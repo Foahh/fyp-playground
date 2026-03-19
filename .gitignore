@@ -1,2 +1,4 @@
 settings.local.json
 datasets/
+results/
+__pycache__/
