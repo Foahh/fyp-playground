@@ -1,4 +1,6 @@
 settings.local.json
 datasets/
-results/
 __pycache__/
+
+results/*
+!results/benchmark_results.csv

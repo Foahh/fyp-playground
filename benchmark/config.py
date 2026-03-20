@@ -6,6 +6,7 @@ from .constants import (
     COCO_80_CLASSES,
     COCO_80_ANNOTATIONS,
     COCO_IMAGES,
+    COCO_80_TFS_TEST,
     COCO_PERSON_ANNOTATIONS,
     COCO_PERSON_TFS_TEST,
     SSD_FAMILIES,
@@ -26,7 +27,7 @@ def _generate_tf_config(entry: ModelEntry) -> str:
     if entry.dataset == "COCO-Person":
         test_path = COCO_PERSON_TFS_TEST
     else:
-        test_path = "./datasets/coco_2017_80_classes/test"
+        test_path = COCO_80_TFS_TEST
 
     return f"""\
 operation_mode: evaluation

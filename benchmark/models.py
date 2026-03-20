@@ -25,7 +25,7 @@ class ModelEntry:
     fmt: str  # "Int8" or "W4A8"
     resolution: int
     model_path: str  # absolute or URL
-    model_type: str  # ssd, st_yolod, st_yoloxn, st_yololcv1, yolov8n, yolov11n
+    model_type: str  # ssd, st_yolod, st_yoloxn, st_yololcv1, yolov8n, yolo11n, yolo26
     model_name: str = ""  # for PT models: e.g. ssdlite_mobilenetv1_pt
 
 
@@ -86,8 +86,10 @@ def _model_type_for_family(family: str) -> str:
         return "st_yololcv1"
     if family == "yolov8n":
         return "yolov8n"
-    if family == "yolov11n":
-        return "yolov11n"
+    if family == "yolo11n":
+        return "yolo11n"
+    if family == "yolo26":
+        return "yolo26"
     return family
 
 
@@ -109,22 +111,22 @@ def discover_models() -> list[ModelEntry]:
     for family in IN_SCOPE_FAMILIES:
         family_dir = MODELZOO_DIR / family
 
-        # Handle remote-only models (yolov8n, yolov11n)
+        # Handle predefined local/remote models (e.g. yolov8n/yolo11n/yolo26)
         if family in REMOTE_MODELS:
-            info = REMOTE_MODELS[family]
-            entries.append(
-                ModelEntry(
-                    family=family,
-                    variant=f"{family}_{info['resolution']}",
-                    hyperparameters="",
-                    dataset=info["dataset"],
-                    num_classes=info["num_classes"],
-                    fmt="Int8",
-                    resolution=info["resolution"],
-                    model_path=info["model_path"],
-                    model_type=info["model_type"],
+            for info in REMOTE_MODELS[family]:
+                entries.append(
+                    ModelEntry(
+                        family=family,
+                        variant=f"{family}_{info['resolution']}",
+                        hyperparameters="",
+                        dataset=info["dataset"],
+                        num_classes=info["num_classes"],
+                        fmt="Int8",
+                        resolution=info["resolution"],
+                        model_path=info["model_path"],
+                        model_type=info["model_type"],
+                    )
                 )
-            )
             continue
 
         if not family_dir.is_dir():

@@ -34,6 +34,9 @@ N6_WORKDIR = OUTPUT_DIR / "n6_workdir"
 
 # Dataset paths
 COCO_PERSON_TFS_TEST = str(BASE_DIR / "datasets" / "coco_2017_person" / "test")
+COCO_80_TFS_TEST = str(
+    BASE_DIR / "datasets" / "coco_2017_80_classes" / "test"
+)
 COCO_PERSON_ANNOTATIONS = str(
     BASE_DIR / "datasets" / "coco" / "annotations" / "instances_val2017_person.json"
 )
@@ -137,7 +140,8 @@ IN_SCOPE_FAMILIES = [
     "st_yololcv1",
     "st_yoloxn",
     "yolov8n",
-    "yolov11n",
+    "yolo11n",
+    "yolo26",
 ]
 
 # Template types
@@ -148,7 +152,7 @@ SSD_FAMILIES = {
     "ssdlite_mobilenetv3small_pt",
 }
 YOLOD_FAMILIES = {"st_yolodv2milli_pt", "st_yolodv2tiny_pt"}
-TF_FAMILIES = {"st_yololcv1", "st_yoloxn", "yolov8n", "yolov11n"}
+TF_FAMILIES = {"st_yololcv1", "st_yoloxn", "yolov8n", "yolo11n", "yolo26"}
 
 CSV_COLUMNS = [
     "model_family",
@@ -165,22 +169,92 @@ CSV_COLUMNS = [
     "ap_50",
 ]
 
-# Hardcoded remote models
+# Local submodule models
+LOCAL_STEDGEAI_OD_DIR = (
+    BASE_DIR
+    / "ultralytics"
+    / "examples"
+    / "YOLOv8-STEdgeAI"
+    / "stedgeai_models"
+    / "object_detection"
+)
+
 REMOTE_MODELS = {
-    "yolov8n": {
-        "model_path": "https://github.com/stm32-hotspot/ultralytics/raw/refs/heads/main/examples/YOLOv8-STEdgeAI/stedgeai_models/object_detection/yolov8n_256_quant_pc_uf_od_coco-person-st.tflite",
-        "model_type": "yolov8n",
-        "resolution": 256,
-        "dataset": "COCO-Person",
-        "num_classes": 1,
-    },
-    "yolov11n": {
-        "model_path": "https://github.com/stm32-hotspot/ultralytics/blob/main/examples/YOLOv8-STEdgeAI/stedgeai_models/object_detection/yolo11/yolo11n_256_quant_pc_uf_od_coco-person-st.tflite",
-        "model_type": "yolov11n",
-        "resolution": 256,
-        "dataset": "COCO-Person",
-        "num_classes": 1,
-    },
+    "yolov8n": [
+        {
+            "model_path": str(
+                LOCAL_STEDGEAI_OD_DIR
+                / "yolov8n_192_quant_pc_uf_od_coco-person-st.tflite"
+            ),
+            "model_type": "yolov8n",
+            "resolution": 192,
+            "dataset": "COCO-Person",
+            "num_classes": 1,
+        },
+        {
+            "model_path": str(
+                LOCAL_STEDGEAI_OD_DIR
+                / "yolov8n_256_quant_pc_uf_od_coco-person-st.tflite"
+            ),
+            "model_type": "yolov8n",
+            "resolution": 256,
+            "dataset": "COCO-Person",
+            "num_classes": 1,
+        },
+        {
+            "model_path": str(
+                LOCAL_STEDGEAI_OD_DIR
+                / "yolov8n_320_quant_pc_uf_od_coco-person-st.tflite"
+            ),
+            "model_type": "yolov8n",
+            "resolution": 320,
+            "dataset": "COCO-Person",
+            "num_classes": 1,
+        },
+        {
+            "model_path": str(
+                LOCAL_STEDGEAI_OD_DIR
+                / "yolov8n_416_quant_pc_uf_od_coco-person-st.tflite"
+            ),
+            "model_type": "yolov8n",
+            "resolution": 416,
+            "dataset": "COCO-Person",
+            "num_classes": 1,
+        },
+    ],
+    "yolo11n": [
+        {
+            "model_path": str(
+                LOCAL_STEDGEAI_OD_DIR
+                / "yolo11"
+                / "yolo11n_256_quant_pc_uf_od_coco-person-st.tflite"
+            ),
+            "model_type": "yolo11n",
+            "resolution": 256,
+            "dataset": "COCO-Person",
+            "num_classes": 1,
+        }
+    ],
+    "yolo26": [
+        {
+            "model_path": str(
+                LOCAL_STEDGEAI_OD_DIR / "yolo26" / "yolo26_256_qdq_int8_od_coco-person-st.onnx"
+            ),
+            "model_type": "yolo26",
+            "resolution": 256,
+            "dataset": "COCO-Person",
+            "num_classes": 1,
+        },
+        {
+            "model_path": str(
+                LOCAL_STEDGEAI_OD_DIR / "yolo26" / "yolo26_320_qdq_int8_od_coco-person-st.onnx"
+            ),
+            "model_type": "yolo26",
+            "resolution": 320,
+            "dataset": "COCO-Person",
+            "num_classes": 1,
+        },
+    ],
 }
 
 
