@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-from .config import generate_config
+from .config import build_eval_config
 from .constants import N6_WORKDIR, SERVICES_DIR, SSD_FAMILIES, STEDGEAI_PATH, STDOUT_LOG
 from .models import ModelEntry
 
@@ -209,9 +209,7 @@ def _step_validate(entry: ModelEntry) -> tuple[str, str, int]:
 
 def _step_evaluate(entry: ModelEntry) -> tuple[str, str, int]:
     """Step 4: Run model zoo evaluator (host-side) for AP metrics."""
-    config_path = SERVICES_DIR / "_benchmark_temp_config.yaml"
-    config_content = generate_config(entry)
-    config_path.write_text(config_content, encoding="utf-8")
+    build_eval_config(entry)
 
     cmd = [
         sys.executable,

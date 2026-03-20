@@ -1,4 +1,4 @@
-"""Paths, class lists, family sets, CSV columns, and remote model definitions."""
+"""Paths, class lists, CSV columns, and explicit model registry."""
 
 import os
 import platform
@@ -18,7 +18,8 @@ def get_stedgeai_path() -> str:
         raise OSError(f"Unsupported platform: {system}")
 
 
-# Paths
+# ── Paths ──
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 MODELZOO_DIR = BASE_DIR / "stm32ai-modelzoo" / "object_detection"
 SERVICES_DIR = BASE_DIR / "stm32ai-modelzoo-services" / "object_detection"
@@ -32,7 +33,8 @@ STEDGEAI_PATH = get_stedgeai_path()
 
 N6_WORKDIR = OUTPUT_DIR / "n6_workdir"
 
-# Dataset paths
+# ── Dataset paths ──
+
 COCO_PERSON_TFS_TEST = str(BASE_DIR / "datasets" / "coco_2017_person" / "test")
 COCO_80_TFS_TEST = str(
     BASE_DIR / "datasets" / "coco_2017_80_classes" / "test"
@@ -45,7 +47,8 @@ COCO_80_ANNOTATIONS = str(
 )
 COCO_IMAGES = str(BASE_DIR / "datasets" / "coco" / "images" / "val2017")
 
-# COCO 80 class names
+# ── COCO 80 class names ──
+
 COCO_80_CLASSES = [
     "person",
     "bicycle",
@@ -129,30 +132,13 @@ COCO_80_CLASSES = [
     "toothbrush",
 ]
 
-# In-scope families
-IN_SCOPE_FAMILIES = [
-    "ssdlite_mobilenetv1_pt",
-    "ssdlite_mobilenetv2_pt",
-    "ssdlite_mobilenetv3large_pt",
-    "ssdlite_mobilenetv3small_pt",
-    "st_yolodv2milli_pt",
-    "st_yolodv2tiny_pt",
-    "st_yololcv1",
-    "st_yoloxn",
-    "yolov8n",
-    "yolo11n",
-    "yolo26",
-]
-
-# Template types
+# SSD families require output_chpos = chfirst; all others use chlast.
 SSD_FAMILIES = {
     "ssdlite_mobilenetv1_pt",
     "ssdlite_mobilenetv2_pt",
     "ssdlite_mobilenetv3large_pt",
     "ssdlite_mobilenetv3small_pt",
 }
-YOLOD_FAMILIES = {"st_yolodv2milli_pt", "st_yolodv2tiny_pt"}
-TF_FAMILIES = {"st_yololcv1", "st_yoloxn", "yolov8n", "yolo11n", "yolo26"}
 
 CSV_COLUMNS = [
     "model_family",
@@ -169,93 +155,559 @@ CSV_COLUMNS = [
     "ap_50",
 ]
 
-# Local submodule models
-LOCAL_STEDGEAI_OD_DIR = (
-    BASE_DIR
-    / "ultralytics"
+# ── Path helpers for the model registry ──
+
+_ZOO = Path("stm32ai-modelzoo") / "object_detection"
+_UL = (
+    Path("ultralytics")
     / "examples"
     / "YOLOv8-STEdgeAI"
     / "stedgeai_models"
     / "object_detection"
 )
 
-REMOTE_MODELS = {
-    "yolov8n": [
-        {
-            "model_path": str(
-                LOCAL_STEDGEAI_OD_DIR
-                / "yolov8n_192_quant_pc_uf_od_coco-person-st.tflite"
-            ),
-            "model_type": "yolov8n",
-            "resolution": 192,
-            "dataset": "COCO-Person",
-            "num_classes": 1,
-        },
-        {
-            "model_path": str(
-                LOCAL_STEDGEAI_OD_DIR
-                / "yolov8n_256_quant_pc_uf_od_coco-person-st.tflite"
-            ),
-            "model_type": "yolov8n",
-            "resolution": 256,
-            "dataset": "COCO-Person",
-            "num_classes": 1,
-        },
-        {
-            "model_path": str(
-                LOCAL_STEDGEAI_OD_DIR
-                / "yolov8n_320_quant_pc_uf_od_coco-person-st.tflite"
-            ),
-            "model_type": "yolov8n",
-            "resolution": 320,
-            "dataset": "COCO-Person",
-            "num_classes": 1,
-        },
-        {
-            "model_path": str(
-                LOCAL_STEDGEAI_OD_DIR
-                / "yolov8n_416_quant_pc_uf_od_coco-person-st.tflite"
-            ),
-            "model_type": "yolov8n",
-            "resolution": 416,
-            "dataset": "COCO-Person",
-            "num_classes": 1,
-        },
-    ],
-    "yolo11n": [
-        {
-            "model_path": str(
-                LOCAL_STEDGEAI_OD_DIR
-                / "yolo11"
-                / "yolo11n_256_quant_pc_uf_od_coco-person-st.tflite"
-            ),
-            "model_type": "yolo11n",
-            "resolution": 256,
-            "dataset": "COCO-Person",
-            "num_classes": 1,
-        }
-    ],
-    "yolo26": [
-        {
-            "model_path": str(
-                LOCAL_STEDGEAI_OD_DIR / "yolo26" / "yolo26_256_qdq_int8_od_coco-person-st.onnx"
-            ),
-            "model_type": "yolo26",
-            "resolution": 256,
-            "dataset": "COCO-Person",
-            "num_classes": 1,
-        },
-        {
-            "model_path": str(
-                LOCAL_STEDGEAI_OD_DIR / "yolo26" / "yolo26_320_qdq_int8_od_coco-person-st.onnx"
-            ),
-            "model_type": "yolo26",
-            "resolution": 320,
-            "dataset": "COCO-Person",
-            "num_classes": 1,
-        },
-    ],
-}
+# ── Model Registry ──
+# Each entry explicitly maps a model file to its base config file.
+# Paths are relative to BASE_DIR and resolved at load time.
+
+MODEL_REGISTRY: list[dict] = [
+    # ── ssdlite_mobilenetv1_pt ──
+    {
+        "config": _ZOO / "ssdlite_mobilenetv1_pt/Public_pretrainedmodel_public_dataset/coco/ssdlite_mobilenetv1_pt_coco_300/ssdlite_mobilenetv1_pt_coco_300_config.yaml",
+        "model": _ZOO / "ssdlite_mobilenetv1_pt/Public_pretrainedmodel_public_dataset/coco/ssdlite_mobilenetv1_pt_coco_300/ssdlite_mobilenetv1_pt_coco_300_qdq_int8.onnx",
+        "family": "ssdlite_mobilenetv1_pt",
+        "variant": "ssdlite_mobilenetv1_pt_coco_300",
+        "hyperparameters": "",
+        "dataset": "COCO-80",
+        "fmt": "Int8",
+        "resolution": 300,
+        "overrides": {"evaluation": {"output_chpos": "chfirst"}},
+    },
+    {
+        "config": _ZOO / "ssdlite_mobilenetv1_pt/ST_pretrainedmodel_public_dataset/coco_person/ssdlite_mobilenetv1_pt_coco_person_300/ssdlite_mobilenetv1_pt_coco_person_300_config.yaml",
+        "model": _ZOO / "ssdlite_mobilenetv1_pt/ST_pretrainedmodel_public_dataset/coco_person/ssdlite_mobilenetv1_pt_coco_person_300/ssdlite_mobilenetv1_pt_coco_person_300_qdq_int8.onnx",
+        "family": "ssdlite_mobilenetv1_pt",
+        "variant": "ssdlite_mobilenetv1_pt_coco_person_300",
+        "hyperparameters": "",
+        "dataset": "COCO-Person",
+        "fmt": "Int8",
+        "resolution": 300,
+        "overrides": {"evaluation": {"output_chpos": "chfirst"}},
+    },
+    # ── ssdlite_mobilenetv2_pt ──
+    {
+        "config": _ZOO / "ssdlite_mobilenetv2_pt/Public_pretrainedmodel_public_dataset/coco/ssdlite_mobilenetv2_pt_coco_300/ssdlite_mobilenetv2_pt_coco_300_config.yaml",
+        "model": _ZOO / "ssdlite_mobilenetv2_pt/Public_pretrainedmodel_public_dataset/coco/ssdlite_mobilenetv2_pt_coco_300/ssdlite_mobilenetv2_pt_coco_300_qdq_int8.onnx",
+        "family": "ssdlite_mobilenetv2_pt",
+        "variant": "ssdlite_mobilenetv2_pt_coco_300",
+        "hyperparameters": "",
+        "dataset": "COCO-80",
+        "fmt": "Int8",
+        "resolution": 300,
+        "overrides": {"evaluation": {"output_chpos": "chfirst"}},
+    },
+    {
+        "config": _ZOO / "ssdlite_mobilenetv2_pt/ST_pretrainedmodel_public_dataset/coco_person/ssdlite_mobilenetv2_pt_coco_person_300/ssdlite_mobilenetv2_pt_coco_person_300_config.yaml",
+        "model": _ZOO / "ssdlite_mobilenetv2_pt/ST_pretrainedmodel_public_dataset/coco_person/ssdlite_mobilenetv2_pt_coco_person_300/ssdlite_mobilenetv2_pt_coco_person_300_qdq_int8.onnx",
+        "family": "ssdlite_mobilenetv2_pt",
+        "variant": "ssdlite_mobilenetv2_pt_coco_person_300",
+        "hyperparameters": "",
+        "dataset": "COCO-Person",
+        "fmt": "Int8",
+        "resolution": 300,
+        "overrides": {"evaluation": {"output_chpos": "chfirst"}},
+    },
+    # ── ssdlite_mobilenetv3large_pt ──
+    {
+        "config": _ZOO / "ssdlite_mobilenetv3large_pt/Public_pretrainedmodel_public_dataset/coco/ssdlite_mobilenetv3large_pt_coco_300/ssdlite_mobilenetv3large_pt_coco_300_config.yaml",
+        "model": _ZOO / "ssdlite_mobilenetv3large_pt/Public_pretrainedmodel_public_dataset/coco/ssdlite_mobilenetv3large_pt_coco_300/ssdlite_mobilenetv3large_pt_coco_300_qdq_int8.onnx",
+        "family": "ssdlite_mobilenetv3large_pt",
+        "variant": "ssdlite_mobilenetv3large_pt_coco_300",
+        "hyperparameters": "",
+        "dataset": "COCO-80",
+        "fmt": "Int8",
+        "resolution": 300,
+        "overrides": {"evaluation": {"output_chpos": "chfirst"}},
+    },
+    {
+        "config": _ZOO / "ssdlite_mobilenetv3large_pt/ST_pretrainedmodel_public_dataset/coco_person/ssdlite_mobilenetv3large_pt_coco_person_300/ssdlite_mobilenetv3large_pt_coco_person_300_config.yaml",
+        "model": _ZOO / "ssdlite_mobilenetv3large_pt/ST_pretrainedmodel_public_dataset/coco_person/ssdlite_mobilenetv3large_pt_coco_person_300/ssdlite_mobilenetv3large_pt_coco_person_300_qdq_int8.onnx",
+        "family": "ssdlite_mobilenetv3large_pt",
+        "variant": "ssdlite_mobilenetv3large_pt_coco_person_300",
+        "hyperparameters": "",
+        "dataset": "COCO-Person",
+        "fmt": "Int8",
+        "resolution": 300,
+        "overrides": {"evaluation": {"output_chpos": "chfirst"}},
+    },
+    # ── ssdlite_mobilenetv3small_pt ──
+    {
+        "config": _ZOO / "ssdlite_mobilenetv3small_pt/Public_pretrainedmodel_public_dataset/coco/ssdlite_mobilenetv3small_pt_coco_300/ssdlite_mobilenetv3small_pt_coco_300_config.yaml",
+        "model": _ZOO / "ssdlite_mobilenetv3small_pt/Public_pretrainedmodel_public_dataset/coco/ssdlite_mobilenetv3small_pt_coco_300/ssdlite_mobilenetv3small_pt_coco_300_qdq_int8.onnx",
+        "family": "ssdlite_mobilenetv3small_pt",
+        "variant": "ssdlite_mobilenetv3small_pt_coco_300",
+        "hyperparameters": "",
+        "dataset": "COCO-80",
+        "fmt": "Int8",
+        "resolution": 300,
+        "overrides": {"evaluation": {"output_chpos": "chfirst"}},
+    },
+    {
+        "config": _ZOO / "ssdlite_mobilenetv3small_pt/ST_pretrainedmodel_public_dataset/coco_person/ssdlite_mobilenetv3small_pt_coco_person_300/ssdlite_mobilenetv3small_pt_coco_person_300_config.yaml",
+        "model": _ZOO / "ssdlite_mobilenetv3small_pt/ST_pretrainedmodel_public_dataset/coco_person/ssdlite_mobilenetv3small_pt_coco_person_300/ssdlite_mobilenetv3small_pt_coco_person_300_qdq_int8.onnx",
+        "family": "ssdlite_mobilenetv3small_pt",
+        "variant": "ssdlite_mobilenetv3small_pt_coco_person_300",
+        "hyperparameters": "",
+        "dataset": "COCO-Person",
+        "fmt": "Int8",
+        "resolution": 300,
+        "overrides": {"evaluation": {"output_chpos": "chfirst"}},
+    },
+    # ── st_yolodv2milli_pt (COCO-80) ──
+    {
+        "config": _ZOO / "st_yolodv2milli_pt/ST_pretrainedmodel_public_dataset/coco/st_yolodv2milli_actrelu_pt_coco_192/st_yolodv2milli_actrelu_pt_coco_192_config.yaml",
+        "model": _ZOO / "st_yolodv2milli_pt/ST_pretrainedmodel_public_dataset/coco/st_yolodv2milli_actrelu_pt_coco_192/st_yolodv2milli_actrelu_pt_coco_192_qdq_int8.onnx",
+        "family": "st_yolodv2milli_pt",
+        "variant": "st_yolodv2milli_actrelu_pt_coco_192",
+        "hyperparameters": "actrelu",
+        "dataset": "COCO-80",
+        "fmt": "Int8",
+        "resolution": 192,
+    },
+    {
+        "config": _ZOO / "st_yolodv2milli_pt/ST_pretrainedmodel_public_dataset/coco/st_yolodv2milli_actrelu_pt_coco_320/st_yolodv2milli_actrelu_pt_coco_320_config.yaml",
+        "model": _ZOO / "st_yolodv2milli_pt/ST_pretrainedmodel_public_dataset/coco/st_yolodv2milli_actrelu_pt_coco_320/st_yolodv2milli_actrelu_pt_coco_320_qdq_int8.onnx",
+        "family": "st_yolodv2milli_pt",
+        "variant": "st_yolodv2milli_actrelu_pt_coco_320",
+        "hyperparameters": "actrelu",
+        "dataset": "COCO-80",
+        "fmt": "Int8",
+        "resolution": 320,
+    },
+    {
+        "config": _ZOO / "st_yolodv2milli_pt/ST_pretrainedmodel_public_dataset/coco/st_yolodv2milli_actrelu_pt_coco_640/st_yolodv2milli_actrelu_pt_coco_640_config.yaml",
+        "model": _ZOO / "st_yolodv2milli_pt/ST_pretrainedmodel_public_dataset/coco/st_yolodv2milli_actrelu_pt_coco_640/st_yolodv2milli_actrelu_pt_coco_640_qdq_int8.onnx",
+        "family": "st_yolodv2milli_pt",
+        "variant": "st_yolodv2milli_actrelu_pt_coco_640",
+        "hyperparameters": "actrelu",
+        "dataset": "COCO-80",
+        "fmt": "Int8",
+        "resolution": 640,
+    },
+    # ── st_yolodv2milli_pt (COCO-Person) ──
+    {
+        "config": _ZOO / "st_yolodv2milli_pt/ST_pretrainedmodel_public_dataset/coco_person/st_yolodv2milli_actrelu_pt_coco_person_192/st_yolodv2milli_actrelu_pt_coco_person_192_config.yaml",
+        "model": _ZOO / "st_yolodv2milli_pt/ST_pretrainedmodel_public_dataset/coco_person/st_yolodv2milli_actrelu_pt_coco_person_192/st_yolodv2milli_actrelu_pt_coco_person_192_qdq_int8.onnx",
+        "family": "st_yolodv2milli_pt",
+        "variant": "st_yolodv2milli_actrelu_pt_coco_person_192",
+        "hyperparameters": "actrelu",
+        "dataset": "COCO-Person",
+        "fmt": "Int8",
+        "resolution": 192,
+    },
+    {
+        "config": _ZOO / "st_yolodv2milli_pt/ST_pretrainedmodel_public_dataset/coco_person/st_yolodv2milli_actrelu_pt_coco_person_256/st_yolodv2milli_actrelu_pt_coco_person_256_config.yaml",
+        "model": _ZOO / "st_yolodv2milli_pt/ST_pretrainedmodel_public_dataset/coco_person/st_yolodv2milli_actrelu_pt_coco_person_256/st_yolodv2milli_actrelu_pt_coco_person_256_qdq_int8.onnx",
+        "family": "st_yolodv2milli_pt",
+        "variant": "st_yolodv2milli_actrelu_pt_coco_person_256",
+        "hyperparameters": "actrelu",
+        "dataset": "COCO-Person",
+        "fmt": "Int8",
+        "resolution": 256,
+    },
+    {
+        "config": _ZOO / "st_yolodv2milli_pt/ST_pretrainedmodel_public_dataset/coco_person/st_yolodv2milli_actrelu_pt_coco_person_320/st_yolodv2milli_actrelu_pt_coco_person_320_config.yaml",
+        "model": _ZOO / "st_yolodv2milli_pt/ST_pretrainedmodel_public_dataset/coco_person/st_yolodv2milli_actrelu_pt_coco_person_320/st_yolodv2milli_actrelu_pt_coco_person_320_qdq_int8.onnx",
+        "family": "st_yolodv2milli_pt",
+        "variant": "st_yolodv2milli_actrelu_pt_coco_person_320",
+        "hyperparameters": "actrelu",
+        "dataset": "COCO-Person",
+        "fmt": "Int8",
+        "resolution": 320,
+    },
+    # ── st_yolodv2tiny_pt (COCO-80) ──
+    {
+        "config": _ZOO / "st_yolodv2tiny_pt/ST_pretrainedmodel_public_dataset/coco/st_yolodv2tiny_actrelu_pt_coco_192/st_yolodv2tiny_actrelu_pt_coco_192_config.yaml",
+        "model": _ZOO / "st_yolodv2tiny_pt/ST_pretrainedmodel_public_dataset/coco/st_yolodv2tiny_actrelu_pt_coco_192/st_yolodv2tiny_actrelu_pt_coco_192_qdq_int8.onnx",
+        "family": "st_yolodv2tiny_pt",
+        "variant": "st_yolodv2tiny_actrelu_pt_coco_192",
+        "hyperparameters": "actrelu",
+        "dataset": "COCO-80",
+        "fmt": "Int8",
+        "resolution": 192,
+    },
+    {
+        "config": _ZOO / "st_yolodv2tiny_pt/ST_pretrainedmodel_public_dataset/coco/st_yolodv2tiny_actrelu_pt_coco_288/st_yolodv2tiny_actrelu_pt_coco_288_config.yaml",
+        "model": _ZOO / "st_yolodv2tiny_pt/ST_pretrainedmodel_public_dataset/coco/st_yolodv2tiny_actrelu_pt_coco_288/st_yolodv2tiny_actrelu_pt_coco_288_qdq_int8.onnx",
+        "family": "st_yolodv2tiny_pt",
+        "variant": "st_yolodv2tiny_actrelu_pt_coco_288",
+        "hyperparameters": "actrelu",
+        "dataset": "COCO-80",
+        "fmt": "Int8",
+        "resolution": 288,
+    },
+    {
+        "config": _ZOO / "st_yolodv2tiny_pt/ST_pretrainedmodel_public_dataset/coco/st_yolodv2tiny_actrelu_pt_coco_640/st_yolodv2tiny_actrelu_pt_coco_640_config.yaml",
+        "model": _ZOO / "st_yolodv2tiny_pt/ST_pretrainedmodel_public_dataset/coco/st_yolodv2tiny_actrelu_pt_coco_640/st_yolodv2tiny_actrelu_pt_coco_640_qdq_int8.onnx",
+        "family": "st_yolodv2tiny_pt",
+        "variant": "st_yolodv2tiny_actrelu_pt_coco_640",
+        "hyperparameters": "actrelu",
+        "dataset": "COCO-80",
+        "fmt": "Int8",
+        "resolution": 640,
+    },
+    # ── st_yolodv2tiny_pt (COCO-Person) ──
+    {
+        "config": _ZOO / "st_yolodv2tiny_pt/ST_pretrainedmodel_public_dataset/coco_person/st_yolodv2tiny_actrelu_pt_coco_person_192/st_yolodv2tiny_actrelu_pt_coco_person_192_config.yaml",
+        "model": _ZOO / "st_yolodv2tiny_pt/ST_pretrainedmodel_public_dataset/coco_person/st_yolodv2tiny_actrelu_pt_coco_person_192/st_yolodv2tiny_actrelu_pt_coco_person_192_qdq_int8.onnx",
+        "family": "st_yolodv2tiny_pt",
+        "variant": "st_yolodv2tiny_actrelu_pt_coco_person_192",
+        "hyperparameters": "actrelu",
+        "dataset": "COCO-Person",
+        "fmt": "Int8",
+        "resolution": 192,
+    },
+    {
+        "config": _ZOO / "st_yolodv2tiny_pt/ST_pretrainedmodel_public_dataset/coco_person/st_yolodv2tiny_actrelu_pt_coco_person_256/st_yolodv2tiny_actrelu_pt_coco_person_256_config.yaml",
+        "model": _ZOO / "st_yolodv2tiny_pt/ST_pretrainedmodel_public_dataset/coco_person/st_yolodv2tiny_actrelu_pt_coco_person_256/st_yolodv2tiny_actrelu_pt_coco_person_256_qdq_int8.onnx",
+        "family": "st_yolodv2tiny_pt",
+        "variant": "st_yolodv2tiny_actrelu_pt_coco_person_256",
+        "hyperparameters": "actrelu",
+        "dataset": "COCO-Person",
+        "fmt": "Int8",
+        "resolution": 256,
+    },
+    {
+        "config": _ZOO / "st_yolodv2tiny_pt/ST_pretrainedmodel_public_dataset/coco_person/st_yolodv2tiny_actrelu_pt_coco_person_288/st_yolodv2tiny_actrelu_pt_coco_person_288_config.yaml",
+        "model": _ZOO / "st_yolodv2tiny_pt/ST_pretrainedmodel_public_dataset/coco_person/st_yolodv2tiny_actrelu_pt_coco_person_288/st_yolodv2tiny_actrelu_pt_coco_person_288_qdq_int8.onnx",
+        "family": "st_yolodv2tiny_pt",
+        "variant": "st_yolodv2tiny_actrelu_pt_coco_person_288",
+        "hyperparameters": "actrelu",
+        "dataset": "COCO-Person",
+        "fmt": "Int8",
+        "resolution": 288,
+    },
+    # ── st_yololcv1 (COCO-Person, Int8) ──
+    {
+        "config": _ZOO / "st_yololcv1/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yololcv1_192/st_yololcv1_192_config.yaml",
+        "model": _ZOO / "st_yololcv1/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yololcv1_192/st_yololcv1_192_int8.tflite",
+        "family": "st_yololcv1",
+        "variant": "st_yololcv1_192",
+        "hyperparameters": "",
+        "dataset": "COCO-Person",
+        "fmt": "Int8",
+        "resolution": 192,
+    },
+    {
+        "config": _ZOO / "st_yololcv1/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yololcv1_224/st_yololcv1_224_config.yaml",
+        "model": _ZOO / "st_yololcv1/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yololcv1_224/st_yololcv1_224_int8.tflite",
+        "family": "st_yololcv1",
+        "variant": "st_yololcv1_224",
+        "hyperparameters": "",
+        "dataset": "COCO-Person",
+        "fmt": "Int8",
+        "resolution": 224,
+    },
+    {
+        "config": _ZOO / "st_yololcv1/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yololcv1_256/st_yololcv1_256_config.yaml",
+        "model": _ZOO / "st_yololcv1/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yololcv1_256/st_yololcv1_256_int8.tflite",
+        "family": "st_yololcv1",
+        "variant": "st_yololcv1_256",
+        "hyperparameters": "",
+        "dataset": "COCO-Person",
+        "fmt": "Int8",
+        "resolution": 256,
+    },
+    # ── st_yololcv1 (COCO-Person, W4A8) ──
+    {
+        "config": _ZOO / "st_yololcv1/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yololcv1_192/st_yololcv1_192_config.yaml",
+        "model": _ZOO / "st_yololcv1/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yololcv1_192/st_yololcv1_192_qdq_w4_74.3%_w8_25.7%_a8_100%_map_33.94.onnx",
+        "family": "st_yololcv1",
+        "variant": "st_yololcv1_192",
+        "hyperparameters": "",
+        "dataset": "COCO-Person",
+        "fmt": "W4A8",
+        "resolution": 192,
+    },
+    {
+        "config": _ZOO / "st_yololcv1/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yololcv1_224/st_yololcv1_224_config.yaml",
+        "model": _ZOO / "st_yololcv1/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yololcv1_224/st_yololcv1_224_qdq_w4_50.53%_w8_49.47%_a8_100%_map_34.99.onnx",
+        "family": "st_yololcv1",
+        "variant": "st_yololcv1_224",
+        "hyperparameters": "",
+        "dataset": "COCO-Person",
+        "fmt": "W4A8",
+        "resolution": 224,
+    },
+    {
+        "config": _ZOO / "st_yololcv1/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yololcv1_256/st_yololcv1_256_config.yaml",
+        "model": _ZOO / "st_yololcv1/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yololcv1_256/st_yololcv1_256_qdq_w4_50.53%_w8_49.47%_a8_100%_map_36.87.onnx",
+        "family": "st_yololcv1",
+        "variant": "st_yololcv1_256",
+        "hyperparameters": "",
+        "dataset": "COCO-Person",
+        "fmt": "W4A8",
+        "resolution": 256,
+    },
+    # ── st_yoloxn (COCO-Person public, Int8) ──
+    {
+        "config": _ZOO / "st_yoloxn/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yoloxn_d033_w025_192/st_yoloxn_d033_w025_192_config.yaml",
+        "model": _ZOO / "st_yoloxn/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yoloxn_d033_w025_192/st_yoloxn_d033_w025_192_int8.tflite",
+        "family": "st_yoloxn",
+        "variant": "st_yoloxn_d033_w025_192",
+        "hyperparameters": "d033_w025",
+        "dataset": "COCO-Person",
+        "fmt": "Int8",
+        "resolution": 192,
+    },
+    {
+        "config": _ZOO / "st_yoloxn/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yoloxn_d033_w025_256/st_yoloxn_d033_w025_256_config.yaml",
+        "model": _ZOO / "st_yoloxn/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yoloxn_d033_w025_256/st_yoloxn_d033_w025_256_int8.tflite",
+        "family": "st_yoloxn",
+        "variant": "st_yoloxn_d033_w025_256",
+        "hyperparameters": "d033_w025",
+        "dataset": "COCO-Person",
+        "fmt": "Int8",
+        "resolution": 256,
+    },
+    {
+        "config": _ZOO / "st_yoloxn/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yoloxn_d033_w025_320/st_yoloxn_d033_w025_320_config.yaml",
+        "model": _ZOO / "st_yoloxn/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yoloxn_d033_w025_320/st_yoloxn_d033_w025_320_int8.tflite",
+        "family": "st_yoloxn",
+        "variant": "st_yoloxn_d033_w025_320",
+        "hyperparameters": "d033_w025",
+        "dataset": "COCO-Person",
+        "fmt": "Int8",
+        "resolution": 320,
+    },
+    {
+        "config": _ZOO / "st_yoloxn/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yoloxn_d033_w025_416/st_yoloxn_d033_w025_416_config.yaml",
+        "model": _ZOO / "st_yoloxn/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yoloxn_d033_w025_416/st_yoloxn_d033_w025_416_int8.tflite",
+        "family": "st_yoloxn",
+        "variant": "st_yoloxn_d033_w025_416",
+        "hyperparameters": "d033_w025",
+        "dataset": "COCO-Person",
+        "fmt": "Int8",
+        "resolution": 416,
+    },
+    {
+        "config": _ZOO / "st_yoloxn/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yoloxn_d050_w040_256/st_yoloxn_d050_w040_256_config.yaml",
+        "model": _ZOO / "st_yoloxn/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yoloxn_d050_w040_256/st_yoloxn_d050_w040_256_int8.tflite",
+        "family": "st_yoloxn",
+        "variant": "st_yoloxn_d050_w040_256",
+        "hyperparameters": "d050_w040",
+        "dataset": "COCO-Person",
+        "fmt": "Int8",
+        "resolution": 256,
+    },
+    {
+        "config": _ZOO / "st_yoloxn/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yoloxn_d100_w025_480/st_yoloxn_d100_w025_480_config.yaml",
+        "model": _ZOO / "st_yoloxn/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yoloxn_d100_w025_480/st_yoloxn_d100_w025_480_int8.tflite",
+        "family": "st_yoloxn",
+        "variant": "st_yoloxn_d100_w025_480",
+        "hyperparameters": "d100_w025",
+        "dataset": "COCO-Person",
+        "fmt": "Int8",
+        "resolution": 480,
+    },
+    # ── st_yoloxn (COCO-Person public, W4A8) ──
+    {
+        "config": _ZOO / "st_yoloxn/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yoloxn_d033_w025_192/st_yoloxn_d033_w025_192_config.yaml",
+        "model": _ZOO / "st_yoloxn/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yoloxn_d033_w025_192/st_yoloxn_d033_w025_192_qdq_w4_83.16%_w8_16.84%_a8_100%_map_37.34.onnx",
+        "family": "st_yoloxn",
+        "variant": "st_yoloxn_d033_w025_192",
+        "hyperparameters": "d033_w025",
+        "dataset": "COCO-Person",
+        "fmt": "W4A8",
+        "resolution": 192,
+    },
+    {
+        "config": _ZOO / "st_yoloxn/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yoloxn_d033_w025_256/st_yoloxn_d033_w025_256_config.yaml",
+        "model": _ZOO / "st_yoloxn/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yoloxn_d033_w025_256/st_yoloxn_d033_w025_256_qdq_w4_83.16%_w8_16.84%_a8_100%_map_44.43.onnx",
+        "family": "st_yoloxn",
+        "variant": "st_yoloxn_d033_w025_256",
+        "hyperparameters": "d033_w025",
+        "dataset": "COCO-Person",
+        "fmt": "W4A8",
+        "resolution": 256,
+    },
+    {
+        "config": _ZOO / "st_yoloxn/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yoloxn_d033_w025_320/st_yoloxn_d033_w025_320_config.yaml",
+        "model": _ZOO / "st_yoloxn/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yoloxn_d033_w025_320/st_yoloxn_d033_w025_320_qdq_w4_59.47%_w8_40.53%_a8_100%_map_50.61.onnx",
+        "family": "st_yoloxn",
+        "variant": "st_yoloxn_d033_w025_320",
+        "hyperparameters": "d033_w025",
+        "dataset": "COCO-Person",
+        "fmt": "W4A8",
+        "resolution": 320,
+    },
+    {
+        "config": _ZOO / "st_yoloxn/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yoloxn_d033_w025_416/st_yoloxn_d033_w025_416_config.yaml",
+        "model": _ZOO / "st_yoloxn/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yoloxn_d033_w025_416/st_yoloxn_d033_w025_416_qdq_w4_76.19%_w8_23.81%_a8_100%_map_53.97.onnx",
+        "family": "st_yoloxn",
+        "variant": "st_yoloxn_d033_w025_416",
+        "hyperparameters": "d033_w025",
+        "dataset": "COCO-Person",
+        "fmt": "W4A8",
+        "resolution": 416,
+    },
+    {
+        "config": _ZOO / "st_yoloxn/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yoloxn_d050_w040_256/st_yoloxn_d050_w040_256_config.yaml",
+        "model": _ZOO / "st_yoloxn/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yoloxn_d050_w040_256/st_yoloxn_d050_w040_256_qdq_w4_62.53%_w8_37.47%_a8_100%_map_49.2.onnx",
+        "family": "st_yoloxn",
+        "variant": "st_yoloxn_d050_w040_256",
+        "hyperparameters": "d050_w040",
+        "dataset": "COCO-Person",
+        "fmt": "W4A8",
+        "resolution": 256,
+    },
+    {
+        "config": _ZOO / "st_yoloxn/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yoloxn_d100_w025_480/st_yoloxn_d100_w025_480_config.yaml",
+        "model": _ZOO / "st_yoloxn/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yoloxn_d100_w025_480/st_yoloxn_d100_w025_480_qdq_w4_46.51%_w8_53.49%_a8_100%_map_60.42.onnx",
+        "family": "st_yoloxn",
+        "variant": "st_yoloxn_d100_w025_480",
+        "hyperparameters": "d100_w025",
+        "dataset": "COCO-Person",
+        "fmt": "W4A8",
+        "resolution": 480,
+    },
+    # ── st_yoloxn (COCO-80, Int8) ──
+    {
+        "config": _ZOO / "st_yoloxn/ST_pretrainedmodel_public_dataset/coco_2017_80_classes/st_yoloxn_d100_w025_480/st_yoloxn_d100_w025_480_config.yaml",
+        "model": _ZOO / "st_yoloxn/ST_pretrainedmodel_public_dataset/coco_2017_80_classes/st_yoloxn_d100_w025_480/st_yoloxn_d100_w025_480_qdq_int8.onnx",
+        "family": "st_yoloxn",
+        "variant": "st_yoloxn_d100_w025_480_80cls",
+        "hyperparameters": "d100_w025",
+        "dataset": "COCO-80",
+        "fmt": "Int8",
+        "resolution": 480,
+    },
+    # ── st_yoloxn (custom dataset / ST-Person, Int8) ──
+    {
+        "config": _ZOO / "st_yoloxn/ST_pretrainedmodel_custom_dataset/st_person/st_yoloxn_d033_w025_416/st_yoloxn_d033_w025_416_config.yaml",
+        "model": _ZOO / "st_yoloxn/ST_pretrainedmodel_custom_dataset/st_person/st_yoloxn_d033_w025_416/st_yoloxn_d033_w025_416_int8.tflite",
+        "family": "st_yoloxn",
+        "variant": "st_yoloxn_d033_w025_416_st",
+        "hyperparameters": "d033_w025",
+        "dataset": "ST-Person",
+        "fmt": "Int8",
+        "resolution": 416,
+    },
+    {
+        "config": _ZOO / "st_yoloxn/ST_pretrainedmodel_custom_dataset/st_person/st_yoloxn_d067_w025_416/st_yoloxn_d067_w025_416_config.yaml",
+        "model": _ZOO / "st_yoloxn/ST_pretrainedmodel_custom_dataset/st_person/st_yoloxn_d067_w025_416/st_yoloxn_d067_w025_416_int8.tflite",
+        "family": "st_yoloxn",
+        "variant": "st_yoloxn_d067_w025_416_st",
+        "hyperparameters": "d067_w025",
+        "dataset": "ST-Person",
+        "fmt": "Int8",
+        "resolution": 416,
+    },
+    {
+        "config": _ZOO / "st_yoloxn/ST_pretrainedmodel_custom_dataset/st_person/st_yoloxn_d100_w025_416/st_yoloxn_d100_w025_416_config.yaml",
+        "model": _ZOO / "st_yoloxn/ST_pretrainedmodel_custom_dataset/st_person/st_yoloxn_d100_w025_416/st_yoloxn_d100_w025_416_int8.tflite",
+        "family": "st_yoloxn",
+        "variant": "st_yoloxn_d100_w025_416_st",
+        "hyperparameters": "d100_w025",
+        "dataset": "ST-Person",
+        "fmt": "Int8",
+        "resolution": 416,
+    },
+    {
+        "config": _ZOO / "st_yoloxn/ST_pretrainedmodel_custom_dataset/st_person/st_yoloxn_d100_w025_480/st_yoloxn_d100_w025_480_config.yaml",
+        "model": _ZOO / "st_yoloxn/ST_pretrainedmodel_custom_dataset/st_person/st_yoloxn_d100_w025_480/st_yoloxn_d100_w025_480_int8.tflite",
+        "family": "st_yoloxn",
+        "variant": "st_yoloxn_d100_w025_480_st",
+        "hyperparameters": "d100_w025",
+        "dataset": "ST-Person",
+        "fmt": "Int8",
+        "resolution": 480,
+    },
+    # ── st_yoloxn (custom dataset / ST-Person, W4A8) ──
+    {
+        "config": _ZOO / "st_yoloxn/ST_pretrainedmodel_custom_dataset/st_person/st_yoloxn_d100_w025_480/st_yoloxn_d100_w025_480_config.yaml",
+        "model": _ZOO / "st_yoloxn/ST_pretrainedmodel_custom_dataset/st_person/st_yoloxn_d100_w025_480/st_yoloxn_d100_w025_480_qdq_w4_78.84%_w8_21.16%_a8_100%_map_47.33.onnx",
+        "family": "st_yoloxn",
+        "variant": "st_yoloxn_d100_w025_480_st",
+        "hyperparameters": "d100_w025",
+        "dataset": "ST-Person",
+        "fmt": "W4A8",
+        "resolution": 480,
+    },
+    # ── yolov8n (all share yolov8n_256 base config, model_path overridden) ──
+    {
+        "config": _ZOO / "yolov8n/yolov8n_256_config.yaml",
+        "model": _UL / "yolov8n_192_quant_pc_uf_od_coco-person-st.tflite",
+        "family": "yolov8n",
+        "variant": "yolov8n_192",
+        "hyperparameters": "",
+        "dataset": "COCO-Person",
+        "fmt": "Int8",
+        "resolution": 192,
+    },
+    {
+        "config": _ZOO / "yolov8n/yolov8n_256_config.yaml",
+        "model": _UL / "yolov8n_256_quant_pc_uf_od_coco-person-st.tflite",
+        "family": "yolov8n",
+        "variant": "yolov8n_256",
+        "hyperparameters": "",
+        "dataset": "COCO-Person",
+        "fmt": "Int8",
+        "resolution": 256,
+    },
+    {
+        "config": _ZOO / "yolov8n/yolov8n_256_config.yaml",
+        "model": _UL / "yolov8n_320_quant_pc_uf_od_coco-person-st.tflite",
+        "family": "yolov8n",
+        "variant": "yolov8n_320",
+        "hyperparameters": "",
+        "dataset": "COCO-Person",
+        "fmt": "Int8",
+        "resolution": 320,
+    },
+    {
+        "config": _ZOO / "yolov8n/yolov8n_256_config.yaml",
+        "model": _UL / "yolov8n_416_quant_pc_uf_od_coco-person-st.tflite",
+        "family": "yolov8n",
+        "variant": "yolov8n_416",
+        "hyperparameters": "",
+        "dataset": "COCO-Person",
+        "fmt": "Int8",
+        "resolution": 416,
+    },
+    # ── yolo11n ──
+    {
+        "config": _ZOO / "yolov11n/yolov11n_256_config.yaml",
+        "model": _UL / "yolo11/yolo11n_256_quant_pc_uf_od_coco-person-st.tflite",
+        "family": "yolo11n",
+        "variant": "yolo11n_256",
+        "hyperparameters": "",
+        "dataset": "COCO-Person",
+        "fmt": "Int8",
+        "resolution": 256,
+    },
+    # ── yolo26 ──
+    {
+        "config": _ZOO / "yolo26/yolo26_config.yaml",
+        "model": _UL / "yolo26/yolo26_256_qdq_int8_od_coco-person-st.onnx",
+        "family": "yolo26",
+        "variant": "yolo26_256",
+        "hyperparameters": "",
+        "dataset": "COCO-Person",
+        "fmt": "Int8",
+        "resolution": 256,
+    },
+    {
+        "config": _ZOO / "yolo26/yolo26_config.yaml",
+        "model": _UL / "yolo26/yolo26_320_qdq_int8_od_coco-person-st.onnx",
+        "family": "yolo26",
+        "variant": "yolo26_320",
+        "hyperparameters": "",
+        "dataset": "COCO-Person",
+        "fmt": "Int8",
+        "resolution": 320,
+    },
+]
 
 
 def ensure_dirs():

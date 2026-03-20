@@ -4,7 +4,7 @@ import argparse
 import datetime
 
 from .constants import CSV_PATH, ensure_dirs
-from .models import discover_models
+from .models import load_models
 from .parsing import parse_metrics, _parse_network_c_info
 from .results import append_result, load_completed, log_error, log_stdout
 from .workflow import _get_st_ai_output_dir, run_evaluation
@@ -22,7 +22,7 @@ def main():
 
     ensure_dirs()
 
-    entries = discover_models()
+    entries = load_models()
 
     # Sort for deterministic order: family, variant, format
     entries.sort(key=lambda e: (e.family, e.variant, e.fmt))
