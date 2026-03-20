@@ -2,7 +2,7 @@
 
 import csv
 
-from .constants import CSV_COLUMNS, CSV_PATH, ERROR_LOG
+from .constants import CSV_COLUMNS, CSV_PATH, ERROR_LOG, STDOUT_LOG
 
 
 def load_completed() -> set[tuple[str, str]]:
@@ -32,4 +32,10 @@ def append_result(row: dict):
 def log_error(msg: str):
     """Append error to log file."""
     with open(ERROR_LOG, "a", encoding="utf-8") as f:
+        f.write(msg + "\n")
+
+
+def log_stdout(msg: str):
+    """Append a line to the stdout log file."""
+    with open(STDOUT_LOG, "a", encoding="utf-8") as f:
         f.write(msg + "\n")

@@ -5,13 +5,13 @@ import os
 import subprocess
 import sys
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
-import time
 
 from .config import generate_config
-from .constants import N6_WORKDIR, SERVICES_DIR, SSD_FAMILIES, STEDGEAI_PATH
+from .constants import N6_WORKDIR, SERVICES_DIR, SSD_FAMILIES, STEDGEAI_PATH, STDOUT_LOG
 from .models import ModelEntry
 
 
@@ -32,7 +32,6 @@ def _neuralart_profile() -> str:
 
 def _write_n6_loader_config() -> Path:
     """Write a config_n6l.json pointing to our workdir's generated files."""
-    n6_scripts = _get_n6_scripts_dir()
     stedgeai_dir = Path(os.environ["STEDGEAI_CORE_DIR"])
     project_path = (
         stedgeai_dir / "Projects" / "STM32N6570-DK" / "Applications" / "NPU_Validation"
@@ -51,7 +50,9 @@ def _write_n6_loader_config() -> Path:
     return config_path
 
 
-def _run_streaming(cmd: list, cwd: str, timeout: int, env=None) -> tuple[str, str, int]:
+def _run_streaming(
+    cmd: list, cwd: str, timeout: int, env=None, log_header: str = ""
+) -> tuple[str, str, int]:
     """Run a subprocess, streaming stdout/stderr live while also capturing them."""
     proc = subprocess.Popen(
         cmd,
@@ -65,17 +66,25 @@ def _run_streaming(cmd: list, cwd: str, timeout: int, env=None) -> tuple[str, st
     stdout_lines: list[str] = []
     stderr_lines: list[str] = []
 
-    def _reader(pipe, lines, stream):
+    _log_file = open(STDOUT_LOG, "a", encoding="utf-8")
+    if log_header:
+        _log_file.write(log_header + "\n")
+        _log_file.flush()
+
+    def _reader(pipe, lines, stream, tee_file=None):
         for line in pipe:
             stream.write(line)
             stream.flush()
             lines.append(line)
+            if tee_file:
+                tee_file.write(line)
+                tee_file.flush()
 
     t_out = threading.Thread(
-        target=_reader, args=(proc.stdout, stdout_lines, sys.stdout)
+        target=_reader, args=(proc.stdout, stdout_lines, sys.stdout, _log_file)
     )
     t_err = threading.Thread(
-        target=_reader, args=(proc.stderr, stderr_lines, sys.stderr)
+        target=_reader, args=(proc.stderr, stderr_lines, sys.stderr, _log_file)
     )
     t_out.start()
     t_err.start()
@@ -86,10 +95,12 @@ def _run_streaming(cmd: list, cwd: str, timeout: int, env=None) -> tuple[str, st
         proc.kill()
         t_out.join()
         t_err.join()
+        _log_file.close()
         raise
 
     t_out.join()
     t_err.join()
+    _log_file.close()
 
     return "".join(stdout_lines), "".join(stderr_lines), proc.returncode
 
@@ -105,6 +116,7 @@ def _step_generate(entry: ModelEntry) -> tuple[str, str, int]:
     cmd = [
         STEDGEAI_PATH,
         "generate",
+        "--quiet",
         "--c-api",
         "st-ai",
         "--model",
@@ -124,7 +136,12 @@ def _step_generate(entry: ModelEntry) -> tuple[str, str, int]:
         output_chpos,
     ]
 
-    return _run_streaming(cmd, cwd=str(N6_WORKDIR), timeout=600)
+    return _run_streaming(
+        cmd,
+        cwd=str(N6_WORKDIR),
+        timeout=600,
+        log_header=f"\n=== GENERATE | {entry.variant} | {entry.fmt} ===",
+    )
 
 
 def _step_load(entry: ModelEntry) -> tuple[str, str, int]:
@@ -140,7 +157,12 @@ def _step_load(entry: ModelEntry) -> tuple[str, str, int]:
         str(config_path),
     ]
 
-    return _run_streaming(cmd, cwd=str(n6_dir), timeout=600)
+    return _run_streaming(
+        cmd,
+        cwd=str(n6_dir),
+        timeout=600,
+        log_header=f"\n=== LOAD | {entry.variant} | {entry.fmt} ===",
+    )
 
 
 def _step_validate(entry: ModelEntry) -> tuple[str, str, int]:
@@ -154,6 +176,7 @@ def _step_validate(entry: ModelEntry) -> tuple[str, str, int]:
     cmd = [
         STEDGEAI_PATH,
         "validate",
+        "--quiet",
         "--c-api",
         "st-ai",
         "--model",
@@ -176,7 +199,12 @@ def _step_validate(entry: ModelEntry) -> tuple[str, str, int]:
         output_chpos,
     ]
 
-    return _run_streaming(cmd, cwd=str(N6_WORKDIR), timeout=600)
+    return _run_streaming(
+        cmd,
+        cwd=str(N6_WORKDIR),
+        timeout=600,
+        log_header=f"\n=== VALIDATE | {entry.variant} | {entry.fmt} ===",
+    )
 
 
 def _step_evaluate(entry: ModelEntry) -> tuple[str, str, int]:
@@ -197,7 +225,14 @@ def _step_evaluate(entry: ModelEntry) -> tuple[str, str, int]:
     env = os.environ.copy()
     # TODO: Does int8 need GPU evaluation?
     env["CUDA_VISIBLE_DEVICES"] = "-1"
-    return _run_streaming(cmd, cwd=str(SERVICES_DIR), timeout=3600, env=env)
+    env["HYDRA_FULL_ERROR"] = "1"
+    return _run_streaming(
+        cmd,
+        cwd=str(SERVICES_DIR),
+        timeout=3600,
+        env=env,
+        log_header=f"\n=== EVALUATE | {entry.variant} | {entry.fmt} ===",
+    )
 
 
 @dataclass

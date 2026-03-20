@@ -26,6 +26,7 @@ OUTPUT_DIR = BASE_DIR / "results"
 
 CSV_PATH = OUTPUT_DIR / "benchmark_results.csv"
 ERROR_LOG = OUTPUT_DIR / "benchmark_errors.log"
+STDOUT_LOG = OUTPUT_DIR / "benchmark_stdout.log"
 
 STEDGEAI_PATH = get_stedgeai_path()
 
