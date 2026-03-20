@@ -19,7 +19,7 @@ def download_coco():
         "http://images.cocodataset.org/zips/train2017.zip",
         "http://images.cocodataset.org/zips/val2017.zip",
     ]
-    download(urls, dir=DEST / "images", threads=16)
+    download(urls, dir=DEST / "images", threads=8)
 
 
 def generate_person_annotations():

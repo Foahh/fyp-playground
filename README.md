@@ -61,6 +61,9 @@ conda activate yolo
 # For CUDA 11.8:
 # pip install torch==2.0.0 torchvision==0.15.1 torchaudio==2.0.1 --index-url https://download.pytorch.org/whl/cu118
 
+# For CUDA 12.6:
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
+
 # For CUDA 13.0:
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu130
 
