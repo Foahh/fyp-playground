@@ -1,5 +1,7 @@
 # Getting started - How to evaluate a model on STM32N6 development board
 
+This file is converted from "STEdgeAI/4.0/Documentation/stm32n6_getting_started.html"
+
 ---
 
 *for STM32 target, based on ST Edge AI Core Technology 4.0.0*
