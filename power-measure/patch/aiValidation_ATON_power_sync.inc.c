@@ -21,13 +21,13 @@
 #if PWR_MEASUREMENT_SYNC_ENABLE
 
 #ifndef PWR_SYNC_GPIO_PORT
-#define PWR_SYNC_GPIO_PORT GPIOF
+#define PWR_SYNC_GPIO_PORT GPIOD
 #endif
 #ifndef PWR_SYNC_GPIO_PIN
-#define PWR_SYNC_GPIO_PIN GPIO_PIN_3
+#define PWR_SYNC_GPIO_PIN GPIO_PIN_6
 #endif
 #ifndef PWR_SYNC_GPIO_RCC_ENABLE
-#define PWR_SYNC_GPIO_RCC_ENABLE() __HAL_RCC_GPIOF_CLK_ENABLE()
+#define PWR_SYNC_GPIO_RCC_ENABLE() __HAL_RCC_GPIOD_CLK_ENABLE()
 #endif
 
 static void power_measurement_sync_init(void)

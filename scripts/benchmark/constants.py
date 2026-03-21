@@ -30,6 +30,7 @@ BENCHMARK_DIR = RESULTS_DIR / "benchmark"
 CSV_PATH = BENCHMARK_DIR / "benchmark_results.csv"
 ERROR_LOG = BENCHMARK_DIR / "benchmark_errors.log"
 STDOUT_LOG = BENCHMARK_DIR / "benchmark_stdout.log"
+POWER_MEASURE_CSV_PATH = BENCHMARK_DIR / "power-measure.csv"
 
 STEDGEAI_PATH = get_stedgeai_path()
 
@@ -169,6 +170,45 @@ def get_power_serial_config() -> Tuple[Optional[str], int]:
     except ValueError:
         baud = 115200
     return port, baud
+
+
+_DEFAULT_POWER_DISCARD_MS = 1.0
+
+
+def get_power_edge_discard_ms() -> Tuple[float, float]:
+    """
+    Milliseconds to drop from each contiguous sync-high segment (start and end)
+    when computing avg power. Uses timestamps from the INA228 CSV (ts_us).
+
+    Env:
+      BENCHMARK_POWER_DISCARD_START_MS / BENCHMARK_POWER_DISCARD_END_MS — per-edge
+        (default 1 ms each when unset).
+      BENCHMARK_POWER_DISCARD_EDGE_MS — sets both start and end to the same value when the
+        two specific vars are not set (convenience for symmetric discard).
+      Set START_MS=0 and END_MS=0 explicitly to disable edge trimming.
+    """
+    if (
+        "BENCHMARK_POWER_DISCARD_EDGE_MS" in os.environ
+        and "BENCHMARK_POWER_DISCARD_START_MS" not in os.environ
+        and "BENCHMARK_POWER_DISCARD_END_MS" not in os.environ
+    ):
+        try:
+            v = float(os.environ["BENCHMARK_POWER_DISCARD_EDGE_MS"].strip())
+            v = max(0.0, v)
+            return v, v
+        except ValueError:
+            pass
+
+    def _one(key: str) -> float:
+        raw = os.environ.get(key, "").strip()
+        if not raw:
+            return _DEFAULT_POWER_DISCARD_MS
+        try:
+            return max(0.0, float(raw))
+        except ValueError:
+            return _DEFAULT_POWER_DISCARD_MS
+
+    return _one("BENCHMARK_POWER_DISCARD_START_MS"), _one("BENCHMARK_POWER_DISCARD_END_MS")
 
 # ── Path helpers for the model registry ──
 

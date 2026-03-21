@@ -11,13 +11,27 @@ static constexpr int INA228_SDA_PIN = 12;
 static constexpr int INA228_SCL_PIN = 13;
 static constexpr int INA228_ALERT_PIN = 14;
 
-/** Wire to STM32 inference sync (e.g. NPU_Validation PF3). HIGH = inside npu_run(). */
 static constexpr int SYNC_FROM_MCU_PIN = 15;
 
 static constexpr uint32_t SAMPLE_INTERVAL_US = 110000;
 
 static uint32_t next_sample_us = 0;
 static char line_buf[128];
+
+static void waitForStartCommand() {
+  Serial.println("# Ready. Send START to begin sampling.");
+  while (true) {
+    if (Serial.available()) {
+      String line = Serial.readStringUntil('\n');
+      line.trim();
+      if (line.length() > 0 && line.equalsIgnoreCase("START")) {
+        Serial.println("# Streaming started.");
+        return;
+      }
+    }
+    delay(10);
+  }
+}
 
 void setup() {
   Serial.begin(115200);
@@ -28,7 +42,7 @@ void setup() {
   pinMode(INA228_ALERT_PIN, INPUT_PULLUP);
   pinMode(SYNC_FROM_MCU_PIN, INPUT_PULLDOWN);
 
-  Serial.println("INA228 monitor starting...");
+  Serial.println("# INA228 monitor starting...");
   if (!ina228.begin(INA228_I2C_ADDR, &Wire)) {
     Serial.println("ERROR: INA228 not found.");
     while (true) {
@@ -47,8 +61,9 @@ void setup() {
   ina228.setAlertPolarity(INA228_ALERT_POLARITY_INVERTED);
   ina228.resetAccumulators();
 
-  Serial.println("ts_us,current_mA,bus_V,shunt_mV,power_mW,energy_J,charge_C,temp_C,sync");
+  waitForStartCommand();
 
+  Serial.println("ts_us,current_mA,bus_V,shunt_mV,power_mW,energy_J,charge_C,temp_C,sync");
   next_sample_us = micros();
 }
 

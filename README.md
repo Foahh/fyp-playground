@@ -153,7 +153,7 @@ For inference-window **`avg_power_mW`** in the benchmark CSV (INA228 + `power-me
 3. Paste the code block from [`power-measure/patch/aiValidation_ATON_power_sync.inc.c`](power-measure/patch/aiValidation_ATON_power_sync.inc.c) (not the comment header) **after** the `_dumpable_tensor_name[]` array and **before** `_APP_VERSION_MAJOR_`.
 4. Add the **call sites** if your vendor file does not already include them (see [docs/power-measure-patch-stedge-ai.md](docs/power-measure-patch-stedge-ai.md)).
 
-Full wiring, env vars (`BENCHMARK_POWER_SERIAL`), and troubleshooting: **[docs/power-measure-patch-stedge-ai.md](docs/power-measure-patch-stedge-ai.md)**.
+Full wiring, env vars (`BENCHMARK_POWER_SERIAL`, optional `BENCHMARK_POWER_DISCARD_*` for edge trimming), and troubleshooting: **[docs/power-measure-patch-stedge-ai.md](docs/power-measure-patch-stedge-ai.md)**. With power serial enabled, the run also appends a continuous log to **`results/benchmark/power-measure.csv`** (host timestamp + INA228 fields). The sketch waits for **`START`** on the serial line; the benchmark sends it when opening the port.
 
 ### Run Benchmark
 

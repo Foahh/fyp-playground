@@ -8,7 +8,7 @@ After you **upgrade ST Edge AI** or **reinstall** the tree, re-apply the patch b
 
 ## What the patch does
 
-1. **`aiValidation_ATON.c`** — Adds **static** GPIO helpers and calls them around **`npu_run()`** so only **inference** is marked high on a pin (default **PF3**), not UART/USB protocol I/O.
+1. **`aiValidation_ATON.c`** — Adds **static** GPIO helpers and calls them around **`npu_run()`** so only **inference** is marked high on a pin (default **PD6** on STM32N6570-DK; checked against BSP for conflicts), not UART/USB protocol I/O.
 2. **Host** — Benchmark reads the INA228 serial stream during `validate` when `BENCHMARK_POWER_SERIAL` is set (`scripts/benchmark/`).
 
 There is **no** separate `power_measure_sync.c` and **no** NPU_Validation **Makefile** change: everything lives in one middleware file.
@@ -62,14 +62,22 @@ Edit the **`PWR_SYNC_GPIO_*`** / **`PWR_SYNC_GPIO_RCC_ENABLE`** defaults in the 
 
 ## Arduino and host benchmark
 
-1. Flash `power-measure/power-measure.ino`. Wire **STM32 sync** (e.g. PF3) to **`SYNC_FROM_MCU_PIN`** and common ground.
+1. Flash `power-measure/power-measure.ino`. It **waits for a `START` command** on serial before streaming CSV (status lines are prefixed with `#`). The benchmark sends `START\\n` automatically when it opens `BENCHMARK_POWER_SERIAL`. For manual use, open the serial console and send `START`. Wire **STM32 sync** (**PD6** by default) to **`SYNC_FROM_MCU_PIN`** and common ground.
 2. Second serial for the INA228 (not the ST-LINK port used by `stedgeai`):
 
    - `BENCHMARK_POWER_SERIAL` — e.g. `/dev/ttyUSB1`
    - `BENCHMARK_POWER_BAUD` — default `115200`
 
-3. `pip install pyserial`
-4. Run the benchmark; CSV column **`avg_power_mW`** fills when samples are captured.
+3. Optional — trim **start/end** of each inference window (by CSV `ts_us`) to reduce GPIO and rail edge effects:
+
+   - `BENCHMARK_POWER_DISCARD_START_MS` — drop samples in the first *n* milliseconds of each contiguous `sync==1` segment (default **`1`** ms when unset).
+   - `BENCHMARK_POWER_DISCARD_END_MS` — drop samples in the last *n* milliseconds of each segment (default **`1`** ms when unset).
+   - `BENCHMARK_POWER_DISCARD_EDGE_MS` — convenience: sets **both** start and end to the same value when the two variables above are **not** set (e.g. `0.5` for 0.5 ms each side).
+
+   Set **`BENCHMARK_POWER_DISCARD_START_MS=0`** and **`BENCHMARK_POWER_DISCARD_END_MS=0`** to disable trimming. If a segment is shorter than the requested trim, or timestamps are missing, the benchmark keeps the full segment for that run (no worse than no discard).
+
+4. `pip install pyserial`
+5. Run the benchmark. While `BENCHMARK_POWER_SERIAL` is set, a background thread starts at benchmark launch and **appends every INA228 row** to **`results/benchmark/power-measure.csv`** with a leading **`host_time_iso`** column (UTC). **`avg_power_mW`** in `benchmark_results.csv` still uses only samples captured during each model’s **validate** step (same logic as before, including optional edge discard).
 
 ## After an ST Edge AI upgrade
 
@@ -82,5 +90,7 @@ Edit the **`PWR_SYNC_GPIO_*`** / **`PWR_SYNC_GPIO_RCC_ENABLE`** defaults in the 
 |--------|----------------|
 | Empty `avg_power_mW` | `BENCHMARK_POWER_SERIAL` unset, wrong port, or `pyserial` missing |
 | Power looks like whole-run average | Sync GPIO not wired; benchmark falls back to all INA228 lines |
+| `avg_power_mW` unchanged after discard vars | `ts_us` missing in CSV; discard needs timestamps |
+| Want no edge trimming | `BENCHMARK_POWER_DISCARD_START_MS=0` and `BENCHMARK_POWER_DISCARD_END_MS=0` |
 | Build errors in the new block | Pin/port conflict or RIF/security; change `PWR_SYNC_*` / RCC macro |
 | HAL / GPIO undeclared | `stm32n6xx_hal.h` include path / N6 build only (this path is for STM32N6 NPU validation) |

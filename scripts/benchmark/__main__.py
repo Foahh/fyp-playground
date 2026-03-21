@@ -3,10 +3,11 @@
 import argparse
 import datetime
 
-from .constants import CSV_PATH, ensure_dirs
+from .constants import CSV_PATH, POWER_MEASURE_CSV_PATH, ensure_dirs
 from .models import load_models
 from .parsing import parse_metrics, _parse_network_c_info
 from .results import append_result, load_completed, log_error, log_stdout
+from .power_serial import start_power_session, stop_power_session
 from .workflow import _get_st_ai_output_dir, run_evaluation
 
 
@@ -21,6 +22,8 @@ def main():
     args = parser.parse_args()
 
     ensure_dirs()
+
+    power_running = start_power_session()
 
     entries = load_models()
 
@@ -42,6 +45,13 @@ def main():
     print(header)
     log_stdout(header)
 
+    try:
+        _run_benchmark_loop(entries, total, completed, power_running)
+    finally:
+        stop_power_session()
+
+
+def _run_benchmark_loop(entries, total, completed, power_running: bool):
     for i, entry in enumerate(entries, 1):
         key = (entry.variant, entry.fmt)
         tag = f"[{i}/{total}]"
@@ -121,6 +131,8 @@ def main():
             log_stdout(f"{tag} ERROR: {entry.variant} ({entry.fmt}) — {exc}")
 
     footer = f"\nBenchmark complete. Results in: {CSV_PATH}"
+    if power_running:
+        footer += f"\nINA228 log: {POWER_MEASURE_CSV_PATH}"
     print(footer)
     log_stdout(footer)
 
