@@ -98,6 +98,11 @@ def main():
                 "weights_flash_kib": metrics.get("weights_flash_kib", ""),
                 "inference_time_ms": metrics.get("inference_time_ms", ""),
                 "inf_per_sec": metrics.get("inf_per_sec", ""),
+                "avg_power_mW": (
+                    f"{res.avg_power_mW:.3f}"
+                    if res.avg_power_mW is not None
+                    else ""
+                ),
                 "ap_50": metrics.get("ap_50", ""),
             }
 

@@ -144,6 +144,17 @@ ST_BENCHMARK_ENV=my-benchmark-env python3 conda_setup_benchmark.py
 - STM32N6570-DK board connected via USB
 - `STEDGEAI_CORE_DIR` environment variable set
 
+#### Power measurement (`avg_power_mW`, optional)
+
+For inference-window **`avg_power_mW`** in the benchmark CSV (INA228 + `power-measure/power-measure.ino`), apply a **single-file** patch to ST Edge AI:
+
+1. Open `Middlewares/ST/AI/Validation/Src/aiValidation_ATON.c` in your ST install (`$STEDGEAI_CORE_DIR`).
+2. Add `#include "stm32n6xx_hal.h"` once with the other includes if it is not there yet.
+3. Paste the code block from [`power-measure/patch/aiValidation_ATON_power_sync.inc.c`](power-measure/patch/aiValidation_ATON_power_sync.inc.c) (not the comment header) **after** the `_dumpable_tensor_name[]` array and **before** `_APP_VERSION_MAJOR_`.
+4. Add the **call sites** if your vendor file does not already include them (see [docs/power-measure-patch-stedge-ai.md](docs/power-measure-patch-stedge-ai.md)).
+
+Full wiring, env vars (`BENCHMARK_POWER_SERIAL`), and troubleshooting: **[docs/power-measure-patch-stedge-ai.md](docs/power-measure-patch-stedge-ai.md)**.
+
 ### Run Benchmark
 
 Test with a single model first:

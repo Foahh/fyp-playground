@@ -3,6 +3,7 @@
 import os
 import platform
 from pathlib import Path
+from typing import Optional, Tuple
 
 
 def get_stedgeai_path() -> str:
@@ -154,7 +155,20 @@ CSV_COLUMNS = [
     "inference_time_ms",
     "inf_per_sec",
     "ap_50",
+    "avg_power_mW",
 ]
+
+
+def get_power_serial_config() -> Tuple[Optional[str], int]:
+    """Serial device for INA228 Arduino CSV (separate from ST-LINK UART used by stedgeai)."""
+    port = os.environ.get("BENCHMARK_POWER_SERIAL", "").strip()
+    if not port:
+        return None, 115200
+    try:
+        baud = int(os.environ.get("BENCHMARK_POWER_BAUD", "115200"))
+    except ValueError:
+        baud = 115200
+    return port, baud
 
 # ── Path helpers for the model registry ──
 

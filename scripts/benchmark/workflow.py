@@ -13,6 +13,7 @@ from typing import Optional
 from .config import build_eval_config
 from .constants import N6_WORKDIR, SERVICES_DIR, SSD_FAMILIES, STEDGEAI_PATH, STDOUT_LOG
 from .models import ModelEntry
+from .power_serial import compute_avg_power_mw, start_background_capture, stop_capture
 
 
 def _get_n6_scripts_dir() -> Path:
@@ -249,6 +250,7 @@ class EvalResult:
     evaluate_out: str = ""
     evaluate_err: str = ""
     evaluate_rc: int = 0
+    avg_power_mW: Optional[float] = None
 
     @property
     def combined_stdout(self) -> str:
@@ -292,8 +294,14 @@ def run_evaluation(entry: ModelEntry) -> EvalResult:
 
         time.sleep(1)
 
-        # Step 3: Validate on device (perf/memory metrics)
-        res.validate_out, res.validate_err, res.validate_rc = _step_validate(entry)
+        # Step 3: Validate on device (perf/memory metrics); optional INA228 CSV on BENCHMARK_POWER_SERIAL
+        power_lines, power_stop, power_thread = start_background_capture()
+        try:
+            res.validate_out, res.validate_err, res.validate_rc = _step_validate(entry)
+        finally:
+            stop_capture(power_stop, power_thread)
+        if power_lines is not None:
+            res.avg_power_mW = compute_avg_power_mw(power_lines)
         # Continue even if validate fails — we still want AP from host eval
 
     except subprocess.TimeoutExpired as e:
