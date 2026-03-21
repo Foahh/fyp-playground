@@ -1,12 +1,12 @@
 [submodule "stm32ai-modelzoo"]
-	path = stm32ai-modelzoo
+	path = external/stm32ai-modelzoo
 	url = https://github.com/Foahh/stm32ai-modelzoo
 [submodule "stm32ai-modelzoo-services"]
-	path = stm32ai-modelzoo-services
+	path = external/stm32ai-modelzoo-services
 	url = https://github.com/Foahh/stm32ai-modelzoo-services
 [submodule "TinyissimoYOLO"]
-	path = TinyissimoYOLO
+	path = external/TinyissimoYOLO
 	url = https://github.com/Foahh/TinyissimoYOLO
 [submodule "ultralytics"]
-	path = ultralytics
+	path = external/ultralytics
 	url = https://github.com/Foahh/ultralytics

@@ -20,18 +20,19 @@ def get_stedgeai_path() -> str:
 
 # ── Paths ──
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-MODELZOO_DIR = BASE_DIR / "stm32ai-modelzoo" / "object_detection"
-SERVICES_DIR = BASE_DIR / "stm32ai-modelzoo-services" / "object_detection"
-OUTPUT_DIR = BASE_DIR / "results"
+BASE_DIR = Path(__file__).resolve().parents[2]
+MODELZOO_DIR = BASE_DIR / "external" / "stm32ai-modelzoo" / "object_detection"
+SERVICES_DIR = BASE_DIR / "external" / "stm32ai-modelzoo-services" / "object_detection"
+RESULTS_DIR = BASE_DIR / "results"
+BENCHMARK_DIR = RESULTS_DIR / "benchmark"
 
-CSV_PATH = OUTPUT_DIR / "benchmark_results.csv"
-ERROR_LOG = OUTPUT_DIR / "benchmark_errors.log"
-STDOUT_LOG = OUTPUT_DIR / "benchmark_stdout.log"
+CSV_PATH = BENCHMARK_DIR / "benchmark_results.csv"
+ERROR_LOG = BENCHMARK_DIR / "benchmark_errors.log"
+STDOUT_LOG = BENCHMARK_DIR / "benchmark_stdout.log"
 
 STEDGEAI_PATH = get_stedgeai_path()
 
-N6_WORKDIR = OUTPUT_DIR / "n6_workdir"
+N6_WORKDIR = BENCHMARK_DIR / "n6_workdir"
 
 # ── Dataset paths ──
 
@@ -157,9 +158,10 @@ CSV_COLUMNS = [
 
 # ── Path helpers for the model registry ──
 
-_ZOO = Path("stm32ai-modelzoo") / "object_detection"
+_ZOO = Path("external") / "stm32ai-modelzoo" / "object_detection"
 _UL = (
-    Path("ultralytics")
+    Path("external")
+    / "ultralytics"
     / "examples"
     / "YOLOv8-STEdgeAI"
     / "stedgeai_models"
@@ -712,5 +714,5 @@ MODEL_REGISTRY: list[dict] = [
 
 def ensure_dirs():
     """Create output directories. Call once from __main__."""
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    os.makedirs(BENCHMARK_DIR, exist_ok=True)
     os.makedirs(N6_WORKDIR, exist_ok=True)

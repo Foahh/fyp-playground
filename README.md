@@ -48,31 +48,23 @@ python ./load_coco.py
 
 Training requires **Python 3.10** and several Python packages.
 
-For full setup instructions, see [TinyissimoYOLO/tinyissimoYOLO_README.md](TinyissimoYOLO/tinyissimoYOLO_README.md).
+For full setup instructions, see [external/TinyissimoYOLO/tinyissimoYOLO_README.md](external/TinyissimoYOLO/tinyissimoYOLO_README.md).
 
 ### Conda Environment Setup
 
 ```sh
-cd TinyissimoYOLO
+python3 conda_setup_train.py
+```
 
-conda create -n yolo python=3.10
-conda activate yolo
+Optional overrides:
 
-# For CUDA 11.8:
-# pip install torch==2.0.0 torchvision==0.15.1 torchaudio==2.0.1 --index-url https://download.pytorch.org/whl/cu118
-
-# For CUDA 12.6:
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
-
-# For CUDA 13.0:
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu130
-
-pip install -r requirements.txt
+```sh
+TINYISSIMO_TRAIN_ENV=tinyissimo-train TORCH_INDEX_URL=https://download.pytorch.org/whl/cu126 python3 conda_setup_train.py
 ```
 
 ### Training
 
-Run training with different input sizes:
+From the repository root (script lives next to this README; outputs go to `external/TinyissimoYOLO/results/`):
 
 ```sh
 python train_coco_person.py --img_size 192
@@ -83,9 +75,42 @@ python train_coco_person.py --img_size 320
 
 ---
 
+## Export TinyissimoYOLO to TFLite INT8
+
+### Conda Environment Setup
+
+```sh
+python3 conda_setup_export.py
+```
+
+Optional overrides:
+
+```sh
+YOLO_EXPORT_ENV=yolo-export TORCH_INDEX_URL=https://download.pytorch.org/whl/cu126 python3 conda_setup_export.py
+```
+
+### Export
+
+```sh
+python export_tflite.py --img_size 192
+python export_tflite.py --img_size 256
+python export_tflite.py --img_size 288
+python export_tflite.py --img_size 320
+```
+
+By default, export reads checkpoints from `results/model/tinyissimoyolo_v8_<img_size>/weights/best.pt`.
+
+You can also export a specific checkpoint:
+
+```sh
+python export_tflite.py --img_size 192 --weights results/model/tinyissimoyolo_v8_192/weights/best.pt
+```
+
+---
+
 ## Benchmark on STM32N6570-DK
 
-This benchmark performs on-device evaluation for all supported model variants and saves the results to `benchmark_results.csv`.
+This benchmark performs on-device evaluation for all supported model variants and saves the results to `results/benchmark/benchmark_results.csv`.
 
 ### Reading
 
@@ -100,19 +125,18 @@ Before benchmarking, make sure:
 
 Benchmarking requires **Python 3.12.9** and several additional packages.
 
-For full setup instructions, see [stm32ai-modelzoo-services/README.md](stm32ai-modelzoo-services/README.md#before-you-start).
+For full setup instructions, see [external/stm32ai-modelzoo-services/README.md](external/stm32ai-modelzoo-services/README.md#before-you-start).
 
 ### Conda Environment Setup
 
 ```sh
-conda create -n st_zoo python=3.12.9
-conda activate st_zoo
+python3 conda_setup_benchmark.py
 ```
 
-If you want to use **NVIDIA GPU support**, run:
+Optional: use a different env name (default is `st_zoo`):
 
 ```sh
-conda install -c conda-forge cudatoolkit=11.8 cudnn
+ST_BENCHMARK_ENV=my-benchmark-env python3 conda_setup_benchmark.py
 ```
 
 ### Prerequisites
