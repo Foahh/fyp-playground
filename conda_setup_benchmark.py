@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create conda env for STM32 benchmark (CUDA + modelzoo deps)."""
+"""Create conda env for STM32 benchmark (CUDA, modelzoo deps, README metrics parser)."""
 
 from __future__ import annotations
 
@@ -48,6 +48,9 @@ def main() -> None:
         print(f"Wrote {script} (LD_LIBRARY_PATH for conda CUDA libs)")
 
     pip_install(ENV_NAME, "-r", str(req))
+
+    print("Installing README metrics parser deps (scripts/benchmark/parse_modelzoo_readme.py) ...")
+    pip_install(ENV_NAME, "markdown", "beautifulsoup4")
 
     print(f"Done. Activate with: conda activate {ENV_NAME}")
     conda_run(

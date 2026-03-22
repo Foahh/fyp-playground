@@ -143,6 +143,8 @@ ST_BENCHMARK_ENV=my-benchmark-env python3 conda_setup_benchmark.py
 
 - STM32N6570-DK board connected via USB
 - `STEDGEAI_CORE_DIR` environment variable set
+- ESPS3-C3 connected with INA228
+- Arduino IDE (flash `power-measure/power-measure.ino`)
 
 #### Power measurement (`avg_power_mW`, optional)
 

@@ -1,10 +1,10 @@
-#include <Wire.h>
 #include <Adafruit_INA228.h>
+#include <Wire.h>
 
 Adafruit_INA228 ina228;
 
 static constexpr uint8_t INA228_I2C_ADDR = INA228_I2CADDR_DEFAULT;
-static constexpr float SHUNT_RESISTOR_OHMS = 0.1f;  // R100
+static constexpr float SHUNT_RESISTOR_OHMS = 0.1f; // R100
 static constexpr float MAX_EXPECTED_CURRENT_A = 10.0f;
 
 static constexpr int INA228_SDA_PIN = 12;
@@ -84,8 +84,7 @@ void loop() {
   const float power_mW = ina228.getPower_mW();
   const int sync = digitalRead(SYNC_FROM_MCU_PIN) == HIGH ? 1 : 0;
 
-  int len = snprintf(line_buf, sizeof(line_buf),
-                     "%lu,%.3f,%.4f,%.3f,%d\n",
+  int len = snprintf(line_buf, sizeof(line_buf), "%lu,%.3f,%.4f,%.3f,%d\n",
                      (unsigned long)ts, current_mA, bus_V, power_mW, sync);
   Serial.write(line_buf, len);
 }
