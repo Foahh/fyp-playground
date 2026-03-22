@@ -58,7 +58,7 @@ def _write_n6_loader_config() -> Path:
 def _run_streaming(
     cmd: list, cwd: str, timeout: int, env=None, log_header: str = ""
 ) -> tuple[str, str, int]:
-    """Run a subprocess, streaming stdout/stderr live while also capturing them."""
+    """Run a subprocess; capture stdout/stderr in memory and append to STDOUT_LOG only."""
     proc = subprocess.Popen(
         cmd,
         cwd=cwd,
@@ -76,20 +76,17 @@ def _run_streaming(
         _log_file.write(log_header + "\n")
         _log_file.flush()
 
-    def _reader(pipe, lines, stream, tee_file=None):
+    def _reader(pipe, lines, log_file):
         for line in pipe:
-            stream.write(line)
-            stream.flush()
             lines.append(line)
-            if tee_file:
-                tee_file.write(line)
-                tee_file.flush()
+            log_file.write(line)
+            log_file.flush()
 
     t_out = threading.Thread(
-        target=_reader, args=(proc.stdout, stdout_lines, sys.stdout, _log_file)
+        target=_reader, args=(proc.stdout, stdout_lines, _log_file)
     )
     t_err = threading.Thread(
-        target=_reader, args=(proc.stderr, stderr_lines, sys.stderr, _log_file)
+        target=_reader, args=(proc.stderr, stderr_lines, _log_file)
     )
     t_out.start()
     t_err.start()

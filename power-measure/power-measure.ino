@@ -9,11 +9,12 @@ static constexpr float MAX_EXPECTED_CURRENT_A = 10.0f;
 
 static constexpr int INA228_SDA_PIN = 12;
 static constexpr int INA228_SCL_PIN = 13;
-static constexpr int INA228_ALERT_PIN = 14;
+static constexpr int INA228_ALERT_PIN = 11;
 
 static constexpr int SYNC_FROM_MCU_PIN = 15;
 
-static constexpr uint32_t SAMPLE_INTERVAL_US = 110000;
+// Min SAMPLE_INTERVAL_US ~= INA228_COUNT_X * (t_shunt + t_bus) in us.
+static constexpr uint32_t SAMPLE_INTERVAL_US = 20000;
 
 static uint32_t next_sample_us = 0;
 static char line_buf[128];
@@ -52,10 +53,9 @@ void setup() {
 
   ina228.setShunt(SHUNT_RESISTOR_OHMS, MAX_EXPECTED_CURRENT_A);
 
-  ina228.setAveragingCount(INA228_COUNT_64);
+  ina228.setAveragingCount(INA228_COUNT_16);
   ina228.setVoltageConversionTime(INA228_TIME_540_us);
   ina228.setCurrentConversionTime(INA228_TIME_540_us);
-  ina228.setTemperatureConversionTime(INA228_TIME_540_us);
 
   ina228.setAlertType(INA228_ALERT_CONVERSION_READY);
   ina228.setAlertPolarity(INA228_ALERT_POLARITY_INVERTED);
@@ -63,7 +63,7 @@ void setup() {
 
   waitForStartCommand();
 
-  Serial.println("ts_us,current_mA,bus_V,shunt_mV,power_mW,energy_J,charge_C,temp_C,sync");
+  Serial.println("ts_us,current_mA,bus_V,power_mW,sync");
   next_sample_us = micros();
 }
 
@@ -81,16 +81,11 @@ void loop() {
   const uint32_t ts = micros();
   const float current_mA = ina228.getCurrent_mA();
   const float bus_V = ina228.getBusVoltage_V();
-  const float shunt_mV = ina228.getShuntVoltage_mV();
   const float power_mW = ina228.getPower_mW();
-  const float energy_J = ina228.readEnergy();
-  const float charge_C = ina228.readCharge();
-  const float temp_C = ina228.readDieTemp();
   const int sync = digitalRead(SYNC_FROM_MCU_PIN) == HIGH ? 1 : 0;
 
   int len = snprintf(line_buf, sizeof(line_buf),
-                     "%lu,%.3f,%.4f,%.4f,%.3f,%.6f,%.6f,%.2f,%d\n",
-                     (unsigned long)ts, current_mA, bus_V, shunt_mV,
-                     power_mW, energy_J, charge_C, temp_C, sync);
+                     "%lu,%.3f,%.4f,%.3f,%d\n",
+                     (unsigned long)ts, current_mA, bus_V, power_mW, sync);
   Serial.write(line_buf, len);
 }

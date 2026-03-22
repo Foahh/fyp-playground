@@ -10,25 +10,25 @@ from .constants import get_power_edge_discard_ms, get_power_serial_config, POWER
 
 
 def parse_ina228_csv_line(line: str) -> Optional[dict]:
-    """Parse one data line from power-measure.ino (with optional trailing sync column)."""
+    """Parse one data line: ts_us,current_mA,bus_V,power_mW,sync."""
     line = line.strip()
     if not line or line.startswith("ts_us"):
         return None
     parts = line.split(",")
-    if len(parts) < 8:
+    if len(parts) < 4:
         return None
     try:
         ts_us = int(parts[0].strip())
     except ValueError:
         ts_us = None
     try:
-        power_mw = float(parts[4])
+        power_mw = float(parts[3])
     except ValueError:
         return None
     sync: Optional[int] = None
-    if len(parts) >= 9:
+    if len(parts) >= 5:
         try:
-            sync = int(parts[8].strip())
+            sync = int(parts[4].strip())
         except ValueError:
             sync = None
     return {"ts_us": ts_us, "power_mW": power_mw, "sync": sync}
@@ -125,7 +125,7 @@ class PowerMeasureSession:
     """Reads INA228 serial for the whole benchmark run; logs to power-measure.csv with host time."""
 
     _CSV_HEADER = (
-        "host_time_iso,ts_us,current_mA,bus_V,shunt_mV,power_mW,energy_J,charge_C,temp_C,sync\n"
+        "host_time_iso,ts_us,current_mA,bus_V,power_mW,sync\n"
     )
 
     def __init__(self) -> None:
