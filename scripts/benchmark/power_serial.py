@@ -10,7 +10,7 @@ from .constants import get_power_edge_discard_ms, get_power_serial_config, POWER
 
 
 def parse_ina228_csv_line(line: str) -> Optional[dict]:
-    """Parse one data line: ts_us,current_mA,bus_V,power_mW,sync."""
+    """Parse one data line: ts_us,current_mA,bus_V,power_mW,inference."""
     line = line.strip()
     if not line or line.startswith("ts_us"):
         return None
@@ -25,27 +25,27 @@ def parse_ina228_csv_line(line: str) -> Optional[dict]:
         power_mw = float(parts[3])
     except ValueError:
         return None
-    sync: Optional[int] = None
+    inference: Optional[int] = None
     if len(parts) >= 5:
         try:
-            sync = int(parts[4].strip())
+            inference = int(parts[4].strip())
         except ValueError:
-            sync = None
-    return {"ts_us": ts_us, "power_mW": power_mw, "sync": sync}
+            inference = None
+    return {"ts_us": ts_us, "power_mW": power_mw, "inference": inference}
 
 
-def _contiguous_sync_one_segments(rows: list[dict]) -> list[tuple[int, int]]:
-    """Inclusive index ranges [lo, hi] of rows with sync==1 in each contiguous run."""
+def _contiguous_inference_one_segments(rows: list[dict]) -> list[tuple[int, int]]:
+    """Inclusive index ranges [lo, hi] of rows with inference==1 in each contiguous run."""
     segments: list[tuple[int, int]] = []
     n = len(rows)
     i = 0
     while i < n:
-        while i < n and rows[i].get("sync") != 1:
+        while i < n and rows[i].get("inference") != 1:
             i += 1
         if i >= n:
             break
         j = i
-        while j < n and rows[j].get("sync") == 1:
+        while j < n and rows[j].get("inference") == 1:
             j += 1
         segments.append((i, j - 1))
         i = j
@@ -54,13 +54,13 @@ def _contiguous_sync_one_segments(rows: list[dict]) -> list[tuple[int, int]]:
 
 def compute_avg_power_mw(lines: list[str]) -> Optional[float]:
     """
-    Prefer the mean of samples where sync==1 (inference window on STM32).
+    Prefer the mean of samples where inference==1 (inference window on STM32).
 
-    Each contiguous sync-high segment is trimmed by discarding samples in the first
+    Each contiguous inference-high segment is trimmed by discarding samples in the first
     START ms and last END ms (by ts_us); defaults are 1 ms each. Set both env vars to 0
     to disable. Reduces GPIO and power rail edge effects.
 
-    If no sync column or no sync-high samples, use all valid samples (no edge discard).
+    If no inference column or no inference-high samples, use all valid samples (no edge discard).
     """
     parsed: list[dict] = []
     for line in lines:
@@ -74,16 +74,16 @@ def compute_avg_power_mw(lines: list[str]) -> Optional[float]:
     discard_start_us = int(round(discard_start_ms * 1000.0))
     discard_end_us = int(round(discard_end_ms * 1000.0))
 
-    synced = [r for r in parsed if r.get("sync") == 1]
-    if not synced:
+    inference_samples = [r for r in parsed if r.get("inference") == 1]
+    if not inference_samples:
         unsync = [r["power_mW"] for r in parsed]
         return sum(unsync) / len(unsync)
 
     if discard_start_us == 0 and discard_end_us == 0:
-        return sum(r["power_mW"] for r in synced) / len(synced)
+        return sum(r["power_mW"] for r in inference_samples) / len(inference_samples)
 
     powers_kept: list[float] = []
-    for lo, hi in _contiguous_sync_one_segments(parsed):
+    for lo, hi in _contiguous_inference_one_segments(parsed):
         seg = [parsed[k] for k in range(lo, hi + 1)]
         t_first = seg[0].get("ts_us")
         t_last = seg[-1].get("ts_us")
@@ -105,7 +105,7 @@ def compute_avg_power_mw(lines: list[str]) -> Optional[float]:
     if powers_kept:
         return sum(powers_kept) / len(powers_kept)
 
-    return sum(r["power_mW"] for r in synced) / len(synced)
+    return sum(r["power_mW"] for r in inference_samples) / len(inference_samples)
 
 
 def _skip_arduino_noise(line: str) -> bool:
@@ -125,7 +125,7 @@ class PowerMeasureSession:
     """Reads INA228 serial for the whole benchmark run; logs to power-measure.csv with host time."""
 
     _CSV_HEADER = (
-        "host_time_iso,ts_us,current_mA,bus_V,power_mW,sync\n"
+        "host_time_iso,ts_us,current_mA,bus_V,power_mW,inference\n"
     )
 
     def __init__(self) -> None:

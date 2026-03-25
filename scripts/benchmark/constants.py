@@ -181,7 +181,7 @@ _DEFAULT_POWER_DISCARD_MS = 1.0
 
 def get_power_edge_discard_ms() -> Tuple[float, float]:
     """
-    Milliseconds to drop from each contiguous sync-high segment (start and end)
+    Milliseconds to drop from each contiguous inference-high segment (start and end)
     when computing avg power. Uses timestamps from the INA228 CSV (ts_us).
 
     Env:
