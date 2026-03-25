@@ -71,11 +71,21 @@ def build_eval_config(entry: ModelEntry) -> Path:
         overrides["dataset"] = {
             "test_images_path": COCO_IMAGES,
             "test_annotations_path": coco_annotations,
+            # Null out paths unused during evaluation; the base config may
+            # contain relative paths that do not resolve from the benchmark CWD.
+            "quantization_path": None,
+            "prediction_path": None,
         }
     else:
         overrides["dataset"] = {
             "test_path": tfs_test,
         }
+
+    # Ensure model_name is set — some base configs omit it, but the
+    # modelzoo dataloader dispatcher (combined.py) requires it.
+    base_model = base.get("model", {})
+    if not base_model.get("model_name"):
+        overrides["model"]["model_name"] = base_model.get("model_type", entry.family)
 
     overrides = _deep_merge(overrides, entry.overrides)
     merged = _deep_merge(base, overrides)
