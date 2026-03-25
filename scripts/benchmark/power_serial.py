@@ -23,6 +23,57 @@ except ImportError:
     _HAS_PROTOBUF = False
     PowerSample = None
 
+try:
+    from serial.tools import list_ports
+    _HAS_SERIAL_TOOLS = True
+except ImportError:
+    _HAS_SERIAL_TOOLS = False
+
+
+def _auto_detect_esp32c6() -> Optional[str]:
+    """Auto-detect ESP32-C6 power monitor port."""
+    if not _HAS_SERIAL_TOOLS:
+        return None
+
+    ports = [p for p in list_ports.comports() if p.vid is not None]
+    if not ports:
+        return None
+
+    _ESPRESSIF_VIDS = {0x303A}
+    best_port = None
+    best_score = 0
+
+    for port in ports:
+        if port.vid not in _ESPRESSIF_VIDS:
+            continue
+
+        score = 0
+        text = " ".join([
+            (port.manufacturer or ""),
+            (port.product or ""),
+            (port.description or ""),
+        ]).lower()
+
+        if "esp32c6" in text:
+            score += 8
+        elif "c6" in text:
+            score += 7
+        elif "esp32" in text:
+            score += 6
+        elif "espressif" in text:
+            score += 6
+        elif "esp" in text:
+            score += 4
+
+        if score > best_score:
+            best_score = score
+            best_port = port.device
+
+    if best_port and best_score > 0:
+        print(f"Auto-detected ESP32-C6 power monitor: {best_port} (score={best_score})")
+
+    return best_port
+
 
 def compute_avg_power_mw(samples: list[dict]) -> Optional[float]:
     """
@@ -86,18 +137,23 @@ class PowerMeasureSession:
 
     def start(self) -> bool:
         if not _HAS_PROTOBUF:
+            print("WARNING: Power measurement disabled - protobuf module not found (pip install protobuf)")
             return False
         try:
             import serial
         except ImportError:
+            print("WARNING: Power measurement disabled - pyserial module not found (pip install pyserial)")
             return False
         port, baud = get_power_serial_config()
+        if not port:
+            port = _auto_detect_esp32c6()
         if not port:
             return False
         try:
             self._ser = serial.Serial(port, baud, timeout=0.25)
             self._ser.reset_input_buffer()
-        except Exception:
+        except Exception as e:
+            print(f"WARNING: Failed to connect to power measurement serial port {port}: {e}")
             self._ser = None
             return False
 

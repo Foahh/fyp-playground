@@ -284,11 +284,13 @@ def run_evaluation(entry: ModelEntry) -> EvalResult:
 
     try:
         # Step 1: Generate
+        print("  → Generating C code...")
         res.generate_out, res.generate_err, res.generate_rc = _step_generate(entry)
         if res.generate_rc != 0:
             return res
 
         # Step 2: Build & Flash
+        print("  → Building and flashing...")
         res.load_out, res.load_err, res.load_rc = _step_load(entry)
         if res.load_rc != 0:
             return res
@@ -297,6 +299,7 @@ def run_evaluation(entry: ModelEntry) -> EvalResult:
 
         # Step 3: Validate on device (perf/memory metrics); INA228 capture window if
         # start_power_session() is active in benchmark main (long-running power-measure.csv).
+        print("  → Validating on device...")
         begin_validate_capture()
         try:
             res.validate_out, res.validate_err, res.validate_rc = _step_validate(entry)
@@ -313,6 +316,7 @@ def run_evaluation(entry: ModelEntry) -> EvalResult:
 
     try:
         # Step 4: Host-side evaluation for AP metrics
+        print("  → Evaluating accuracy metrics...")
         res.evaluate_out, res.evaluate_err, res.evaluate_rc = _step_evaluate(entry)
     except subprocess.TimeoutExpired:
         res.evaluate_err = "TIMEOUT: host evaluation exceeded 1 hour"
