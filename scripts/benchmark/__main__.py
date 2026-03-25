@@ -178,8 +178,10 @@ def _run_benchmark_loop(entries, total, completed, power_running: bool, validati
             power_parts: list[str] = []
             if res.avg_power_inf_mW is not None:
                 power_parts.append(f"avg_power_inf={res.avg_power_inf_mW:.1f}mW")
-            if res.avg_energy_inf_mJ is not None:
-                power_parts.append(f"avg_energy_inf={res.avg_energy_inf_mJ:.2f}mJ")
+            if res.avg_power_idle_mW is not None:
+                power_parts.append(f"avg_power_idle={res.avg_power_idle_mW:.1f}mW")
+            if res.avg_power_delta_mW is not None:
+                power_parts.append(f"avg_power_delta={res.avg_power_delta_mW:.1f}mW")
 
             power_str = f", {', '.join(power_parts)}" if power_parts else ""
             done_msg = f"{tag} DONE: ap_50={ap}, inference={inf}ms{power_str}"
