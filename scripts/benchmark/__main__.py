@@ -19,11 +19,30 @@ def main():
         default="",
         help="Only run variants whose name contains this string",
     )
+    parser.add_argument(
+        "--power-serial",
+        type=str,
+        default=None,
+        help="Serial port for INA228 power measurement (e.g., /dev/ttyUSB0); auto-detects if not specified",
+    )
+    parser.add_argument(
+        "--power-baud",
+        type=int,
+        default=921600,
+        help="Baud rate for power measurement serial (default: 921600)",
+    )
+    parser.add_argument(
+        "--validation-count",
+        type=int,
+        default=10,
+        help="Number of inference runs for validation (default: 10)",
+    )
     args = parser.parse_args()
 
     ensure_dirs()
 
-    power_running = start_power_session()
+    power_running = start_power_session(args.power_serial, args.power_baud)
+    print("power_running:", power_running)
 
     entries = load_models()
 
@@ -46,12 +65,12 @@ def main():
     log_stdout(header)
 
     try:
-        _run_benchmark_loop(entries, total, completed, power_running)
+        _run_benchmark_loop(entries, total, completed, power_running, args.validation_count)
     finally:
         stop_power_session()
 
 
-def _run_benchmark_loop(entries, total, completed, power_running: bool):
+def _run_benchmark_loop(entries, total, completed, power_running: bool, validation_count: int):
     for i, entry in enumerate(entries, 1):
         key = (entry.variant, entry.fmt)
         tag = f"[{i}/{total}]"
@@ -77,7 +96,7 @@ def _run_benchmark_loop(entries, total, completed, power_running: bool):
         log_stdout(model_header)
 
         try:
-            res = run_evaluation(entry)
+            res = run_evaluation(entry, validation_count)
 
             failed = res.failed_step
             if failed:
@@ -96,6 +115,22 @@ def _run_benchmark_loop(entries, total, completed, power_running: bool):
             if cinfo_path.exists():
                 _parse_network_c_info(cinfo_path, metrics)
 
+            # Warn about missing critical metrics
+            missing = []
+            if not metrics.get("inference_time_ms"):
+                missing.append("inference_time_ms")
+            if not metrics.get("inf_per_sec"):
+                missing.append("inf_per_sec")
+            if not metrics.get("ap_50"):
+                missing.append("ap_50")
+            if res.avg_power_inf_mW is None:
+                missing.append("avg_power_inf_mW")
+
+            if missing:
+                warn_msg = f"  ⚠ WARNING: Missing metrics: {', '.join(missing)}"
+                print(warn_msg)
+                log_stdout(warn_msg)
+
             row = {
                 "model_family": entry.family,
                 "model_variant": entry.variant,
@@ -108,19 +143,46 @@ def _run_benchmark_loop(entries, total, completed, power_running: bool):
                 "weights_flash_kib": metrics.get("weights_flash_kib", ""),
                 "inference_time_ms": metrics.get("inference_time_ms", ""),
                 "inf_per_sec": metrics.get("inf_per_sec", ""),
-                "avg_power_mW": (
-                    f"{res.avg_power_mW:.3f}"
-                    if res.avg_power_mW is not None
+                "ap_50": metrics.get("ap_50", ""),
+                "avg_power_inf_mW": (
+                    f"{res.avg_power_inf_mW:.3f}"
+                    if res.avg_power_inf_mW is not None
                     else ""
                 ),
-                "ap_50": metrics.get("ap_50", ""),
+                "avg_power_idle_mW": (
+                    f"{res.avg_power_idle_mW:.3f}"
+                    if res.avg_power_idle_mW is not None
+                    else ""
+                ),
+                "avg_power_delta_mW": (
+                    f"{res.avg_power_delta_mW:.3f}"
+                    if res.avg_power_delta_mW is not None
+                    else ""
+                ),
+                "avg_power_inf_ms": (
+                    f"{res.avg_power_inf_ms:.3f}"
+                    if res.avg_power_inf_ms is not None
+                    else ""
+                ),
+                "avg_energy_inf_mJ": (
+                    f"{res.avg_energy_inf_mJ:.3f}"
+                    if res.avg_energy_inf_mJ is not None
+                    else ""
+                ),
             }
 
             append_result(row)
 
             ap = metrics.get("ap_50", "N/A")
             inf = metrics.get("inference_time_ms", "N/A")
-            done_msg = f"{tag} DONE: ap_50={ap}, inference={inf}ms"
+            power_parts: list[str] = []
+            if res.avg_power_inf_mW is not None:
+                power_parts.append(f"avg_power_inf={res.avg_power_inf_mW:.1f}mW")
+            if res.avg_energy_inf_mJ is not None:
+                power_parts.append(f"avg_energy_inf={res.avg_energy_inf_mJ:.2f}mJ")
+
+            power_str = f", {', '.join(power_parts)}" if power_parts else ""
+            done_msg = f"{tag} DONE: ap_50={ap}, inference={inf}ms{power_str}"
             print(done_msg)
             log_stdout(done_msg)
 

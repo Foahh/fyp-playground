@@ -4,3 +4,4 @@ __pycache__/
 
 results/*
 *.npy
+ai_runner.log

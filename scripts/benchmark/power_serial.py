@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from .constants import get_power_edge_discard_ms, get_power_serial_config, POWER_MEASURE_CSV_PATH
+from .constants import POWER_MEASURE_CSV_PATH
 
 # Add external/fyp-power-measure to path for protobuf import
 _pb_path = Path(__file__).resolve().parents[2] / "external" / "fyp-power-measure"
@@ -75,50 +75,71 @@ def _auto_detect_esp32c6() -> Optional[str]:
     return best_port
 
 
-def compute_avg_power_mw(samples: list[dict]) -> Optional[float]:
+def compute_power_metrics(samples: list[dict], num_inferences: int = 1) -> dict:
     """
-    Compute average power from protobuf samples with is_inference=True.
+    Compute power metrics from protobuf samples.
 
-    Uses energy accumulator data: each sample has avg_mw over duration_us.
-    Weighted average by duration, with optional edge trimming.
+    Args:
+        samples: List of power sample dictionaries
+        num_inferences: Number of inference runs (for averaging)
+
+    Returns dict with:
+    - avg_power_inf_mW: weighted average power during inference (mW)
+    - avg_power_idle_mW: weighted average power during idle (mW)
+    - avg_power_delta_mW: avg_power_inf_mW - avg_power_idle_mW (mW)
+    - avg_power_inf_ms: average duration per inference run (ms)
+    - avg_energy_inf_mJ: average energy per inference run (mJ)
     """
-    if not samples:
-        return None
+    if not samples or num_inferences <= 0:
+        return {
+            "avg_power_inf_mW": None,
+            "avg_power_idle_mW": None,
+            "avg_power_delta_mW": None,
+            "avg_power_inf_ms": None,
+            "avg_energy_inf_mJ": None,
+        }
 
     inference_samples = [s for s in samples if s.get("is_inference")]
-    if not inference_samples:
-        all_samples = [s for s in samples if s.get("duration_us", 0) > 0]
-        if not all_samples:
-            return None
-        total_energy = sum(s["avg_mw"] * s["duration_us"] for s in all_samples)
-        total_duration = sum(s["duration_us"] for s in all_samples)
-        return total_energy / total_duration if total_duration > 0 else None
+    idle_samples = [s for s in samples if not s.get("is_inference") and s.get("duration_us", 0) > 0]
 
-    discard_start_ms, discard_end_ms = get_power_edge_discard_ms()
-    if discard_start_ms == 0 and discard_end_ms == 0:
-        total_energy = sum(s["avg_mw"] * s["duration_us"] for s in inference_samples)
-        total_duration = sum(s["duration_us"] for s in inference_samples)
-        return total_energy / total_duration if total_duration > 0 else None
+    # Compute inference metrics
+    if inference_samples:
+        inf_energy_uw_us = sum(s["avg_mw"] * s["duration_us"] for s in inference_samples)
+        inf_duration_us = sum(s["duration_us"] for s in inference_samples)
+        avg_power_inf = inf_energy_uw_us / inf_duration_us if inf_duration_us > 0 else None
+        avg_duration_ms = (inf_duration_us / num_inferences) / 1000.0 if inf_duration_us > 0 else None
+        avg_energy_mj = (inf_energy_uw_us / num_inferences) / 1000.0 if inf_energy_uw_us > 0 else None
+    else:
+        avg_power_inf = None
+        avg_duration_ms = None
+        avg_energy_mj = None
 
-    # Edge trimming: discard first/last N ms of inference windows
-    discard_start_us = int(discard_start_ms * 1000)
-    discard_end_us = int(discard_end_ms * 1000)
+    # Compute idle metrics
+    if idle_samples:
+        idle_energy = sum(s["avg_mw"] * s["duration_us"] for s in idle_samples)
+        idle_duration = sum(s["duration_us"] for s in idle_samples)
+        avg_power_idle = idle_energy / idle_duration if idle_duration > 0 else None
+    else:
+        avg_power_idle = None
 
-    kept_samples = []
-    for s in inference_samples:
-        dur = s.get("duration_us", 0)
-        if dur <= (discard_start_us + discard_end_us):
-            kept_samples.append(s)
-            continue
-        # Proportionally reduce contribution from edges
-        kept_dur = dur - discard_start_us - discard_end_us
-        kept_samples.append({"avg_mw": s["avg_mw"], "duration_us": kept_dur})
+    avg_power_delta = (
+        (avg_power_inf - avg_power_idle)
+        if (avg_power_inf is not None and avg_power_idle is not None)
+        else None
+    )
 
-    if not kept_samples:
-        return None
-    total_energy = sum(s["avg_mw"] * s["duration_us"] for s in kept_samples)
-    total_duration = sum(s["duration_us"] for s in kept_samples)
-    return total_energy / total_duration if total_duration > 0 else None
+    return {
+        "avg_power_inf_mW": avg_power_inf,
+        "avg_power_idle_mW": avg_power_idle,
+        "avg_power_delta_mW": avg_power_delta,
+        "avg_power_inf_ms": avg_duration_ms,
+        "avg_energy_inf_mJ": avg_energy_mj,
+    }
+
+
+def compute_avg_power_mw(samples: list[dict]) -> Optional[float]:
+    """Legacy function for backward compatibility."""
+    return compute_power_metrics(samples)["avg_power_inf_mW"]
 
 
 class PowerMeasureSession:
@@ -135,7 +156,7 @@ class PowerMeasureSession:
         self._validate_lock = threading.Lock()
         self._capture_validate = False
 
-    def start(self) -> bool:
+    def start(self, port: Optional[str], baud: int) -> bool:
         if not _HAS_PROTOBUF:
             print("WARNING: Power measurement disabled - protobuf module not found (pip install protobuf)")
             return False
@@ -144,10 +165,14 @@ class PowerMeasureSession:
         except ImportError:
             print("WARNING: Power measurement disabled - pyserial module not found (pip install pyserial)")
             return False
-        port, baud = get_power_serial_config()
         if not port:
             port = _auto_detect_esp32c6()
         if not port:
+            print(
+                "WARNING: Power measurement disabled - could not find an ESP32-C6 power monitor serial port. "
+                "If the monitor is connected via USB, ensure USB CDC (\"USC-CDC\") is enabled on the ESP32 so it "
+                "appears as /dev/ttyACM* (or pass the correct device explicitly with --power-serial)."
+            )
             return False
         try:
             self._ser = serial.Serial(port, baud, timeout=0.25)
@@ -166,6 +191,7 @@ class PowerMeasureSession:
 
         self._thread = threading.Thread(target=self._run, name="ina228-power", daemon=True)
         self._thread.start()
+
         return True
 
     def stop(self) -> None:
@@ -239,19 +265,18 @@ class PowerMeasureSession:
 _session: Optional[PowerMeasureSession] = None
 
 
-def start_power_session() -> bool:
+def start_power_session(port: Optional[str], baud: int) -> bool:
     """
-    If BENCHMARK_POWER_SERIAL is set, start a background thread that logs every INA228
+    If port is provided, start a background thread that logs every INA228
     sample to results/benchmark/power-measure.csv with host_time_iso (UTC).
     """
     global _session
     if _session is not None:
         return True
-    port, _ = get_power_serial_config()
     if not port:
-        return False
+        port = _auto_detect_esp32c6()
     sess = PowerMeasureSession()
-    if not sess.start():
+    if not sess.start(port, baud):
         return False
     _session = sess
     return True
@@ -278,3 +303,9 @@ def end_validate_capture() -> list[dict]:
     if _session is None:
         return []
     return _session.end_validate_window()
+
+
+def is_power_session_active() -> bool:
+    """Check if power measurement session is currently active."""
+    global _session
+    return _session is not None

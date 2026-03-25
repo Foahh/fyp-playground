@@ -160,15 +160,16 @@ Results CSV: `results/benchmark/benchmark_results.csv`
 - **STM32CubeIDE** installed (C code compilation)
 - `$STEDGEAI_CORE_DIR/scripts/N6_scripts/config.json` configured for your board setup
 
-### Power Measurement (Optional)
+### Power Measurement
 - Arduino IDE for flashing `external/fyp-power-measure/fyp-power-measure.ino`
-- **ESP32-S6** with INA228 module connected to power supply rail
+- **ESP32-C6** with INA228 module connected to power supply rail
 - Uses interrupt-driven edge detection + INA228 energy accumulator for accurate measurements
 - Sends binary protobuf messages (PowerSample) at 921600 baud
-- Apply one-file patch to ST Edge AI: `power-measure/patch/aiValidation_ATON_power_sync.inc.c`
-- Environment variables: `BENCHMARK_POWER_SERIAL` (serial port), optional `BENCHMARK_POWER_DISCARD_*` (edge trimming)
+- Apply one-file patch to ST Edge AI: `external/fyp-power-measure/patch/aiValidation_ATON_power_sync.inc.c`
+- Auto-detects ESP32-C6 power monitor if `--power-serial` not specified (looks for Espressif VID 0x303A)
+- Command-line flags: `--power-serial` (optional, auto-detects if omitted), `--power-baud` (default 921600), `--validation-count` (default 10)
 - Requires: `pip install pyserial protobuf`
-- See `docs/power-measure-patch-stedge-ai.md` for full wiring & troubleshooting
+- See `external/fyp-power-measure/patch/power-measure-patch-stedge-ai.md` for full wiring & troubleshooting
 
 ## Data Setup
 
@@ -195,13 +196,13 @@ Expects dataset structure recognized by TinyissimoYOLO/Ultralytics (auto-handled
 - **Training fails**: Check Python 3.10 version, CUDA availability, dataset path in YAML
 - **Export fails**: Verify checkpoint exists in `results/model/<name>/weights/best.pt`; check Ultralytics patch was applied
 - **Benchmark connection fails**: Verify USB connection, dialout group membership, STEdgeAI config, board detection via STM32CubeIDE
-- **Power measurement unreliable**: Check serial port permissions, Arduino sketch flashing, INA228 wiring; see `docs/power-measure-patch-stedge-ai.md`
+- **Power measurement unreliable**: Check serial port permissions, Arduino sketch flashing, INA228 wiring; see `external/fyp-power-measure/patch/power-measure-patch-stedge-ai.md`
 
 ## Related Documentation
 
 - `README.md` - High-level workflow & quick start
 - `docs/stm32n6_getting_started.md` - STM32N6570-DK board setup & troubleshooting
-- `docs/power-measure-patch-stedge-ai.md` - Power measurement wiring, config, debugging
+- `external/fyp-power-measure/patch/power-measure-patch-stedge-ai.md` - Power measurement wiring, config, debugging
 - `docs/ai_runner.md` - ST Edge AI runner API (reference for benchmarking backend)
 - `external/TinyissimoYOLO/tinyissimoYOLO_README.md` - TinyissimoYOLO training details
 - `external/stm32ai-modelzoo-services/README.md` - Benchmarking service setup

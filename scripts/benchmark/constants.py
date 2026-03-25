@@ -156,63 +156,27 @@ CSV_COLUMNS = [
     "inference_time_ms",
     "inf_per_sec",
     "ap_50",
-    "avg_power_mW",
+    "avg_power_inf_mW",
+    "avg_power_idle_mW",
+    "avg_power_delta_mW",
+    "avg_power_inf_ms",
+    "avg_energy_inf_mJ",
 ]
 
-CSV_COLUMNS_NO_POWER = [c for c in CSV_COLUMNS if c != "avg_power_mW"]
+CSV_COLUMNS_NO_POWER = [
+    c
+    for c in CSV_COLUMNS
+    if c
+    not in (
+        "avg_power_inf_mW",
+        "avg_power_idle_mW",
+        "avg_power_delta_mW",
+        "avg_power_inf_ms",
+        "avg_energy_inf_mJ",
+    )
+]
 
 METRIC_PARSED_CSV_PATH = BENCHMARK_DIR / "metric_parsed.csv"
-
-
-def get_power_serial_config() -> Tuple[Optional[str], int]:
-    """Serial device for INA228 Arduino protobuf (separate from ST-LINK UART used by stedgeai)."""
-    port = os.environ.get("BENCHMARK_POWER_SERIAL", "").strip()
-    if not port:
-        return None, 921600
-    try:
-        baud = int(os.environ.get("BENCHMARK_POWER_BAUD", "921600"))
-    except ValueError:
-        baud = 921600
-    return port, baud
-
-
-_DEFAULT_POWER_DISCARD_MS = 1.0
-
-
-def get_power_edge_discard_ms() -> Tuple[float, float]:
-    """
-    Milliseconds to drop from each contiguous inference-high segment (start and end)
-    when computing avg power. Uses timestamps from the INA228 CSV (ts_us).
-
-    Env:
-      BENCHMARK_POWER_DISCARD_START_MS / BENCHMARK_POWER_DISCARD_END_MS — per-edge
-        (default 1 ms each when unset).
-      BENCHMARK_POWER_DISCARD_EDGE_MS — sets both start and end to the same value when the
-        two specific vars are not set (convenience for symmetric discard).
-      Set START_MS=0 and END_MS=0 explicitly to disable edge trimming.
-    """
-    if (
-        "BENCHMARK_POWER_DISCARD_EDGE_MS" in os.environ
-        and "BENCHMARK_POWER_DISCARD_START_MS" not in os.environ
-        and "BENCHMARK_POWER_DISCARD_END_MS" not in os.environ
-    ):
-        try:
-            v = float(os.environ["BENCHMARK_POWER_DISCARD_EDGE_MS"].strip())
-            v = max(0.0, v)
-            return v, v
-        except ValueError:
-            pass
-
-    def _one(key: str) -> float:
-        raw = os.environ.get(key, "").strip()
-        if not raw:
-            return _DEFAULT_POWER_DISCARD_MS
-        try:
-            return max(0.0, float(raw))
-        except ValueError:
-            return _DEFAULT_POWER_DISCARD_MS
-
-    return _one("BENCHMARK_POWER_DISCARD_START_MS"), _one("BENCHMARK_POWER_DISCARD_END_MS")
 
 # ── Path helpers for the model registry ──
 

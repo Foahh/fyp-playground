@@ -15,10 +15,10 @@ from .constants import N6_WORKDIR, SERVICES_DIR, SSD_FAMILIES, STEDGEAI_PATH, ST
 from .models import ModelEntry
 from .power_serial import (
     begin_validate_capture,
-    compute_avg_power_mw,
+    compute_power_metrics,
     end_validate_capture,
+    is_power_session_active,
 )
-
 
 def _get_n6_scripts_dir() -> Path:
     """Return the N6_scripts directory from STEDGEAI_CORE_DIR."""
@@ -167,46 +167,55 @@ def _step_load(entry: ModelEntry) -> tuple[str, str, int]:
     )
 
 
-def _step_validate(entry: ModelEntry) -> tuple[str, str, int]:
-    """Step 3: stedgeai validate — quick validation on the device."""
-    model_path = entry.model_path
-    if not model_path.startswith(("http://", "https://")):
-        model_path = str(Path(model_path).resolve())
+def _step_validate(entry: ModelEntry, n_runs: int = 10) -> tuple[str, str, int]:
+    """Step 3: Use ai_runner to run multiple inferences for accurate power measurement."""
 
-    output_chpos = "chfirst" if entry.family in SSD_FAMILIES else "chlast"
+    try:
+        # Import ai_runner from STEdgeAI installation
+        stedgeai_scripts = Path(os.environ["STEDGEAI_CORE_DIR"]) / "scripts" / "ai_runner"
+        if str(stedgeai_scripts) not in sys.path:
+            sys.path.insert(0, str(stedgeai_scripts))
+        from stm_ai_runner import AiRunner
+    except ImportError as e:
+        return "", f"Failed to import ai_runner: {e}", 1
 
-    cmd = [
-        STEDGEAI_PATH,
-        "validate",
-        "--quiet",
-        "--c-api",
-        "st-ai",
-        "--model",
-        model_path,
-        "--target",
-        "stm32n6",
-        "--mode",
-        "target",
-        "-d",
-        "serial:921600",
-        "-b",
-        "1",
-        "--input-data-type",
-        "uint8",
-        "--output-data-type",
-        "int8",
-        "--inputs-ch-position",
-        "chlast",
-        "--outputs-ch-position",
-        output_chpos,
-    ]
+    output_lines = []
+    try:
+        output_lines.append(f"Running {n_runs} inferences using ai_runner...")
+        runner = AiRunner(debug=False)
+        runner.connect("serial:921600")
 
-    return _run_streaming(
-        cmd,
-        cwd=str(N6_WORKDIR),
-        timeout=600,
-        log_header=f"\n=== VALIDATE | {entry.variant} | {entry.fmt} ===",
-    )
+        if not runner.is_connected:
+            return "", f"Failed to connect to device: {runner.get_error()}", 1
+
+        # Generate random input (batch_size=1)
+        inputs = runner.generate_rnd_inputs(batch_size=1)
+
+        # Run inference n_runs times
+        durations = []
+        for i in range(n_runs):
+            _, profile = runner.invoke(inputs, mode=AiRunner.Mode.IO_ONLY, disable_pb=True)
+
+            if profile['c_durations']:
+                durations.append(profile['c_durations'][0])
+
+            # Sleep 20ms between runs for power measurement denoising
+            time.sleep(0.02)
+
+        runner.disconnect()
+
+        # Format output
+        if durations:
+            avg_ms = sum(durations) / len(durations)
+            min_ms = min(durations)
+            max_ms = max(durations)
+            output_lines.append(f"Completed {len(durations)} inferences")
+            output_lines.append(f"Inference time: avg={avg_ms:.3f}ms, min={min_ms:.3f}ms, max={max_ms:.3f}ms")
+
+        return "\n".join(output_lines), "", 0
+
+    except Exception as e:
+        return "\n".join(output_lines), f"Error during multi-inference: {e}", 1
 
 
 def _step_evaluate(entry: ModelEntry) -> tuple[str, str, int]:
@@ -251,7 +260,11 @@ class EvalResult:
     evaluate_out: str = ""
     evaluate_err: str = ""
     evaluate_rc: int = 0
-    avg_power_mW: Optional[float] = None
+    avg_power_inf_mW: Optional[float] = None
+    avg_power_idle_mW: Optional[float] = None
+    avg_power_delta_mW: Optional[float] = None
+    avg_power_inf_ms: Optional[float] = None
+    avg_energy_inf_mJ: Optional[float] = None
 
     @property
     def combined_stdout(self) -> str:
@@ -278,7 +291,7 @@ class EvalResult:
         return None
 
 
-def run_evaluation(entry: ModelEntry) -> EvalResult:
+def run_evaluation(entry: ModelEntry, validation_count: int) -> EvalResult:
     """Run the full doc-based 4-step benchmark workflow."""
     res = EvalResult()
 
@@ -297,16 +310,22 @@ def run_evaluation(entry: ModelEntry) -> EvalResult:
 
         time.sleep(1)
 
-        # Step 3: Validate on device (perf/memory metrics); INA228 capture window if
-        # start_power_session() is active in benchmark main (long-running power-measure.csv).
-        print("  → Validating on device...")
+        # Step 3: Validate on device with multiple inferences for power measurement
+        print(f"  → Validating on device ({validation_count}x inferences)...")
         begin_validate_capture()
         try:
-            res.validate_out, res.validate_err, res.validate_rc = _step_validate(entry)
+            res.validate_out, res.validate_err, res.validate_rc = _step_validate(entry, validation_count)
         finally:
             validate_lines = end_validate_capture()
         if validate_lines:
-            res.avg_power_mW = compute_avg_power_mw(validate_lines)
+            metrics = compute_power_metrics(validate_lines, validation_count)
+            res.avg_power_inf_mW = metrics["avg_power_inf_mW"]
+            res.avg_power_idle_mW = metrics["avg_power_idle_mW"]
+            res.avg_power_delta_mW = metrics["avg_power_delta_mW"]
+            res.avg_power_inf_ms = metrics["avg_power_inf_ms"]
+            res.avg_energy_inf_mJ = metrics["avg_energy_inf_mJ"]
+        elif is_power_session_active():
+            print("  ⚠ WARNING: Power measurement active but no samples captured during validation")
 
     except subprocess.TimeoutExpired as e:
         step = "on-target"

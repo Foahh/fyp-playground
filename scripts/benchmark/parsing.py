@@ -140,13 +140,19 @@ def parse_metrics(stdout: str, stderr: str) -> dict:
         metrics["weights_flash_kib"] = m.group(2)
 
     m = re.search(r"hyperRAM\s+\[[^\]]+\]:\s+([\d.]+)\s+kB\s*/", combined)
-    if m and float(m.group(1)) > 0:
+    if m:
         metrics["external_ram_kib"] = m.group(1)
 
-    # ── Inference time from stedgeai validate output ──
-    m = re.search(r"duration\s*:\s*([\d.]+)\s*ms", combined)
+    # ── Inference time from ai_runner validation output ──
+    m = re.search(r"Inference time: avg=([\d.]+)ms", combined)
     if m:
         metrics["inference_time_ms"] = m.group(1)
+
+    # ── Fallback: stedgeai validate output ──
+    if not metrics["inference_time_ms"]:
+        m = re.search(r"duration\s*:\s*([\d.]+)\s*ms", combined)
+        if m:
+            metrics["inference_time_ms"] = m.group(1)
 
     # ── Compute inf/sec from inference time ──
     if metrics["inference_time_ms"]:
