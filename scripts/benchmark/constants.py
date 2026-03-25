@@ -144,6 +144,7 @@ SSD_FAMILIES = {
 }
 
 CSV_COLUMNS = [
+    "host_time_iso",
     "model_family",
     "model_variant",
     "hyperparameters",

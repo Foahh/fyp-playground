@@ -132,6 +132,9 @@ def _run_benchmark_loop(entries, total, completed, power_running: bool, validati
                 log_stdout(warn_msg)
 
             row = {
+                "host_time_iso": datetime.datetime.now(
+                    datetime.timezone.utc
+                ).isoformat(),
                 "model_family": entry.family,
                 "model_variant": entry.variant,
                 "hyperparameters": entry.hyperparameters,

@@ -455,6 +455,7 @@ def build_metric_rows() -> list[dict[str, str]]:
         mets = _pick_metrics(reg, family_metrics)
         rows.append(
             {
+                "host_time_iso": "",
                 "model_family": reg["family"],
                 "model_variant": reg["variant"],
                 "hyperparameters": reg.get("hyperparameters", "") or "",
