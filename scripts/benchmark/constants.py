@@ -165,14 +165,14 @@ METRIC_PARSED_CSV_PATH = BENCHMARK_DIR / "metric_parsed.csv"
 
 
 def get_power_serial_config() -> Tuple[Optional[str], int]:
-    """Serial device for INA228 Arduino CSV (separate from ST-LINK UART used by stedgeai)."""
+    """Serial device for INA228 Arduino protobuf (separate from ST-LINK UART used by stedgeai)."""
     port = os.environ.get("BENCHMARK_POWER_SERIAL", "").strip()
     if not port:
-        return None, 115200
+        return None, 921600
     try:
-        baud = int(os.environ.get("BENCHMARK_POWER_BAUD", "115200"))
+        baud = int(os.environ.get("BENCHMARK_POWER_BAUD", "921600"))
     except ValueError:
-        baud = 115200
+        baud = 921600
     return port, baud
 
 

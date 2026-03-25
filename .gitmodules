@@ -10,3 +10,6 @@
 [submodule "ultralytics"]
 	path = external/ultralytics
 	url = https://github.com/Foahh/ultralytics
+[submodule "external/fyp-power-measure"]
+	path = external/fyp-power-measure
+	url = https://github.com/Foahh/fyp-power-measure.git

@@ -23,6 +23,8 @@ from scripts.conda.conda_setup_common import (
 )
 
 ENV_NAME = os.environ.get("ST_BENCHMARK_ENV", "st_zoo")
+PYTHON_VERSION = "3.12.9"
+CUDA_VERSION = "11.8"
 
 
 def main() -> None:
@@ -33,10 +35,10 @@ def main() -> None:
         print(f"Missing {req}", file=sys.stderr)
         sys.exit(1)
 
-    ensure_conda_env(ENV_NAME, "3.12.9", "Python 3.12.9")
+    ensure_conda_env(ENV_NAME, PYTHON_VERSION, f"Python {PYTHON_VERSION}")
 
     print("Installing NVIDIA CUDA runtime + cuDNN (conda-forge) ...")
-    conda_install(ENV_NAME, "cudatoolkit=11.8", "cudnn", channels=("conda-forge",))
+    conda_install(ENV_NAME, f"cudatoolkit={CUDA_VERSION}", "cudnn", channels=("conda-forge",))
 
     if platform.system() == "Linux":
         activate_d = Path(conda_prefix(ENV_NAME)) / "etc" / "conda" / "activate.d"
@@ -49,8 +51,8 @@ def main() -> None:
 
     pip_install(ENV_NAME, "-r", str(req))
 
-    print("Installing README metrics parser deps (scripts/benchmark/parse_modelzoo_readme.py) ...")
-    pip_install(ENV_NAME, "markdown", "beautifulsoup4")
+    print("Installing power measurement and README parser deps ...")
+    pip_install(ENV_NAME, "-r", str(root / "requirements-benchmark.txt"))
 
     print(f"Done. Activate with: conda activate {ENV_NAME}")
     conda_run(

@@ -2,7 +2,7 @@
 
 This file is the **canonical** guide for the power-measure ST Edge AI patch (single-file `aiValidation_ATON.c` workflow).
 
-This project benchmarks inference on the STM32N6570-DK using ST Edge AI (`stedgeai`, `n6_loader.py`) and can record **average power during NPU inference** when you use an external INA228 monitor (Arduino sketch in `power-measure/`).
+This project benchmarks inference on the STM32N6570-DK using ST Edge AI (`stedgeai`, `n6_loader.py`) and can record **average power during NPU inference** when you use an external INA228 monitor (Arduino sketch in `external/fyp-power-measure/`).
 
 After you **upgrade ST Edge AI** or **reinstall** the tree, re-apply the patch below.
 
@@ -62,22 +62,24 @@ Edit the **`PWR_SYNC_GPIO_*`** / **`PWR_SYNC_GPIO_RCC_ENABLE`** defaults in the 
 
 ## Arduino and host benchmark
 
-1. Flash `power-measure/power-measure.ino`. It **waits for a `START` command** on serial before streaming CSV (status lines are prefixed with `#`). The benchmark sends `START\\n` automatically when it opens `BENCHMARK_POWER_SERIAL`. For manual use, open the serial console and send `START`. Wire **STM32 sync** (**PD6** by default) to **`SYNC_FROM_MCU_PIN`** and common ground.
+1. Flash `external/fyp-power-measure/fyp-power-measure.ino`. It uses **interrupt-driven edge detection** on the sync pin and the **INA228 energy accumulator** for accurate power measurement. Sends binary **protobuf messages** (PowerSample) over serial at 921600 baud. Wire **STM32 sync** (**PD6** by default) to **`IS_INFERENCING_PIN`** (GPIO 3) and common ground.
+
 2. Second serial for the INA228 (not the ST-LINK port used by `stedgeai`):
 
    - `BENCHMARK_POWER_SERIAL` — e.g. `/dev/ttyUSB1`
-   - `BENCHMARK_POWER_BAUD` — default `115200`
+   - `BENCHMARK_POWER_BAUD` — default `921600` (matches Arduino sketch)
 
-3. Optional — trim **start/end** of each inference window (by CSV `ts_us`) to reduce GPIO and rail edge effects:
+3. Optional — trim **start/end** of each inference window to reduce GPIO and rail edge effects:
 
-   - `BENCHMARK_POWER_DISCARD_START_MS` — drop samples in the first *n* milliseconds of each contiguous `sync==1` segment (default **`1`** ms when unset).
-   - `BENCHMARK_POWER_DISCARD_END_MS` — drop samples in the last *n* milliseconds of each segment (default **`1`** ms when unset).
-   - `BENCHMARK_POWER_DISCARD_EDGE_MS` — convenience: sets **both** start and end to the same value when the two variables above are **not** set (e.g. `0.5` for 0.5 ms each side).
+   - `BENCHMARK_POWER_DISCARD_START_MS` — drop first *n* milliseconds of each inference window (default **`1`** ms).
+   - `BENCHMARK_POWER_DISCARD_END_MS` — drop last *n* milliseconds of each window (default **`1`** ms).
+   - `BENCHMARK_POWER_DISCARD_EDGE_MS` — convenience: sets **both** start and end when the two variables above are **not** set.
 
-   Set **`BENCHMARK_POWER_DISCARD_START_MS=0`** and **`BENCHMARK_POWER_DISCARD_END_MS=0`** to disable trimming. If a segment is shorter than the requested trim, or timestamps are missing, the benchmark keeps the full segment for that run (no worse than no discard).
+   Set **`BENCHMARK_POWER_DISCARD_START_MS=0`** and **`BENCHMARK_POWER_DISCARD_END_MS=0`** to disable trimming.
 
-4. `pip install pyserial`
-5. Run the benchmark. While `BENCHMARK_POWER_SERIAL` is set, a background thread starts at benchmark launch and **appends every INA228 row** to **`results/benchmark/power-measure.csv`** with a leading **`host_time_iso`** column (UTC). **`avg_power_mW`** in `benchmark_results.csv` still uses only samples captured during each model’s **validate** step (same logic as before, including optional edge discard).
+4. `pip install pyserial protobuf`
+
+5. Run the benchmark. While `BENCHMARK_POWER_SERIAL` is set, a background thread starts at benchmark launch and **appends every protobuf sample** to **`results/benchmark/power-measure.csv`** with a leading **`host_time_iso`** column (UTC). **`avg_power_mW`** in `benchmark_results.csv` uses only samples captured during each model’s **validate** step with `is_inference=True`.
 
 ## After an ST Edge AI upgrade
 
@@ -88,9 +90,11 @@ Edit the **`PWR_SYNC_GPIO_*`** / **`PWR_SYNC_GPIO_RCC_ENABLE`** defaults in the 
 
 | Issue | What to check |
 |--------|----------------|
-| Empty `avg_power_mW` | `BENCHMARK_POWER_SERIAL` unset, wrong port, or `pyserial` missing |
-| Power looks like whole-run average | Sync GPIO not wired; benchmark falls back to all INA228 lines |
-| `avg_power_mW` unchanged after discard vars | `ts_us` missing in CSV; discard needs timestamps |
+| Empty `avg_power_mW` | `BENCHMARK_POWER_SERIAL` unset, wrong port, `pyserial`/`protobuf` missing |
+| Power looks like whole-run average | Sync GPIO not wired; benchmark falls back to all samples |
+| `avg_power_mW` unchanged after discard vars | Edge trimming uses duration-based proportional reduction |
 | Want no edge trimming | `BENCHMARK_POWER_DISCARD_START_MS=0` and `BENCHMARK_POWER_DISCARD_END_MS=0` |
 | Build errors in the new block | Pin/port conflict or RIF/security; change `PWR_SYNC_*` / RCC macro |
-| HAL / GPIO undeclared | `stm32n6xx_hal.h` include path / N6 build only (this path is for STM32N6 NPU validation) |
+| HAL / GPIO undeclared | `stm32n6xx_hal.h` include path / N6 build only |
+| Serial read errors | Check baud rate is 921600, Arduino sketch flashed correctly |
+| Protobuf import errors | `pip install protobuf`, regenerate with `protoc --python_out=scripts/benchmark external/fyp-power-measure/power_sample.proto` |

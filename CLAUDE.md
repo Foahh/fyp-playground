@@ -161,10 +161,13 @@ Results CSV: `results/benchmark/benchmark_results.csv`
 - `$STEDGEAI_CORE_DIR/scripts/N6_scripts/config.json` configured for your board setup
 
 ### Power Measurement (Optional)
-- Arduino IDE for flashing `power-measure/power-measure.ino`
-- **ESPS3-C3** with INA228 module connected to power supply rail
+- Arduino IDE for flashing `external/fyp-power-measure/fyp-power-measure.ino`
+- **ESP32-S6** with INA228 module connected to power supply rail
+- Uses interrupt-driven edge detection + INA228 energy accumulator for accurate measurements
+- Sends binary protobuf messages (PowerSample) at 921600 baud
 - Apply one-file patch to ST Edge AI: `power-measure/patch/aiValidation_ATON_power_sync.inc.c`
 - Environment variables: `BENCHMARK_POWER_SERIAL` (serial port), optional `BENCHMARK_POWER_DISCARD_*` (edge trimming)
+- Requires: `pip install pyserial protobuf`
 - See `docs/power-measure-patch-stedge-ai.md` for full wiring & troubleshooting
 
 ## Data Setup

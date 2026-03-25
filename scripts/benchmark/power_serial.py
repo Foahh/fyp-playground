@@ -1,143 +1,92 @@
-"""INA228 serial capture: long-running session, power-measure.csv + validate-window avg."""
+"""INA228 serial capture: protobuf-based energy accumulator with edge-triggered windows."""
 
 from __future__ import annotations
 
+import struct
+import sys
 import threading
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 
 from .constants import get_power_edge_discard_ms, get_power_serial_config, POWER_MEASURE_CSV_PATH
 
+# Add external/fyp-power-measure to path for protobuf import
+_pb_path = Path(__file__).resolve().parents[2] / "external" / "fyp-power-measure"
+if str(_pb_path) not in sys.path:
+    sys.path.insert(0, str(_pb_path))
 
-def parse_ina228_csv_line(line: str) -> Optional[dict]:
-    """Parse one data line: ts_us,current_mA,bus_V,power_mW,inference."""
-    line = line.strip()
-    if not line or line.startswith("ts_us"):
-        return None
-    parts = line.split(",")
-    if len(parts) < 4:
-        return None
-    try:
-        ts_us = int(parts[0].strip())
-    except ValueError:
-        ts_us = None
-    try:
-        power_mw = float(parts[3])
-    except ValueError:
-        return None
-    inference: Optional[int] = None
-    if len(parts) >= 5:
-        try:
-            inference = int(parts[4].strip())
-        except ValueError:
-            inference = None
-    return {"ts_us": ts_us, "power_mW": power_mw, "inference": inference}
+try:
+    from power_sample_pb2 import PowerSample
+    _HAS_PROTOBUF = True
+except ImportError:
+    _HAS_PROTOBUF = False
+    PowerSample = None
 
 
-def _contiguous_inference_one_segments(rows: list[dict]) -> list[tuple[int, int]]:
-    """Inclusive index ranges [lo, hi] of rows with inference==1 in each contiguous run."""
-    segments: list[tuple[int, int]] = []
-    n = len(rows)
-    i = 0
-    while i < n:
-        while i < n and rows[i].get("inference") != 1:
-            i += 1
-        if i >= n:
-            break
-        j = i
-        while j < n and rows[j].get("inference") == 1:
-            j += 1
-        segments.append((i, j - 1))
-        i = j
-    return segments
-
-
-def compute_avg_power_mw(lines: list[str]) -> Optional[float]:
+def compute_avg_power_mw(samples: list[dict]) -> Optional[float]:
     """
-    Prefer the mean of samples where inference==1 (inference window on STM32).
+    Compute average power from protobuf samples with is_inference=True.
 
-    Each contiguous inference-high segment is trimmed by discarding samples in the first
-    START ms and last END ms (by ts_us); defaults are 1 ms each. Set both env vars to 0
-    to disable. Reduces GPIO and power rail edge effects.
-
-    If no inference column or no inference-high samples, use all valid samples (no edge discard).
+    Uses energy accumulator data: each sample has avg_mw over duration_us.
+    Weighted average by duration, with optional edge trimming.
     """
-    parsed: list[dict] = []
-    for line in lines:
-        row = parse_ina228_csv_line(line)
-        if row:
-            parsed.append(row)
-    if not parsed:
+    if not samples:
         return None
+
+    inference_samples = [s for s in samples if s.get("is_inference")]
+    if not inference_samples:
+        all_samples = [s for s in samples if s.get("duration_us", 0) > 0]
+        if not all_samples:
+            return None
+        total_energy = sum(s["avg_mw"] * s["duration_us"] for s in all_samples)
+        total_duration = sum(s["duration_us"] for s in all_samples)
+        return total_energy / total_duration if total_duration > 0 else None
 
     discard_start_ms, discard_end_ms = get_power_edge_discard_ms()
-    discard_start_us = int(round(discard_start_ms * 1000.0))
-    discard_end_us = int(round(discard_end_ms * 1000.0))
+    if discard_start_ms == 0 and discard_end_ms == 0:
+        total_energy = sum(s["avg_mw"] * s["duration_us"] for s in inference_samples)
+        total_duration = sum(s["duration_us"] for s in inference_samples)
+        return total_energy / total_duration if total_duration > 0 else None
 
-    inference_samples = [r for r in parsed if r.get("inference") == 1]
-    if not inference_samples:
-        unsync = [r["power_mW"] for r in parsed]
-        return sum(unsync) / len(unsync)
+    # Edge trimming: discard first/last N ms of inference windows
+    discard_start_us = int(discard_start_ms * 1000)
+    discard_end_us = int(discard_end_ms * 1000)
 
-    if discard_start_us == 0 and discard_end_us == 0:
-        return sum(r["power_mW"] for r in inference_samples) / len(inference_samples)
-
-    powers_kept: list[float] = []
-    for lo, hi in _contiguous_inference_one_segments(parsed):
-        seg = [parsed[k] for k in range(lo, hi + 1)]
-        t_first = seg[0].get("ts_us")
-        t_last = seg[-1].get("ts_us")
-        if t_first is None or t_last is None:
-            powers_kept.extend(r["power_mW"] for r in seg)
+    kept_samples = []
+    for s in inference_samples:
+        dur = s.get("duration_us", 0)
+        if dur <= (discard_start_us + discard_end_us):
+            kept_samples.append(s)
             continue
-        t_lo = t_first + discard_start_us
-        t_hi = t_last - discard_end_us
-        if t_hi < t_lo:
-            powers_kept.extend(r["power_mW"] for r in seg)
-            continue
-        for r in seg:
-            ts = r.get("ts_us")
-            if ts is None:
-                continue
-            if t_lo <= ts <= t_hi:
-                powers_kept.append(r["power_mW"])
+        # Proportionally reduce contribution from edges
+        kept_dur = dur - discard_start_us - discard_end_us
+        kept_samples.append({"avg_mw": s["avg_mw"], "duration_us": kept_dur})
 
-    if powers_kept:
-        return sum(powers_kept) / len(powers_kept)
-
-    return sum(r["power_mW"] for r in inference_samples) / len(inference_samples)
-
-
-def _skip_arduino_noise(line: str) -> bool:
-    s = line.strip()
-    if not s:
-        return True
-    if s.startswith("#"):
-        return True
-    if s.startswith("ts_us"):
-        return True
-    if "INA228 monitor" in s or s.startswith("ERROR:"):
-        return True
-    return False
+    if not kept_samples:
+        return None
+    total_energy = sum(s["avg_mw"] * s["duration_us"] for s in kept_samples)
+    total_duration = sum(s["duration_us"] for s in kept_samples)
+    return total_energy / total_duration if total_duration > 0 else None
 
 
 class PowerMeasureSession:
-    """Reads INA228 serial for the whole benchmark run; logs to power-measure.csv with host time."""
+    """Reads INA228 protobuf serial for the whole benchmark run; logs to power-measure.csv."""
 
-    _CSV_HEADER = (
-        "host_time_iso,ts_us,current_mA,bus_V,power_mW,inference\n"
-    )
+    _CSV_HEADER = "host_time_iso,timestamp_us,avg_mw,duration_us,is_inference\n"
 
     def __init__(self) -> None:
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self._ser = None
         self._csv_fd = None
-        self._validate_lines: list[str] = []
+        self._validate_samples: list[dict] = []
         self._validate_lock = threading.Lock()
         self._capture_validate = False
 
     def start(self) -> bool:
+        if not _HAS_PROTOBUF:
+            return False
         try:
             import serial
         except ImportError:
@@ -147,17 +96,10 @@ class PowerMeasureSession:
             return False
         try:
             self._ser = serial.Serial(port, baud, timeout=0.25)
+            self._ser.reset_input_buffer()
         except Exception:
             self._ser = None
             return False
-
-        # Sketch waits for START before streaming; unblocks sampling + CSV header.
-        try:
-            self._ser.reset_input_buffer()
-            self._ser.write(b"START\n")
-            self._ser.flush()
-        except Exception:
-            pass
 
         path = POWER_MEASURE_CSV_PATH
         write_header = not path.exists() or path.stat().st_size == 0
@@ -188,40 +130,54 @@ class PowerMeasureSession:
                 pass
             self._csv_fd = None
 
-    def _write_csv_row(self, arduino_csv_line: str) -> None:
+    def _write_csv_row(self, sample: dict) -> None:
         if self._csv_fd is None:
             return
         host = datetime.now(timezone.utc).isoformat()
-        self._csv_fd.write(f"{host},{arduino_csv_line}\n")
+        self._csv_fd.write(
+            f"{host},{sample['timestamp_us']},{sample['avg_mw']},"
+            f"{sample['duration_us']},{int(sample['is_inference'])}\n"
+        )
         self._csv_fd.flush()
 
     def _run(self) -> None:
         assert self._ser is not None
         while not self._stop.is_set():
             try:
-                raw = self._ser.readline()
+                len_bytes = self._ser.read(4)
+                if len(len_bytes) != 4:
+                    continue
+                msg_len = struct.unpack("<I", len_bytes)[0]
+                if msg_len == 0 or msg_len > 1024:
+                    continue
+                msg_bytes = self._ser.read(msg_len)
+                if len(msg_bytes) != msg_len:
+                    continue
+
+                sample_pb = PowerSample()
+                sample_pb.ParseFromString(msg_bytes)
+                sample = {
+                    "timestamp_us": sample_pb.timestamp_us,
+                    "avg_mw": sample_pb.avg_mw,
+                    "duration_us": sample_pb.duration_us,
+                    "is_inference": sample_pb.is_inference,
+                }
+                self._write_csv_row(sample)
+                with self._validate_lock:
+                    if self._capture_validate:
+                        self._validate_samples.append(sample)
             except Exception:
-                break
-            if not raw:
                 continue
-            text = raw.decode("utf-8", errors="replace")
-            tstrip = text.strip()
-            if _skip_arduino_noise(tstrip):
-                continue
-            self._write_csv_row(tstrip)
-            with self._validate_lock:
-                if self._capture_validate:
-                    self._validate_lines.append(tstrip)
 
     def begin_validate_window(self) -> None:
         with self._validate_lock:
-            self._validate_lines.clear()
+            self._validate_samples.clear()
             self._capture_validate = True
 
-    def end_validate_window(self) -> list[str]:
+    def end_validate_window(self) -> list[dict]:
         with self._validate_lock:
             self._capture_validate = False
-            return list(self._validate_lines)
+            return list(self._validate_samples)
 
 
 _session: Optional[PowerMeasureSession] = None
@@ -260,8 +216,8 @@ def begin_validate_capture() -> None:
         _session.begin_validate_window()
 
 
-def end_validate_capture() -> list[str]:
-    """Stop recording validate lines; return captured lines for compute_avg_power_mw."""
+def end_validate_capture() -> list[dict]:
+    """Stop recording validate samples; return captured samples for compute_avg_power_mw."""
     global _session
     if _session is None:
         return []
