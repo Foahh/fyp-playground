@@ -167,7 +167,7 @@ def _step_load(entry: ModelEntry) -> tuple[str, str, int]:
     )
 
 
-def _step_validate(entry: ModelEntry, n_runs: int = 10) -> tuple[str, str, int]:
+def _step_validate(entry: ModelEntry, n_runs: int = 50) -> tuple[str, str, int]:
     """Step 3: Use ai_runner to run multiple inferences for accurate power measurement."""
 
     try:
@@ -199,8 +199,8 @@ def _step_validate(entry: ModelEntry, n_runs: int = 10) -> tuple[str, str, int]:
             if profile['c_durations']:
                 durations.append(profile['c_durations'][0])
 
-            # Sleep 20ms between runs for power measurement denoising
-            time.sleep(0.02)
+            # Sleep 50ms between runs for power measurement denoising
+            time.sleep(0.05)
 
         runner.disconnect()
 

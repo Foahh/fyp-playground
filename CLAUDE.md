@@ -167,7 +167,7 @@ Results CSV: `results/benchmark/benchmark_results.csv`
 - Sends binary protobuf messages (PowerSample) at 921600 baud
 - Apply one-file patch to ST Edge AI: `external/fyp-power-measure/patch/aiValidation_ATON_power_sync.inc.c`
 - Auto-detects ESP32-C6 power monitor if `--power-serial` not specified (looks for Espressif VID 0x303A)
-- Command-line flags: `--power-serial` (optional, auto-detects if omitted), `--power-baud` (default 921600), `--validation-count` (default 10)
+- Command-line flags: `--power-serial` (optional, auto-detects if omitted), `--power-baud` (default 921600), `--validation-count`
 - Requires: `pip install pyserial protobuf`
 - See `external/fyp-power-measure/patch/power-measure-patch-stedge-ai.md` for full wiring & troubleshooting
 
