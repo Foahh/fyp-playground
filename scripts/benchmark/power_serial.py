@@ -85,17 +85,22 @@ def compute_power_metrics(samples: list[dict], num_inferences: int = 1) -> dict:
 
     Returns dict with:
     - avg_power_inf_mW: weighted average power during inference (mW)
+    - avg_power_idle_mW: weighted average power during idle (mW)
+    - avg_power_delta_mW: avg_power_inf_mW - avg_power_idle_mW (mW)
     - avg_power_inf_ms: average duration per inference run (ms)
     - avg_energy_inf_mJ: average energy per inference run (mJ)
     """
     if not samples or num_inferences <= 0:
         return {
             "avg_power_inf_mW": None,
+            "avg_power_idle_mW": None,
+            "avg_power_delta_mW": None,
             "avg_power_inf_ms": None,
             "avg_energy_inf_mJ": None,
         }
 
     inference_samples = [s for s in samples if s.get("is_inference")]
+    idle_samples = [s for s in samples if not s.get("is_inference") and s.get("duration_us", 0) > 0]
 
     # Compute inference metrics
     if inference_samples:
@@ -109,8 +114,24 @@ def compute_power_metrics(samples: list[dict], num_inferences: int = 1) -> dict:
         avg_duration_ms = None
         avg_energy_mj = None
 
+    # Compute idle metrics
+    if idle_samples:
+        idle_energy = sum(s["avg_mw"] * s["duration_us"] for s in idle_samples)
+        idle_duration = sum(s["duration_us"] for s in idle_samples)
+        avg_power_idle = idle_energy / idle_duration if idle_duration > 0 else None
+    else:
+        avg_power_idle = None
+
+    avg_power_delta = (
+        (avg_power_inf - avg_power_idle)
+        if (avg_power_inf is not None and avg_power_idle is not None)
+        else None
+    )
+
     return {
         "avg_power_inf_mW": avg_power_inf,
+        "avg_power_idle_mW": avg_power_idle,
+        "avg_power_delta_mW": avg_power_delta,
         "avg_power_inf_ms": avg_duration_ms,
         "avg_energy_inf_mJ": avg_energy_mj,
     }
