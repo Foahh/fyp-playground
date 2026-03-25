@@ -151,6 +151,7 @@ class PowerMeasureSession:
         self._stop = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self._ser = None
+        self.effective_port: Optional[str] = None
         self._csv_fd = None
         self._validate_samples: list[dict] = []
         self._validate_lock = threading.Lock()
@@ -177,6 +178,7 @@ class PowerMeasureSession:
         try:
             self._ser = serial.Serial(port, baud, timeout=0.25)
             self._ser.reset_input_buffer()
+            self.effective_port = str(self._ser.port)
         except Exception as e:
             print(f"WARNING: Failed to connect to power measurement serial port {port}: {e}")
             self._ser = None
@@ -309,3 +311,11 @@ def is_power_session_active() -> bool:
     """Check if power measurement session is currently active."""
     global _session
     return _session is not None
+
+
+def get_power_session_effective_port() -> Optional[str]:
+    """Serial device in use when power measurement is active; None otherwise."""
+    global _session
+    if _session is None:
+        return None
+    return _session.effective_port

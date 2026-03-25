@@ -2,12 +2,18 @@
 
 import argparse
 import datetime
+import shlex
+import sys
 
 from .constants import CSV_PATH, POWER_MEASURE_CSV_PATH, ensure_dirs
 from .models import load_models
 from .parsing import parse_metrics, _parse_network_c_info
 from .results import append_result, load_completed, log_error, log_stdout
-from .power_serial import start_power_session, stop_power_session
+from .power_serial import (
+    get_power_session_effective_port,
+    start_power_session,
+    stop_power_session,
+)
 from .workflow import _get_st_ai_output_dir, run_evaluation
 
 
@@ -42,7 +48,6 @@ def main():
     ensure_dirs()
 
     power_running = start_power_session(args.power_serial, args.power_baud)
-    print("power_running:", power_running)
 
     entries = load_models()
 
@@ -55,10 +60,27 @@ def main():
     completed = load_completed()
     total = len(entries)
 
+    cmd_line = " ".join(shlex.quote(a) for a in sys.argv)
+    eff_port = get_power_session_effective_port()
+    power_port_line = (
+        f"\n  power_serial_open: {eff_port}"
+        if eff_port
+        else ""
+    )
+    args_block = (
+        f"Command: {cmd_line}\n"
+        f"  --filter: {args.filter or '(none)'}\n"
+        f"  --power-serial: {args.power_serial or '(auto-detect)'}\n"
+        f"  --power-baud: {args.power_baud}\n"
+        f"  --validation-count: {args.validation_count}\n"
+        f"  power_measurement_active: {power_running}"
+        f"{power_port_line}"
+    )
     header = (
         f"\n{'='*60}\n"
         f"Benchmark run started: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
         f"Total entries: {total}  |  Already completed: {len(completed)}\n"
+        f"{args_block}\n"
         f"{'='*60}"
     )
     print(header)
