@@ -167,7 +167,7 @@ def _step_load(entry: ModelEntry) -> tuple[str, str, int]:
     )
 
 
-def _step_validate(entry: ModelEntry, n_runs: int = 50) -> tuple[str, str, int]:
+def _step_validate(entry: ModelEntry, n_runs: int = 10) -> tuple[str, str, int]:
     """Step 3: Use ai_runner to run multiple inferences for accurate power measurement."""
 
     try:
@@ -261,8 +261,6 @@ class EvalResult:
     evaluate_err: str = ""
     evaluate_rc: int = 0
     avg_power_inf_mW: Optional[float] = None
-    avg_power_idle_mW: Optional[float] = None
-    avg_power_delta_mW: Optional[float] = None
     avg_power_inf_ms: Optional[float] = None
     avg_energy_inf_mJ: Optional[float] = None
 
@@ -320,8 +318,6 @@ def run_evaluation(entry: ModelEntry, validation_count: int) -> EvalResult:
         if validate_lines:
             metrics = compute_power_metrics(validate_lines, validation_count)
             res.avg_power_inf_mW = metrics["avg_power_inf_mW"]
-            res.avg_power_idle_mW = metrics["avg_power_idle_mW"]
-            res.avg_power_delta_mW = metrics["avg_power_delta_mW"]
             res.avg_power_inf_ms = metrics["avg_power_inf_ms"]
             res.avg_energy_inf_mJ = metrics["avg_energy_inf_mJ"]
         elif is_power_session_active():

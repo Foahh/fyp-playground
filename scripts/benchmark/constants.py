@@ -157,8 +157,6 @@ CSV_COLUMNS = [
     "inf_per_sec",
     "ap_50",
     "avg_power_inf_mW",
-    "avg_power_idle_mW",
-    "avg_power_delta_mW",
     "avg_power_inf_ms",
     "avg_energy_inf_mJ",
 ]
@@ -169,8 +167,6 @@ CSV_COLUMNS_NO_POWER = [
     if c
     not in (
         "avg_power_inf_mW",
-        "avg_power_idle_mW",
-        "avg_power_delta_mW",
         "avg_power_inf_ms",
         "avg_energy_inf_mJ",
     )
