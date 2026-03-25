@@ -50,8 +50,6 @@ def main() -> None:
         print(f"Wrote {script} (LD_LIBRARY_PATH for conda CUDA libs)")
 
     pip_install(ENV_NAME, "-r", str(req))
-
-    print("Installing power measurement and README parser deps ...")
     pip_install(ENV_NAME, "-r", str(root / "requirements-benchmark.txt"))
 
     print(f"Done. Activate with: conda activate {ENV_NAME}")
