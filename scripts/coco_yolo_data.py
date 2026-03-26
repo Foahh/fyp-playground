@@ -18,22 +18,36 @@ COCO_TEMPLATE_YAML = (
     / "datasets"
     / "coco.yaml"
 )
-DATASETS_ROOT = Path(
-    os.environ.get("DATASETS_DIR", str(REPO_ROOT / "datasets"))
-).expanduser()
-_COCO_ROOT = (DATASETS_ROOT / "coco").resolve()
+DEFAULT_DATASETS_ROOT = (REPO_ROOT / "datasets").resolve()
+
+
+def _candidate_coco_roots() -> list[Path]:
+    roots: list[Path] = []
+    env_root = os.environ.get("DATASETS_DIR")
+    if env_root:
+        roots.append((Path(env_root).expanduser() / "coco").resolve())
+    roots.append((DEFAULT_DATASETS_ROOT / "coco").resolve())
+    return roots
 
 
 def materialize_coco_data_yaml() -> str:
     """Write a data YAML with absolute COCO root (not global Ultralytics datasets_dir)."""
-    val_list = _COCO_ROOT / "val2017.txt"
-    if not val_list.is_file():
+    coco_root = None
+    tried: list[Path] = []
+    for candidate in _candidate_coco_roots():
+        tried.append(candidate)
+        if (candidate / "val2017.txt").is_file():
+            coco_root = candidate
+            break
+    if coco_root is None:
         raise FileNotFoundError(
-            f"Missing {val_list}. Set DATASETS_DIR (optional) and run load_coco.py."
+            "Missing COCO val2017.txt. Checked: "
+            + ", ".join(str(p / "val2017.txt") for p in tried)
+            + ". Set DATASETS_DIR (optional) and run load_coco.py."
         )
     with COCO_TEMPLATE_YAML.open(encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
-    cfg["path"] = str(_COCO_ROOT)
+    cfg["path"] = str(coco_root)
     tmp = tempfile.NamedTemporaryFile(
         mode="w",
         suffix=".yaml",
