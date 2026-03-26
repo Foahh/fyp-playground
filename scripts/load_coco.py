@@ -7,7 +7,11 @@ from pycocotools.coco import COCO
 from ultralytics.utils import ASSETS_URL
 from ultralytics.utils.downloads import download
 
-DEST = Path("datasets/coco")
+REPO_ROOT = Path(__file__).resolve().parents[1]
+DATASETS_DIR = Path(
+    os.environ.get("DATASETS_DIR", str(REPO_ROOT / "datasets"))
+).expanduser()
+DEST = DATASETS_DIR / "coco"
 ANN_PATH = DEST / "annotations" / "instances_val2017.json"
 IMAGES_DIR = DEST / "images" / "val2017"
 
@@ -111,11 +115,11 @@ def main():
     download_coco()
     generate_person_annotations()
 
-    tfs_person_dir = Path("datasets/coco_2017_person/test")
+    tfs_person_dir = DATASETS_DIR / "coco_2017_person" / "test"
     if not tfs_person_dir.exists():
         generate_tfs_dataset(["person"], tfs_person_dir)
 
-    tfs_80_dir = Path("datasets/coco_2017_80_classes/test")
+    tfs_80_dir = DATASETS_DIR / "coco_2017_80_classes" / "test"
     if not tfs_80_dir.exists():
         generate_tfs_dataset(_all_coco_category_names(), tfs_80_dir)
 

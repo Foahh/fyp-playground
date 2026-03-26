@@ -15,6 +15,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import random
 import sys
 from pathlib import Path
@@ -27,6 +28,7 @@ from PIL import Image
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
+DATASETS_DIR = Path(os.environ.get("DATASETS_DIR", str(ROOT / "datasets"))).expanduser()
 
 from scripts.coco_yolo_data import materialize_coco_data_yaml
 
@@ -208,7 +210,7 @@ def main():
     if calib_dir is None or not calib_dir.is_dir():
         raise FileNotFoundError(
             "No calibration images found. Pass --calib-dir or install COCO under "
-            "./datasets/coco (symlink to ~/datasets per README)."
+            f"{DATASETS_DIR / 'coco'}."
         )
 
     stem = (

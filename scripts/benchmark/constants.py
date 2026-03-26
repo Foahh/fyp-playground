@@ -22,6 +22,9 @@ def get_stedgeai_path() -> str:
 # ── Paths ──
 
 BASE_DIR = Path(__file__).resolve().parents[2]
+DATASETS_DIR = Path(
+    os.environ.get("DATASETS_DIR", str(BASE_DIR / "datasets"))
+).expanduser()
 MODELZOO_DIR = BASE_DIR / "external" / "stm32ai-modelzoo" / "object_detection"
 SERVICES_DIR = BASE_DIR / "external" / "stm32ai-modelzoo-services" / "object_detection"
 RESULTS_DIR = BASE_DIR / "results"
@@ -38,17 +41,15 @@ N6_WORKDIR = BENCHMARK_DIR / "n6_workdir"
 
 # ── Dataset paths ──
 
-COCO_PERSON_TFS_TEST = str(BASE_DIR / "datasets" / "coco_2017_person" / "test")
-COCO_80_TFS_TEST = str(
-    BASE_DIR / "datasets" / "coco_2017_80_classes" / "test"
-)
+COCO_PERSON_TFS_TEST = str(DATASETS_DIR / "coco_2017_person" / "test")
+COCO_80_TFS_TEST = str(DATASETS_DIR / "coco_2017_80_classes" / "test")
 COCO_PERSON_ANNOTATIONS = str(
-    BASE_DIR / "datasets" / "coco" / "annotations" / "instances_val2017_person.json"
+    DATASETS_DIR / "coco" / "annotations" / "instances_val2017_person.json"
 )
 COCO_80_ANNOTATIONS = str(
-    BASE_DIR / "datasets" / "coco" / "annotations" / "instances_val2017.json"
+    DATASETS_DIR / "coco" / "annotations" / "instances_val2017.json"
 )
-COCO_IMAGES = str(BASE_DIR / "datasets" / "coco" / "images" / "val2017")
+COCO_IMAGES = str(DATASETS_DIR / "coco" / "images" / "val2017")
 
 # ── COCO 80 class names ──
 

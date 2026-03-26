@@ -1,7 +1,8 @@
-"""COCO data YAML with absolute paths for Ultralytics (repo ./datasets/coco symlink)."""
+"""COCO data YAML with absolute paths for Ultralytics."""
 
 from __future__ import annotations
 
+import os
 import tempfile
 from pathlib import Path
 
@@ -17,7 +18,10 @@ COCO_TEMPLATE_YAML = (
     / "datasets"
     / "coco.yaml"
 )
-_COCO_ROOT = (REPO_ROOT / "datasets" / "coco").resolve()
+DATASETS_ROOT = Path(
+    os.environ.get("DATASETS_DIR", str(REPO_ROOT / "datasets"))
+).expanduser()
+_COCO_ROOT = (DATASETS_ROOT / "coco").resolve()
 
 
 def materialize_coco_data_yaml() -> str:
@@ -25,8 +29,7 @@ def materialize_coco_data_yaml() -> str:
     val_list = _COCO_ROOT / "val2017.txt"
     if not val_list.is_file():
         raise FileNotFoundError(
-            f"Missing {val_list}. From repo root: ln -s ~/datasets datasets "
-            "then run load_coco.py (see README)."
+            f"Missing {val_list}. Set DATASETS_DIR (optional) and run load_coco.py."
         )
     with COCO_TEMPLATE_YAML.open(encoding="utf-8") as f:
         cfg = yaml.safe_load(f)

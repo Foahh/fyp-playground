@@ -75,15 +75,18 @@ Log out and back in for the group change to take effect.
 
 ## Dataset Setup
 
-Create a dataset directory and symlink it into the project:
+Prepare datasets (default: `./datasets` under project root):
 
 ```sh
-mkdir -p ~/datasets
-ln -s ~/datasets/ <project>
+mkdir -p ./datasets
 python ./scripts/load_coco.py
 ```
 
-> Replace `<project>` with the appropriate path inside this repository.
+To store datasets elsewhere, set `DATASETS_DIR`:
+
+```sh
+DATASETS_DIR=~/datasets python ./scripts/load_coco.py
+```
 
 ---
 
