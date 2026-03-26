@@ -232,9 +232,9 @@ def _step_evaluate(entry: ModelEntry) -> tuple[str, str, int]:
     ]
 
     env = os.environ.copy()
-    # TODO: Does int8 need GPU evaluation?
-    env["CUDA_VISIBLE_DEVICES"] = "-1"
     env["HYDRA_FULL_ERROR"] = "1"
+    # Force TensorFlow host evaluation onto CPU to avoid CUDA runtime instability (I am using 5060...).
+    env["CUDA_VISIBLE_DEVICES"] = "-1"
     return _run_streaming(
         cmd,
         cwd=str(SERVICES_DIR),

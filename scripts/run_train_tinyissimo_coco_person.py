@@ -2,8 +2,8 @@
 Train TinyissimoYOLO v8 on COCO Person (single class).
 
 Run from the parent repository root (paths point into external/TinyissimoYOLO/):
-    python scripts/train_coco_person.py --img_size 192
-    python scripts/train_coco_person.py --img_size 192 --resume
+    python scripts/run_train_tinyissimo_coco_person.py --img_size 192
+    python scripts/run_train_tinyissimo_coco_person.py --img_size 192 --resume
 
 Dependencies are provided by the training Docker image (`docker/train.Dockerfile`).
 """
@@ -18,6 +18,7 @@ if str(ROOT) not in sys.path:
 
 from scripts.coco_yolo_data import materialize_coco_data_yaml
 from ultralytics import YOLO
+
 TINY = ROOT / "external" / "TinyissimoYOLO"
 MODEL_YAML = str(TINY / "ultralytics/cfg/models/tinyissimo/tinyissimo-v8.yaml")
 PROJECT = str(TINY / "results")

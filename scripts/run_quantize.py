@@ -86,13 +86,38 @@ def _quantize(
     if QUANT_DTYPES.get(output_type):
         converter.inference_output_type = QUANT_DTYPES[output_type]
 
+    # Force full-integer quantization and keep per-channel weight quantization enabled.
+    converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
+    if hasattr(converter, "_experimental_disable_per_channel"):
+        converter._experimental_disable_per_channel = False
+
     converter.optimizations = [tf.lite.Optimize.DEFAULT]
     converter.representative_dataset = lambda: _representative_data_gen(calib_dir, imgsz)
 
     tflite_bytes = converter.convert()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_bytes(tflite_bytes)
+    _assert_per_channel_quantized(output_path)
     return output_path
+
+
+def _assert_per_channel_quantized(tflite_path: Path) -> None:
+    """Fail if model has no per-channel quantized tensors."""
+    interpreter = tf.lite.Interpreter(model_path=str(tflite_path))
+    details = interpreter.get_tensor_details()
+
+    per_channel_tensors = 0
+    for d in details:
+        q = d.get("quantization_parameters", {})
+        scales = q.get("scales")
+        if d.get("dtype") == np.int8 and scales is not None and len(scales) > 1:
+            per_channel_tensors += 1
+
+    if per_channel_tensors == 0:
+        raise RuntimeError(
+            "Exported TFLite model has no per-channel quantized int8 tensors. "
+            "Per-channel quantization was expected."
+        )
 
 
 def _resolve_saved_model_dir(img_size: int, override: Path | None) -> Path:

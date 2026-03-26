@@ -24,7 +24,7 @@ from scripts.conda.conda_setup_common import (
 
 ENV_NAME = os.environ.get("ST_BENCHMARK_ENV", "fyp")
 PYTHON_VERSION = "3.12.9"
-CUDA_VERSION = "12.8"
+PYTORCH_CUDA_VERSION = "12.8"
 
 
 def main() -> None:
@@ -37,8 +37,15 @@ def main() -> None:
 
     ensure_conda_env(ENV_NAME, PYTHON_VERSION, f"Python {PYTHON_VERSION}")
 
-    print("Installing NVIDIA CUDA runtime + cuDNN (conda-forge) ...")
-    conda_install(ENV_NAME, f"cudatoolkit={CUDA_VERSION}", "cudnn", channels=("conda-forge",))
+    print("Installing PyTorch + Ultralytics from official Conda channels ...")
+    conda_install(
+        ENV_NAME,
+        "pytorch",
+        "torchvision",
+        f"pytorch-cuda={PYTORCH_CUDA_VERSION}",
+        "ultralytics",
+        channels=("pytorch", "nvidia", "conda-forge"),
+    )
 
     if platform.system() == "Linux":
         activate_d = Path(conda_prefix(ENV_NAME)) / "etc" / "conda" / "activate.d"

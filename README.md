@@ -27,7 +27,8 @@ Before running any project components, initialize the Git submodules:
 git submodule update --init --recursive
 ```
 
-Using **Docker** and **Conda** is recommended for dependency and environment management.
+Use **Conda** as the default environment for training/export/benchmark workflows.
+Use **Docker** only for TensorFlow-based quantization (Since at this time TensorFlow don't support 50 series yet).
 
 ---
 
@@ -42,7 +43,7 @@ python project.py coco
 python project.py benchmark --filter st_yoloxn_d033_w025_192
 ```
 
-### Docker-based commands
+### Workflow commands
 
 ```sh
 python project.py train --img_size 192
@@ -99,10 +100,12 @@ For complete setup instructions, see:
 
 - [external/TinyissimoYOLO/tinyissimoYOLO_README.md](external/TinyissimoYOLO/tinyissimoYOLO_README.md)
 
-### Build Docker image
+### Conda setup
+
+Set up the Conda environment before training:
 
 ```sh
-docker compose build train
+python project.py conda
 ```
 
 ### Run training
@@ -126,10 +129,9 @@ python project.py train --img_size 320
 
 ## Export TinyissimoYOLO to TFLite INT8
 
-### Build Docker images
+### Quantization Docker setup (TensorFlow only)
 
 ```sh
-docker compose build export
 docker compose build quantize
 ```
 
@@ -181,8 +183,14 @@ For more details, see:
 
 Before benchmarking, ensure:
 
-- **STM32CubeIDE** is installed
+- **STM32CubeCLT** is installed and `arm-none-eabi-*` is in PATH.
 - `$STEDGEAI_CORE_DIR/scripts/N6_scripts/config.json` is configured correctly
+
+```json
+{
+	"compiler_type": "gcc",
+}
+```
 
 ### Requirements
 

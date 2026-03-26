@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -13,12 +14,13 @@ ROOT = Path(__file__).resolve().parent
 LOCAL_COMMANDS = {
     "coco": "scripts/load_coco.py",
     "benchmark": "scripts/run_benchmark.py",
+    "conda": "scripts/conda_setup_fyp.py",
+    "train": "scripts/run_train_tinyissimo_coco_person.py",
+    "export": "scripts/run_export.py",
 }
 
 DOCKER_COMMANDS = {
-    "train": ("train", "scripts/train_coco_person.py"),
-    "export": ("export", "scripts/run_export.py"),
-    "quantize": ("quantize", "scripts/run_quantize.py"),
+    "quant": ("quantize", "scripts/run_quantize.py"),
 }
 
 
@@ -47,6 +49,8 @@ def _run_docker(service: str, script: str, passthrough: list[str]) -> int:
         "compose",
         "run",
         "--rm",
+        "--user",
+        f"{os.getuid()}:{os.getgid()}",
         service,
         script,
         *_normalize_passthrough(passthrough),

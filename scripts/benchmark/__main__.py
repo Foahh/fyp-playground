@@ -40,8 +40,8 @@ def main():
     parser.add_argument(
         "--validation-count",
         type=int,
-        default=10,
-        help="Number of inference runs for validation (default: 10)",
+        default=50,
+        help="Number of inference runs for validation (default: 50)",
     )
     args = parser.parse_args()
 

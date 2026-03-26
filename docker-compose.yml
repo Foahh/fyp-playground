@@ -1,38 +1,18 @@
 services:
-  train:
-    build:
-      context: .
-      dockerfile: docker/train.Dockerfile
-    image: fyp-playground-train:latest
-    working_dir: /workspace
-    volumes:
-      - .:/workspace
-    tty: true
-    stdin_open: true
-    command: ["scripts/train_coco_person.py", "--help"]
-
-  export:
-    build:
-      context: .
-      dockerfile: docker/export.Dockerfile
-    image: fyp-playground-export:latest
-    working_dir: /workspace
-    volumes:
-      - .:/workspace
-    tty: true
-    stdin_open: true
-    command: ["scripts/run_export.py", "--help"]
-
   quantize:
     build:
       context: .
-      dockerfile: docker/quantize.Dockerfile
-    image: fyp-playground-quantize:latest
+      dockerfile: docker/tensorflow.Dockerfile
+      target: quantize
     working_dir: /workspace
+    user: "${UID:-1000}:${GID:-1000}"
     volumes:
       - .:/workspace
     tty: true
     stdin_open: true
     gpus: all
+    ipc: host
+    ulimits:
+      memlock: -1
+      stack: 67108864
     command: ["scripts/run_quantize.py", "--help"]
-
