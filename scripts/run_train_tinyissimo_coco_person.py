@@ -15,6 +15,8 @@ import sys
 from contextlib import contextmanager
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -106,15 +108,23 @@ def main():
 
     if resume:
         last_pt = weights_dir / "last.pt"
-        if not last_pt.exists():
-            raise FileNotFoundError(f"No checkpoint to resume from at {last_pt}")
-        print(f"Resuming from {last_pt} ...")
-        model = YOLO(str(last_pt))
+        if last_pt.exists():
+            print(f"Resuming from {last_pt} ...")
+            model = YOLO(str(last_pt))
+        else:
+            print(f"No checkpoint found at {last_pt}; starting a new run ...")
+            resume = False
+            model = YOLO(MODEL_YAML)
     else:
         print(f"Creating new model from {MODEL_YAML} ...")
         model = YOLO(MODEL_YAML)
 
-    data_yaml = materialize_coco_data_yaml()
+    data_yaml = materialize_coco_data_yaml(require_person=True)
+    with open(data_yaml, encoding="utf-8") as f:
+        data_cfg = yaml.safe_load(f)
+    print(f"Using dataset YAML: {data_yaml}")
+    print(f"Dataset root: {data_cfg.get('path')}")
+
     model.train(
         data=data_yaml,
         classes=[0],  # filter to person class only

@@ -17,6 +17,7 @@ from scripts.conda.conda_setup_common import (
     ensure_conda_env,
     main_guard,
     pip_install,
+    repo_root,
 )
 
 YOLO_ENV_NAME = os.environ.get("ST_YOLO_ENV", "yolo")
@@ -26,6 +27,12 @@ PYTORCH_WHL_INDEX = "https://download.pytorch.org/whl/cu128"
 
 def main() -> None:
     main_guard()
+    root = repo_root()
+    yolo_req = root / "scripts" / "requirements-yolo.txt"
+
+    if not yolo_req.is_file():
+        print(f"Missing {yolo_req}", file=sys.stderr)
+        sys.exit(1)
 
     ensure_conda_env(YOLO_ENV_NAME, PYTHON_VERSION, f"Python {PYTHON_VERSION}")
 
@@ -43,6 +50,7 @@ def main() -> None:
         "--index-url",
         PYTORCH_WHL_INDEX,
     )
+    pip_install(YOLO_ENV_NAME, "-r", str(yolo_req))
 
     print("Done.")
     print(f"- YOLO env: conda activate {YOLO_ENV_NAME}")

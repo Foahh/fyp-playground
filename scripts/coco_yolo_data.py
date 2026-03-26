@@ -42,12 +42,20 @@ def _is_person_split(root: Path) -> bool:
     )
 
 
-def materialize_coco_data_yaml() -> str:
+def materialize_coco_data_yaml(require_person: bool = False) -> str:
     """Write a data YAML with absolute COCO root (not global Ultralytics datasets_dir)."""
     coco_root = None
     tried: list[Path] = []
     is_person_root = False
-    for candidate in _candidate_coco_roots():
+    person_candidates = [
+        p for p in _candidate_coco_roots() if p.name == "coco_2017_person"
+    ]
+    non_person_candidates = [
+        p for p in _candidate_coco_roots() if p.name != "coco_2017_person"
+    ]
+    candidates = person_candidates + ([] if require_person else non_person_candidates)
+
+    for candidate in candidates:
         tried.append(candidate)
         if _is_person_split(candidate):
             coco_root = candidate
@@ -57,6 +65,14 @@ def materialize_coco_data_yaml() -> str:
             coco_root = candidate
             break
     if coco_root is None:
+        if require_person:
+            raise FileNotFoundError(
+                "Missing person-only COCO split files under coco_2017_person. Checked: "
+                + ", ".join(
+                    f"{p / 'train2017.txt'} and {p / 'val2017.txt'}" for p in tried
+                )
+                + ". Re-run scripts/load_coco.py to regenerate person splits."
+            )
         raise FileNotFoundError(
             "Missing COCO split files. Checked: "
             + ", ".join(f"{p / 'train2017.txt'} and {p / 'val2017.txt'}" for p in tried)

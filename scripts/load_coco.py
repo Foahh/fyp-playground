@@ -208,7 +208,8 @@ def _write_person_yolo_split(
                 for pl in person_lines:
                     lf.write(f"{pl}\n")
 
-            list_f.write(f"{dst_img.resolve()}\n")
+            # Keep symlink path inside coco_2017_person, do not resolve to source COCO path.
+            list_f.write(f"{dst_img}\n")
             written += 1
     return written
 
