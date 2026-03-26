@@ -3,6 +3,9 @@ datasets/
 __pycache__/
 
 results/*
+!results/benchmark_nominal/
+!results/benchmark_parsed.csv
+
 *.npy
 ai_runner.log
 yolo26n.pt
