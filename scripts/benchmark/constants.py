@@ -190,11 +190,13 @@ CSV_COLUMNS = [
     "inference_time_ms",
     "inf_per_sec",
     "ap_50",
-    "avg_power_inf_mW",
-    "avg_power_idle_mW",
-    "avg_power_delta_mW",
-    "avg_power_inf_ms",
-    "avg_energy_inf_mJ",
+    "pm_avg_inf_mW",
+    "pm_avg_idle_mW",
+    "pm_avg_delta_mW",
+    "pm_avg_inf_ms",
+    "pm_avg_idle_ms",
+    "pm_avg_inf_mJ",
+    "pm_avg_idle_mJ",
 ]
 
 CSV_COLUMNS_NO_POWER = [
@@ -202,11 +204,13 @@ CSV_COLUMNS_NO_POWER = [
     for c in CSV_COLUMNS
     if c
     not in (
-        "avg_power_inf_mW",
-        "avg_power_idle_mW",
-        "avg_power_delta_mW",
-        "avg_power_inf_ms",
-        "avg_energy_inf_mJ",
+        "pm_avg_inf_mW",
+        "pm_avg_idle_mW",
+        "pm_avg_delta_mW",
+        "pm_avg_inf_ms",
+        "pm_avg_idle_ms",
+        "pm_avg_inf_mJ",
+        "pm_avg_idle_mJ",
     )
 ]
 

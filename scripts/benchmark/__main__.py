@@ -188,8 +188,8 @@ def _run_benchmark_loop(entries, total, completed, power_running: bool, validati
                 missing.append("inf_per_sec")
             if not metrics.get("ap_50"):
                 missing.append("ap_50")
-            if res.avg_power_inf_mW is None:
-                missing.append("avg_power_inf_mW")
+            if res.pm_avg_inf_mW is None:
+                missing.append("pm_avg_inf_mW")
 
             if missing:
                 warn_msg = f"  ⚠ WARNING: Missing metrics: {', '.join(missing)}"
@@ -212,29 +212,39 @@ def _run_benchmark_loop(entries, total, completed, power_running: bool, validati
                 "inference_time_ms": metrics.get("inference_time_ms", ""),
                 "inf_per_sec": metrics.get("inf_per_sec", ""),
                 "ap_50": metrics.get("ap_50", ""),
-                "avg_power_inf_mW": (
-                    f"{res.avg_power_inf_mW:.3f}"
-                    if res.avg_power_inf_mW is not None
+                "pm_avg_inf_mW": (
+                    f"{res.pm_avg_inf_mW:.3f}"
+                    if res.pm_avg_inf_mW is not None
                     else ""
                 ),
-                "avg_power_idle_mW": (
-                    f"{res.avg_power_idle_mW:.3f}"
-                    if res.avg_power_idle_mW is not None
+                "pm_avg_idle_mW": (
+                    f"{res.pm_avg_idle_mW:.3f}"
+                    if res.pm_avg_idle_mW is not None
                     else ""
                 ),
-                "avg_power_delta_mW": (
-                    f"{res.avg_power_delta_mW:.3f}"
-                    if res.avg_power_delta_mW is not None
+                "pm_avg_delta_mW": (
+                    f"{res.pm_avg_delta_mW:.3f}"
+                    if res.pm_avg_delta_mW is not None
                     else ""
                 ),
-                "avg_power_inf_ms": (
-                    f"{res.avg_power_inf_ms:.3f}"
-                    if res.avg_power_inf_ms is not None
+                "pm_avg_inf_ms": (
+                    f"{res.pm_avg_inf_ms:.3f}"
+                    if res.pm_avg_inf_ms is not None
                     else ""
                 ),
-                "avg_energy_inf_mJ": (
-                    f"{res.avg_energy_inf_mJ:.3f}"
-                    if res.avg_energy_inf_mJ is not None
+                "pm_avg_idle_ms": (
+                    f"{res.pm_avg_idle_ms:.3f}"
+                    if res.pm_avg_idle_ms is not None
+                    else ""
+                ),
+                "pm_avg_inf_mJ": (
+                    f"{res.pm_avg_inf_mJ:.3f}"
+                    if res.pm_avg_inf_mJ is not None
+                    else ""
+                ),
+                "pm_avg_idle_mJ": (
+                    f"{res.pm_avg_idle_mJ:.3f}"
+                    if res.pm_avg_idle_mJ is not None
                     else ""
                 ),
             }
@@ -244,12 +254,12 @@ def _run_benchmark_loop(entries, total, completed, power_running: bool, validati
             ap = metrics.get("ap_50", "N/A")
             inf = metrics.get("inference_time_ms", "N/A")
             power_parts: list[str] = []
-            if res.avg_power_inf_mW is not None:
-                power_parts.append(f"avg_power_inf={res.avg_power_inf_mW:.1f}mW")
-            if res.avg_power_idle_mW is not None:
-                power_parts.append(f"avg_power_idle={res.avg_power_idle_mW:.1f}mW")
-            if res.avg_power_delta_mW is not None:
-                power_parts.append(f"avg_power_delta={res.avg_power_delta_mW:.1f}mW")
+            if res.pm_avg_inf_mW is not None:
+                power_parts.append(f"pm_avg_inf={res.pm_avg_inf_mW:.1f}mW")
+            if res.pm_avg_idle_mW is not None:
+                power_parts.append(f"pm_avg_idle={res.pm_avg_idle_mW:.1f}mW")
+            if res.pm_avg_delta_mW is not None:
+                power_parts.append(f"pm_avg_delta={res.pm_avg_delta_mW:.1f}mW")
 
             power_str = f", {', '.join(power_parts)}" if power_parts else ""
             done_msg = f"{tag} DONE: ap_50={ap}, inference={inf}ms{power_str}"

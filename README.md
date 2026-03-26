@@ -231,7 +231,7 @@ To enable inference-window power logging (INA228 + ESP32-C6), follow:
 
 This guide covers wiring, Arduino sketch flashing, required ST Edge AI patching, CLI flags (`--power-serial`, `--power-baud`, `--validation-count`), and troubleshooting.
 
-In `results/benchmark_nominal/benchmark_results.csv`, inference-window power is stored in `avg_power_inf_mW` (with related fields `avg_power_idle_mW`, `avg_power_delta_mW`, `avg_power_inf_ms`, and `avg_energy_inf_mJ`).
+In `results/benchmark_nominal/benchmark_results.csv`, power-measure averages use the `pm_avg_*` columns (e.g. `pm_avg_inf_mW`, `pm_avg_idle_mW`, `pm_avg_delta_mW`, `pm_avg_inf_ms`, `pm_avg_idle_ms`, `pm_avg_inf_mJ`, `pm_avg_idle_mJ`).
 
 When power serial is enabled, the benchmark also appends a continuous log to:
 

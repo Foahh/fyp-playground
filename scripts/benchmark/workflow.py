@@ -269,9 +269,13 @@ class EvalResult:
     evaluate_out: str = ""
     evaluate_err: str = ""
     evaluate_rc: int = 0
-    avg_power_inf_mW: Optional[float] = None
-    avg_power_inf_ms: Optional[float] = None
-    avg_energy_inf_mJ: Optional[float] = None
+    pm_avg_inf_mW: Optional[float] = None
+    pm_avg_idle_mW: Optional[float] = None
+    pm_avg_delta_mW: Optional[float] = None
+    pm_avg_inf_ms: Optional[float] = None
+    pm_avg_idle_ms: Optional[float] = None
+    pm_avg_inf_mJ: Optional[float] = None
+    pm_avg_idle_mJ: Optional[float] = None
 
     @property
     def combined_stdout(self) -> str:
@@ -338,11 +342,13 @@ def run_evaluation(entry: ModelEntry, validation_count: int) -> EvalResult:
             _append_stdout_log(res.validate_err)
         if validate_lines:
             metrics = compute_power_metrics(validate_lines, validation_count)
-            res.avg_power_inf_mW = metrics["avg_power_inf_mW"]
-            res.avg_power_idle_mW = metrics["avg_power_idle_mW"]
-            res.avg_power_delta_mW = metrics["avg_power_delta_mW"]
-            res.avg_power_inf_ms = metrics["avg_power_inf_ms"]
-            res.avg_energy_inf_mJ = metrics["avg_energy_inf_mJ"]
+            res.pm_avg_inf_mW = metrics["pm_avg_inf_mW"]
+            res.pm_avg_idle_mW = metrics["pm_avg_idle_mW"]
+            res.pm_avg_delta_mW = metrics["pm_avg_delta_mW"]
+            res.pm_avg_inf_ms = metrics["pm_avg_inf_ms"]
+            res.pm_avg_idle_ms = metrics["pm_avg_idle_ms"]
+            res.pm_avg_inf_mJ = metrics["pm_avg_inf_mJ"]
+            res.pm_avg_idle_mJ = metrics["pm_avg_idle_mJ"]
         elif is_power_session_active():
             print("  ⚠ WARNING: Power measurement active but no samples captured during validation")
         if res.validate_rc != 0:
