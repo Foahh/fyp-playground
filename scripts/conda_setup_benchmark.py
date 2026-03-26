@@ -21,7 +21,7 @@ from scripts.conda.conda_setup_common import (
     repo_root,
 )
 
-BENCHMARK_ENV_NAME = os.environ.get("ST_BENCHMARK_ENV", "benchmark")
+STZOO_ENV_NAME = os.environ.get("ST_STZOO_ENV", "stzoo")
 PYTHON_VERSION = "3.12.9"
 
 
@@ -38,27 +38,27 @@ def main() -> None:
         print(f"Missing {benchmark_extra_req}", file=sys.stderr)
         sys.exit(1)
 
-    ensure_conda_env(BENCHMARK_ENV_NAME, PYTHON_VERSION, f"Python {PYTHON_VERSION}")
+    ensure_conda_env(STZOO_ENV_NAME, PYTHON_VERSION, f"Python {PYTHON_VERSION}")
 
     if platform.system() == "Linux":
-        activate_d = Path(conda_prefix(BENCHMARK_ENV_NAME)) / "etc" / "conda" / "activate.d"
+        activate_d = Path(conda_prefix(STZOO_ENV_NAME)) / "etc" / "conda" / "activate.d"
         activate_d.mkdir(parents=True, exist_ok=True)
         script = activate_d / "st_benchmark_ld.sh"
         script.write_text(
             "export LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-}:${CONDA_PREFIX}/lib/\n"
         )
-        print(f"Wrote {script} (LD_LIBRARY_PATH for conda CUDA libs in '{BENCHMARK_ENV_NAME}')")
+        print(f"Wrote {script} (LD_LIBRARY_PATH for conda CUDA libs in '{STZOO_ENV_NAME}')")
 
-    pip_install(BENCHMARK_ENV_NAME, "-r", str(benchmark_req))
-    pip_install(BENCHMARK_ENV_NAME, "-r", str(benchmark_extra_req))
+    pip_install(STZOO_ENV_NAME, "-r", str(benchmark_req))
+    pip_install(STZOO_ENV_NAME, "-r", str(benchmark_extra_req))
 
     print("Done.")
-    print(f"- Benchmark env: conda activate {BENCHMARK_ENV_NAME}")
+    print(f"- STZoo env: conda activate {STZOO_ENV_NAME}")
     conda_run(
-        BENCHMARK_ENV_NAME,
+        STZOO_ENV_NAME,
         "python",
         "-c",
-        "import sys; print('Benchmark Python', sys.version.split()[0])",
+        "import sys; print('STZoo Python', sys.version.split()[0])",
     )
 
 
