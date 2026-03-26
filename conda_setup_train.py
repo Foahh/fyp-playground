@@ -15,7 +15,7 @@ from scripts.conda.conda_setup_common import ensure_conda_env, main_guard, pip_i
 
 ENV_NAME = os.environ.get("TINYISSIMO_TRAIN_ENV", "tinyissimo-train")
 TORCH_INDEX_URL = os.environ.get(
-    "TORCH_INDEX_URL", "https://download.pytorch.org/whl/cu126"
+    "TORCH_INDEX_URL", "https://download.pytorch.org/whl/cu128"
 )
 
 
