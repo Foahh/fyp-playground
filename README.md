@@ -111,6 +111,12 @@ Set up the Conda environment before training:
 python project.py conda
 ```
 
+The setup installs PyTorch from the official CUDA 12.8 wheel index (for RTX 50-series compatibility):
+
+```sh
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+```
+
 ### Run training
 
 From the repository root, outputs are written to:
