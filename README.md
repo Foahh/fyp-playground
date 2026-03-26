@@ -12,7 +12,7 @@ Before running any project components, initialize the Git submodules:
 git submodule update --init --recursive
 ```
 
-It is recommended to use **Conda** for Python environment management.
+It is recommended to use **Docker** for environment management.
 
 ## Linux Setup
 
@@ -50,52 +50,48 @@ Training requires **Python 3.10** and several Python packages.
 
 For full setup instructions, see [external/TinyissimoYOLO/tinyissimoYOLO_README.md](external/TinyissimoYOLO/tinyissimoYOLO_README.md).
 
-### Conda Environment Setup
+### Docker Setup
 
 ```sh
-python3 conda_setup_train.py
-```
-
-Optional overrides:
-
-```sh
-TINYISSIMO_TRAIN_ENV=tinyissimo-train TORCH_INDEX_URL=https://download.pytorch.org/whl/cu126 python3 conda_setup_train.py
+docker compose build train
 ```
 
 ### Training
 
-From the repository root (script lives next to this README; outputs go to `external/TinyissimoYOLO/results/`):
+From the repository root (outputs go to `external/TinyissimoYOLO/results/`):
 
 ```sh
-python train_coco_person.py --img_size 192
-python train_coco_person.py --img_size 256
-python train_coco_person.py --img_size 288
-python train_coco_person.py --img_size 320
+docker compose run --rm train train_coco_person.py --img_size 192
+docker compose run --rm train train_coco_person.py --img_size 256
+docker compose run --rm train train_coco_person.py --img_size 288
+docker compose run --rm train train_coco_person.py --img_size 320
 ```
 
 ---
 
 ## Export TinyissimoYOLO to TFLite INT8
 
-### Conda Environment Setup
+### Docker Setup
 
 ```sh
-python3 conda_setup_export.py
-```
-
-Optional overrides:
-
-```sh
-YOLO_EXPORT_ENV=yolo-export TORCH_INDEX_URL=https://download.pytorch.org/whl/cu126 python3 conda_setup_export.py
+docker compose build export
 ```
 
 ### Export
 
 ```sh
-python run_export_tflite.py --img_size 192
-python run_export_tflite.py --img_size 256
-python run_export_tflite.py --img_size 288
-python run_export_tflite.py --img_size 320
+docker compose run --rm export run_export.py --img_size 192
+docker compose run --rm export run_export.py --img_size 256
+docker compose run --rm export run_export.py --img_size 288
+docker compose run --rm export run_export.py --img_size 320
+```
+
+Quantize SavedModel to TFLite INT8:
+
+```sh
+docker compose run --rm export run_quantize.py \
+  --img_size 192 \
+  --saved-model-dir results/model/tinyissimoyolo_v8_192/weights/best_saved_model
 ```
 
 By default, export reads checkpoints from `results/model/tinyissimoyolo_v8_<img_size>/weights/best.pt`.
@@ -103,7 +99,7 @@ By default, export reads checkpoints from `results/model/tinyissimoyolo_v8_<img_
 You can also export a specific checkpoint:
 
 ```sh
-python run_export_tflite.py --img_size 192 --weights results/model/tinyissimoyolo_v8_192/weights/best.pt
+docker compose run --rm export run_export.py --img_size 192 --weights results/model/tinyissimoyolo_v8_192/weights/best.pt
 ```
 
 ---
@@ -133,7 +129,7 @@ For full setup instructions, see [external/stm32ai-modelzoo-services/README.md](
 python3 conda_setup_benchmark.py
 ```
 
-Optional: use a different env name (default is `st_zoo`):
+Optional: use a different env name (default is `fyp`):
 
 ```sh
 ST_BENCHMARK_ENV=my-benchmark-env python3 conda_setup_benchmark.py

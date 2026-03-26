@@ -64,32 +64,27 @@ scripts/
 
 ### Environment Setup
 ```bash
-# From repo root; creates Python 3.10 training env
-python3 conda_setup_train.py
+# Build isolated Docker image for training (Python 3.10)
+docker compose build train
 
-# Export environment (Python 3.10)
-python3 conda_setup_export.py
+# Build isolated Docker image for export + quantization (Python 3.10)
+docker compose build export
 
-# Benchmark environment (Python 3.12.9); requires STEDGEAI_CORE_DIR
+# Benchmark environment (Python 3.12.9)
 python3 conda_setup_benchmark.py
-
-# Custom env names via environment variables:
-TINYISSIMO_TRAIN_ENV=custom-train python3 conda_setup_train.py
-ST_BENCHMARK_ENV=custom-bench python3 conda_setup_benchmark.py
 ```
 
 ### Training
 ```bash
-# Activate training env and train single image size
-conda activate tinyissimo-train  # or your custom env name
-python train_coco_person.py --img_size 192
+# Train single image size
+docker compose run --rm train train_coco_person.py --img_size 192
 
 # Resume training from last checkpoint
-python train_coco_person.py --img_size 192 --resume
+docker compose run --rm train train_coco_person.py --img_size 192 --resume
 
 # Train all supported sizes (run sequentially or in parallel)
 for size in 192 256 288 320; do
-  python train_coco_person.py --img_size $size
+  docker compose run --rm train train_coco_person.py --img_size $size
 done
 ```
 
@@ -97,18 +92,18 @@ Results are saved to `external/TinyissimoYOLO/results/tinyissimoyolo_v8_<size>/`
 
 ### Export to TFLite INT8
 ```bash
-# Activate export env
-conda activate yolo-export  # or your custom env name
-
 # Export single model (reads from external/TinyissimoYOLO/results/)
-python run_export_tflite.py --img_size 192
+docker compose run --rm export run_export.py --img_size 192
 
 # Export with custom checkpoint
-python run_export_tflite.py --img_size 192 --weights external/TinyissimoYOLO/results/tinyissimoyolo_v8_192/weights/best.pt
+docker compose run --rm export run_export.py --img_size 192 --weights external/TinyissimoYOLO/results/tinyissimoyolo_v8_192/weights/best.pt
+
+# Quantize SavedModel to TFLite INT8
+docker compose run --rm export run_quantize.py --img_size 192 --saved-model-dir results/model/tinyissimoyolo_v8_192/weights/best_saved_model
 
 # Export all variants
 for size in 192 256 288 320; do
-  python run_export_tflite.py --img_size $size
+  docker compose run --rm export run_export.py --img_size $size
 done
 ```
 
@@ -116,9 +111,6 @@ Exported models are copied to `results/model/tinyissimoyolo_v8_<size>/`
 
 ### Benchmarking
 ```bash
-# Activate benchmark env (requires STEDGEAI_CORE_DIR)
-conda activate st_zoo  # or your custom env name
-
 # Test with single model
 python run_benchmark.py --filter st_yoloxn_d033_w025_192
 
@@ -137,9 +129,13 @@ Results CSV: `results/benchmark/benchmark_results.csv`
 | Path | Purpose |
 |------|---------|
 | `train_coco_person.py` | Training entry point (wrapper around Ultralytics YOLO) |
-| `run_export_tflite.py` | TFLite export with INT8 quantization |
+| `run_export.py` | Stage-1 export (`.pt` -> SavedModel) |
+| `run_quantize.py` | Stage-2 quantization (SavedModel -> TFLite INT8) |
 | `run_benchmark.py` | Benchmark entry point (thin shim to scripts/benchmark/__main__.py) |
-| `conda_setup_*.py` | Environment creation scripts |
+| `docker/train.Dockerfile` | Training image definition |
+| `docker/export.Dockerfile` | Export/quantization image definition |
+| `conda_setup_benchmark.py` | Benchmark environment setup script |
+| `docker-compose.yml` | Train/export Docker services |
 | `load_coco.py` | COCO dataset loader |
 | `configs/` | Training/export configuration files |
 | `external/TinyissimoYOLO/results/` | Training outputs (checkpoints, logs) |
@@ -185,7 +181,7 @@ Expects dataset structure recognized by TinyissimoYOLO/Ultralytics (auto-handled
 ## Important Notes
 
 - **Submodules are critical**: `TinyissimoYOLO` provides modified YOLO code; `ultralytics` is used for exports. Always init submodules.
-- **Separate conda envs are required** due to Python version and dependency conflicts between training (3.10), export (3.10), and benchmarking (3.12).
+- **Hybrid setup is required**: train/export use Docker; benchmark uses a dedicated conda environment.
 - **Image sizes are model variants**: Training produces separate checkpoints for each size (192, 256, 288, 320); export and benchmark treat these as distinct model families.
 - **Results organization**: Training outputs go to `external/TinyissimoYOLO/results/`; export copies them to `results/model/` before generating TFLite files; benchmark reads from `results/model/`.
 - **Power measurement is single-file patch**: Only `aiValidation_ATON.c` needs modification in ST Edge AI; patch file is provided.

@@ -5,7 +5,7 @@ Run from the parent repository root (paths point into external/TinyissimoYOLO/):
     python train_coco_person.py --img_size 192
     python train_coco_person.py --img_size 192 --resume
 
-Conda env: `python3 conda_setup_train.py` (repo root); deps: `external/TinyissimoYOLO/requirements.txt`.
+Dependencies are provided by the training Docker image (`docker/train.Dockerfile`).
 """
 
 import argparse

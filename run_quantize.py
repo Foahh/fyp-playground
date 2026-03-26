@@ -34,7 +34,7 @@ QUANT_DTYPES = {
     "uint8": tf.uint8,
     "float": None,
 }
-NUM_CALIB_IMAGES = 200
+NUM_CALIB_IMAGES = 500
 
 
 def _resolve_calib_dir(data_yaml: Path) -> Path | None:
