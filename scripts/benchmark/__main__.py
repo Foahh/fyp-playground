@@ -2,8 +2,11 @@
 
 import argparse
 import datetime
+import os
+import re
 import shlex
 import sys
+from pathlib import Path
 
 from .constants import CSV_PATH, POWER_MEASURE_CSV_PATH, ensure_dirs
 from .models import load_models
@@ -15,6 +18,36 @@ from .power_serial import (
     stop_power_session,
 )
 from .workflow import _get_st_ai_output_dir, run_evaluation
+
+APP_CONFIG_PATH = (
+    Path(os.environ["STEDGEAI_CORE_DIR"])
+    / "Projects"
+    / "STM32N6570-DK"
+    / "Applications"
+    / "NPU_Validation"
+    / "Core"
+    / "Inc"
+    / "app_config.h"
+)
+
+
+def _apply_benchmark_mode(mode: str) -> None:
+    """Patch app_config.h USE_OVERDRIVE according to benchmark mode."""
+    normalized = "nominal" if mode == "norminal" else mode
+    normalized = "overdrive" if normalized == "override" else normalized
+    use_overdrive = "1" if normalized == "overdrive" else "0"
+    if not APP_CONFIG_PATH.exists():
+        raise FileNotFoundError(f"app_config.h not found: {APP_CONFIG_PATH}")
+
+    text = APP_CONFIG_PATH.read_text(encoding="utf-8")
+    pattern = r"(^\s*#define\s+USE_OVERDRIVE\s+)\d+"
+    updated, count = re.subn(pattern, rf"\g<1>{use_overdrive}", text, flags=re.MULTILINE)
+    if count == 0:
+        raise RuntimeError(
+            f"Failed to patch USE_OVERDRIVE in {APP_CONFIG_PATH}: define not found"
+        )
+    if updated != text:
+        APP_CONFIG_PATH.write_text(updated, encoding="utf-8")
 
 
 def main():
@@ -43,9 +76,17 @@ def main():
         default=50,
         help="Number of inference runs for validation (default: 50)",
     )
+    parser.add_argument(
+        "--mode",
+        type=str,
+        choices=["nominal", "norminal", "overdrive", "override"],
+        default="nominal",
+        help="Patch NPU_Validation app_config.h for benchmark mode",
+    )
     args = parser.parse_args()
 
     ensure_dirs()
+    _apply_benchmark_mode(args.mode)
 
     power_running = start_power_session(args.power_serial, args.power_baud)
 
@@ -73,6 +114,8 @@ def main():
         f"  --power-serial: {args.power_serial or '(auto-detect)'}\n"
         f"  --power-baud: {args.power_baud}\n"
         f"  --validation-count: {args.validation_count}\n"
+        f"  --mode: {'overdrive' if args.mode == 'override' else ('nominal' if args.mode == 'norminal' else args.mode)}\n"
+        f"  app_config: {APP_CONFIG_PATH}\n"
         f"  power_measurement_active: {power_running}"
         f"{power_port_line}"
     )

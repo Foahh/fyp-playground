@@ -173,7 +173,7 @@ python project.py quant --img_size 192 --out /path/to/output.tflite
 This benchmark performs on-device evaluation for all supported model variants and saves results to:
 
 ```text
-results/benchmark/benchmark_results.csv
+results/benchmark_nominal/benchmark_results.csv
 ```
 
 ### Additional reading
@@ -231,12 +231,12 @@ To enable inference-window power logging (INA228 + ESP32-C6), follow:
 
 This guide covers wiring, Arduino sketch flashing, required ST Edge AI patching, CLI flags (`--power-serial`, `--power-baud`, `--validation-count`), and troubleshooting.
 
-In `results/benchmark/benchmark_results.csv`, inference-window power is stored in `avg_power_inf_mW` (with related fields `avg_power_idle_mW`, `avg_power_delta_mW`, `avg_power_inf_ms`, and `avg_energy_inf_mJ`).
+In `results/benchmark_nominal/benchmark_results.csv`, inference-window power is stored in `avg_power_inf_mW` (with related fields `avg_power_idle_mW`, `avg_power_delta_mW`, `avg_power_inf_ms`, and `avg_energy_inf_mJ`).
 
 When power serial is enabled, the benchmark also appends a continuous log to:
 
 ```text
-results/benchmark/power-measure.csv
+results/benchmark_nominal/power_measure.csv
 ```
 
 This log contains host timestamps and INA228 fields. The Arduino sketch waits for `START` on the serial line, which the benchmark sends when opening the port.

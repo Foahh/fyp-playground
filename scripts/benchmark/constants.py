@@ -2,6 +2,7 @@
 
 import os
 import platform
+import sys
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -28,16 +29,47 @@ DATASETS_DIR = Path(
 MODELZOO_DIR = BASE_DIR / "external" / "stm32ai-modelzoo" / "object_detection"
 SERVICES_DIR = BASE_DIR / "external" / "stm32ai-modelzoo-services" / "object_detection"
 RESULTS_DIR = BASE_DIR / "results"
-BENCHMARK_DIR = RESULTS_DIR / "benchmark"
+
+
+def _detect_benchmark_mode_from_argv() -> str:
+    """Detect benchmark mode from CLI args.
+
+    Supports:
+    - --mode overdrive
+    - --mode override (legacy alias)
+    - --mode nominal / --mode norminal (legacy typo alias)
+    """
+    mode = "nominal"
+    argv = sys.argv[1:]
+    for i, token in enumerate(argv):
+        if token == "--mode" and i + 1 < len(argv):
+            mode = argv[i + 1].strip().lower()
+            break
+        if token.startswith("--mode="):
+            mode = token.split("=", 1)[1].strip().lower()
+            break
+
+    if mode in ("override", "overdrive"):
+        return "overdrive"
+    if mode in ("norminal", "nominal"):
+        return "nominal"
+    return "nominal"
+
+
+BENCHMARK_MODE = _detect_benchmark_mode_from_argv()
+BENCHMARK_DIR = RESULTS_DIR / (
+    "benchmark_overdrive" if BENCHMARK_MODE == "overdrive" else "benchmark_nominal"
+)
+BENCHMARK_PARSED_DIR = RESULTS_DIR
 
 CSV_PATH = BENCHMARK_DIR / "benchmark_results.csv"
 ERROR_LOG = BENCHMARK_DIR / "benchmark_errors.log"
 STDOUT_LOG = BENCHMARK_DIR / "benchmark_stdout.log"
-POWER_MEASURE_CSV_PATH = BENCHMARK_DIR / "power-measure.csv"
+POWER_MEASURE_CSV_PATH = BENCHMARK_DIR / "power_measure.csv"
 
 STEDGEAI_PATH = get_stedgeai_path()
 
-N6_WORKDIR = BENCHMARK_DIR / "n6_workdir"
+N6_WORKDIR = RESULTS_DIR / "n6_workdir"
 
 # ── Dataset paths ──
 
@@ -178,7 +210,7 @@ CSV_COLUMNS_NO_POWER = [
     )
 ]
 
-METRIC_PARSED_CSV_PATH = BENCHMARK_DIR / "metric_parsed.csv"
+METRIC_PARSED_CSV_PATH = BENCHMARK_PARSED_DIR / "benchmark_parsed.csv"
 
 # ── Path helpers for the model registry ──
 

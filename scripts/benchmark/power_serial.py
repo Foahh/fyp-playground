@@ -144,7 +144,7 @@ def compute_avg_power_mw(samples: list[dict]) -> Optional[float]:
 
 
 class PowerMeasureSession:
-    """Reads INA228 protobuf serial for the whole benchmark run; logs to power-measure.csv."""
+    """Reads INA228 protobuf serial for the whole benchmark run; logs to power_measure.csv."""
 
     _CSV_HEADER = "host_time_iso,timestamp_us,avg_mw,duration_us,is_inference\n"
     _HANDSHAKE_REQUEST = b"PM_PING\n"
@@ -315,7 +315,7 @@ _session: Optional[PowerMeasureSession] = None
 def start_power_session(port: Optional[str], baud: int) -> bool:
     """
     If port is provided, start a background thread that logs every INA228
-    sample to results/benchmark/power-measure.csv with host_time_iso (UTC).
+    sample to results/benchmark_nominal/power_measure.csv with host_time_iso (UTC).
     """
     global _session
     if _session is not None:
