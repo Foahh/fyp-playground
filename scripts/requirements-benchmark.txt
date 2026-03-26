@@ -1,7 +1,4 @@
 pyserial>=3.5
-
-grpcio-tools>=1.78.0
-protobuf
-
+protobuf==3.20
 markdown
 beautifulsoup4

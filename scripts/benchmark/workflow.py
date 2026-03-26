@@ -20,6 +20,15 @@ from .power_serial import (
     is_power_session_active,
 )
 
+
+def _append_stdout_log(text: str) -> None:
+    """Append plain text to benchmark stdout log."""
+    with open(STDOUT_LOG, "a", encoding="utf-8") as fd:
+        fd.write(text)
+        if not text.endswith("\n"):
+            fd.write("\n")
+
+
 def _get_n6_scripts_dir() -> Path:
     """Return the N6_scripts directory from STEDGEAI_CORE_DIR."""
     return Path(os.environ["STEDGEAI_CORE_DIR"]) / "scripts" / "N6_scripts"
@@ -310,11 +319,23 @@ def run_evaluation(entry: ModelEntry, validation_count: int) -> EvalResult:
 
         # Step 3: Validate on device with multiple inferences for power measurement
         print(f"  → Validating on device ({validation_count}x inferences)...")
+        validate_t0 = time.monotonic()
         begin_validate_capture()
         try:
             res.validate_out, res.validate_err, res.validate_rc = _step_validate(entry, validation_count)
         finally:
             validate_lines = end_validate_capture()
+        validate_dt = time.monotonic() - validate_t0
+        validate_header = (
+            f"\n=== VALIDATE | {entry.variant} | {entry.fmt} ===\n"
+            f"elapsed time (VALIDATE): {validate_dt:.3f}s\n"
+            f"validate rc: {res.validate_rc}\n"
+        )
+        _append_stdout_log(validate_header)
+        if res.validate_out:
+            _append_stdout_log(res.validate_out)
+        if res.validate_err:
+            _append_stdout_log(res.validate_err)
         if validate_lines:
             metrics = compute_power_metrics(validate_lines, validation_count)
             res.avg_power_inf_mW = metrics["avg_power_inf_mW"]
@@ -324,6 +345,8 @@ def run_evaluation(entry: ModelEntry, validation_count: int) -> EvalResult:
             res.avg_energy_inf_mJ = metrics["avg_energy_inf_mJ"]
         elif is_power_session_active():
             print("  ⚠ WARNING: Power measurement active but no samples captured during validation")
+        if res.validate_rc != 0:
+            print(f"  ⚠ Validation step failed (rc={res.validate_rc}); check benchmark_stdout.log VALIDATE block")
 
     except subprocess.TimeoutExpired as e:
         step = "on-target"
