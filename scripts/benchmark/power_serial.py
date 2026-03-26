@@ -195,8 +195,8 @@ class PowerMeasureSession:
             )
             try:
                 self._ser.close()
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"WARNING: Failed to close power serial after handshake failure: {e}")
             self._ser = None
             return False
 
@@ -218,14 +218,16 @@ class PowerMeasureSession:
             self._ser.reset_input_buffer()
             self._ser.write(self._HANDSHAKE_REQUEST)
             self._ser.flush()
-        except Exception:
+        except Exception as e:
+            print(f"WARNING: Handshake write failed: {e}")
             return False
 
         deadline = time.monotonic() + self._HANDSHAKE_TIMEOUT_S
         while time.monotonic() < deadline:
             try:
                 line = self._ser.readline()
-            except Exception:
+            except Exception as e:
+                print(f"WARNING: Handshake read failed: {e}")
                 return False
             if not line:
                 continue
@@ -246,14 +248,14 @@ class PowerMeasureSession:
         if self._ser is not None:
             try:
                 self._ser.close()
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"WARNING: Failed to close power serial: {e}")
             self._ser = None
         if self._csv_fd is not None:
             try:
                 self._csv_fd.close()
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"WARNING: Failed to close power CSV file: {e}")
             self._csv_fd = None
 
     def _write_csv_row(self, sample: dict) -> None:
@@ -292,7 +294,8 @@ class PowerMeasureSession:
                 with self._validate_lock:
                     if self._capture_validate:
                         self._validate_samples.append(sample)
-            except Exception:
+            except Exception as e:
+                print(f"WARNING: Power serial reader loop error: {e}")
                 continue
 
     def begin_validate_window(self) -> None:
