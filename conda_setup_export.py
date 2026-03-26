@@ -21,7 +21,7 @@ from scripts.conda.conda_setup_common import (
 
 ENV_NAME = os.environ.get("YOLO_EXPORT_ENV", "yolo-export")
 TORCH_INDEX_URL = os.environ.get(
-    "TORCH_INDEX_URL", "https://download.pytorch.org/whl/cu126"
+    "TORCH_INDEX_URL", "https://download.pytorch.org/whl/cu128"
 )
 
 

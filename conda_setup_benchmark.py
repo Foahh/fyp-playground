@@ -22,7 +22,7 @@ from scripts.conda.conda_setup_common import (
     repo_root,
 )
 
-ENV_NAME = os.environ.get("ST_BENCHMARK_ENV", "st_zoo")
+ENV_NAME = os.environ.get("ST_BENCHMARK_ENV", "fyp")
 PYTHON_VERSION = "3.12.9"
 CUDA_VERSION = "11.8"
 
