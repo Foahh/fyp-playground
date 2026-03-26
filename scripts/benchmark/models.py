@@ -18,6 +18,9 @@ class ModelEntry:
     model_path: str     # absolute path to model file
     config_path: str    # absolute path to base config YAML
     overrides: dict = field(default_factory=dict)
+    framework: str = "tf"           # "tf" or "torch"
+    input_data_type: str = "uint8"
+    output_data_type: str = "int8"
 
 
 def _num_classes_for_dataset(dataset: str) -> int:
@@ -52,6 +55,9 @@ def load_models() -> list[ModelEntry]:
                 model_path=str(model_path.resolve()),
                 config_path=str(config_path.resolve()),
                 overrides=reg.get("overrides", {}),
+                framework=reg.get("framework", "tf"),
+                input_data_type=reg.get("input_data_type", "uint8"),
+                output_data_type=reg.get("output_data_type", "int8"),
             )
         )
     return entries

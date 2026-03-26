@@ -43,8 +43,8 @@ def build_eval_config(entry: ModelEntry) -> Path:
         },
         "evaluation": {
             "profile": "profile_O3",
-            "input_type": "uint8",
-            "output_type": "int8",
+            "input_type": entry.input_data_type,
+            "output_type": entry.output_data_type,
             "input_chpos": "chlast",
             "output_chpos": "chlast",
             "target": "host",
@@ -81,11 +81,20 @@ def build_eval_config(entry: ModelEntry) -> Path:
             "test_path": tfs_test,
         }
 
-    # Ensure model_name is set — some base configs omit it, but the
-    # modelzoo dataloader dispatcher (combined.py) requires it.
+    # Handle model_name vs model_path exclusivity.
+    # PyTorch models allow both; TF models don't (cfg_utils.py:691).
     base_model = base.get("model", {})
-    if not base_model.get("model_name"):
-        overrides["model"]["model_name"] = base_model.get("model_type", entry.family)
+
+    if entry.framework == "torch":
+        if not base_model.get("model_name"):
+            overrides["model"]["model_name"] = base_model.get("model_type") or entry.family
+    else:
+        overrides["model"]["model_name"] = None
+
+    # Add input_shape when the base config doesn't provide it so that
+    # downstream preprocessing knows the target resolution.
+    if not base_model.get("input_shape"):
+        overrides["model"]["input_shape"] = [entry.resolution, entry.resolution, 3]
 
     overrides = _deep_merge(overrides, entry.overrides)
     merged = _deep_merge(base, overrides)

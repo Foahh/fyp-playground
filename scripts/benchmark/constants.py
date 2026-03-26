@@ -213,6 +213,7 @@ MODEL_REGISTRY: list[dict] = [
         "config": _ZOO / "ssdlite_mobilenetv1_pt/Public_pretrainedmodel_public_dataset/coco/ssdlite_mobilenetv1_pt_coco_300/ssdlite_mobilenetv1_pt_coco_300_config.yaml",
         "model": _ZOO / "ssdlite_mobilenetv1_pt/Public_pretrainedmodel_public_dataset/coco/ssdlite_mobilenetv1_pt_coco_300/ssdlite_mobilenetv1_pt_coco_300_qdq_int8.onnx",
         "family": "ssdlite_mobilenetv1_pt",
+        "framework": "torch",
         "readme": _MD_ssdlite_mobilenetv1_pt,
         "variant": "ssdlite_mobilenetv1_pt_coco_300",
         "hyperparameters": "",
@@ -225,6 +226,7 @@ MODEL_REGISTRY: list[dict] = [
         "config": _ZOO / "ssdlite_mobilenetv1_pt/ST_pretrainedmodel_public_dataset/coco_person/ssdlite_mobilenetv1_pt_coco_person_300/ssdlite_mobilenetv1_pt_coco_person_300_config.yaml",
         "model": _ZOO / "ssdlite_mobilenetv1_pt/ST_pretrainedmodel_public_dataset/coco_person/ssdlite_mobilenetv1_pt_coco_person_300/ssdlite_mobilenetv1_pt_coco_person_300_qdq_int8.onnx",
         "family": "ssdlite_mobilenetv1_pt",
+        "framework": "torch",
         "readme": _MD_ssdlite_mobilenetv1_pt,
         "variant": "ssdlite_mobilenetv1_pt_coco_person_300",
         "hyperparameters": "",
@@ -238,6 +240,7 @@ MODEL_REGISTRY: list[dict] = [
         "config": _ZOO / "ssdlite_mobilenetv2_pt/Public_pretrainedmodel_public_dataset/coco/ssdlite_mobilenetv2_pt_coco_300/ssdlite_mobilenetv2_pt_coco_300_config.yaml",
         "model": _ZOO / "ssdlite_mobilenetv2_pt/Public_pretrainedmodel_public_dataset/coco/ssdlite_mobilenetv2_pt_coco_300/ssdlite_mobilenetv2_pt_coco_300_qdq_int8.onnx",
         "family": "ssdlite_mobilenetv2_pt",
+        "framework": "torch",
         "readme": _MD_ssdlite_mobilenetv2_pt,
         "variant": "ssdlite_mobilenetv2_pt_coco_300",
         "hyperparameters": "",
@@ -250,6 +253,7 @@ MODEL_REGISTRY: list[dict] = [
         "config": _ZOO / "ssdlite_mobilenetv2_pt/ST_pretrainedmodel_public_dataset/coco_person/ssdlite_mobilenetv2_pt_coco_person_300/ssdlite_mobilenetv2_pt_coco_person_300_config.yaml",
         "model": _ZOO / "ssdlite_mobilenetv2_pt/ST_pretrainedmodel_public_dataset/coco_person/ssdlite_mobilenetv2_pt_coco_person_300/ssdlite_mobilenetv2_pt_coco_person_300_qdq_int8.onnx",
         "family": "ssdlite_mobilenetv2_pt",
+        "framework": "torch",
         "readme": _MD_ssdlite_mobilenetv2_pt,
         "variant": "ssdlite_mobilenetv2_pt_coco_person_300",
         "hyperparameters": "",
@@ -263,6 +267,7 @@ MODEL_REGISTRY: list[dict] = [
         "config": _ZOO / "ssdlite_mobilenetv3large_pt/Public_pretrainedmodel_public_dataset/coco/ssdlite_mobilenetv3large_pt_coco_300/ssdlite_mobilenetv3large_pt_coco_300_config.yaml",
         "model": _ZOO / "ssdlite_mobilenetv3large_pt/Public_pretrainedmodel_public_dataset/coco/ssdlite_mobilenetv3large_pt_coco_300/ssdlite_mobilenetv3large_pt_coco_300_qdq_int8.onnx",
         "family": "ssdlite_mobilenetv3large_pt",
+        "framework": "torch",
         "readme": _MD_ssdlite_mobilenetv3large_pt,
         "variant": "ssdlite_mobilenetv3large_pt_coco_300",
         "hyperparameters": "",
@@ -275,6 +280,7 @@ MODEL_REGISTRY: list[dict] = [
         "config": _ZOO / "ssdlite_mobilenetv3large_pt/ST_pretrainedmodel_public_dataset/coco_person/ssdlite_mobilenetv3large_pt_coco_person_300/ssdlite_mobilenetv3large_pt_coco_person_300_config.yaml",
         "model": _ZOO / "ssdlite_mobilenetv3large_pt/ST_pretrainedmodel_public_dataset/coco_person/ssdlite_mobilenetv3large_pt_coco_person_300/ssdlite_mobilenetv3large_pt_coco_person_300_qdq_int8.onnx",
         "family": "ssdlite_mobilenetv3large_pt",
+        "framework": "torch",
         "readme": _MD_ssdlite_mobilenetv3large_pt,
         "variant": "ssdlite_mobilenetv3large_pt_coco_person_300",
         "hyperparameters": "",
@@ -288,6 +294,7 @@ MODEL_REGISTRY: list[dict] = [
         "config": _ZOO / "ssdlite_mobilenetv3small_pt/Public_pretrainedmodel_public_dataset/coco/ssdlite_mobilenetv3small_pt_coco_300/ssdlite_mobilenetv3small_pt_coco_300_config.yaml",
         "model": _ZOO / "ssdlite_mobilenetv3small_pt/Public_pretrainedmodel_public_dataset/coco/ssdlite_mobilenetv3small_pt_coco_300/ssdlite_mobilenetv3small_pt_coco_300_qdq_int8.onnx",
         "family": "ssdlite_mobilenetv3small_pt",
+        "framework": "torch",
         "readme": _MD_ssdlite_mobilenetv3small_pt,
         "variant": "ssdlite_mobilenetv3small_pt_coco_300",
         "hyperparameters": "",
@@ -300,6 +307,7 @@ MODEL_REGISTRY: list[dict] = [
         "config": _ZOO / "ssdlite_mobilenetv3small_pt/ST_pretrainedmodel_public_dataset/coco_person/ssdlite_mobilenetv3small_pt_coco_person_300/ssdlite_mobilenetv3small_pt_coco_person_300_config.yaml",
         "model": _ZOO / "ssdlite_mobilenetv3small_pt/ST_pretrainedmodel_public_dataset/coco_person/ssdlite_mobilenetv3small_pt_coco_person_300/ssdlite_mobilenetv3small_pt_coco_person_300_qdq_int8.onnx",
         "family": "ssdlite_mobilenetv3small_pt",
+        "framework": "torch",
         "readme": _MD_ssdlite_mobilenetv3small_pt,
         "variant": "ssdlite_mobilenetv3small_pt_coco_person_300",
         "hyperparameters": "",
@@ -313,6 +321,7 @@ MODEL_REGISTRY: list[dict] = [
         "config": _ZOO / "st_yolodv2milli_pt/ST_pretrainedmodel_public_dataset/coco/st_yolodv2milli_actrelu_pt_coco_192/st_yolodv2milli_actrelu_pt_coco_192_config.yaml",
         "model": _ZOO / "st_yolodv2milli_pt/ST_pretrainedmodel_public_dataset/coco/st_yolodv2milli_actrelu_pt_coco_192/st_yolodv2milli_actrelu_pt_coco_192_qdq_int8.onnx",
         "family": "st_yolodv2milli_pt",
+        "framework": "torch",
         "readme": _MD_st_yolodv2milli_pt,
         "variant": "st_yolodv2milli_actrelu_pt_coco_192",
         "hyperparameters": "actrelu",
@@ -324,6 +333,7 @@ MODEL_REGISTRY: list[dict] = [
         "config": _ZOO / "st_yolodv2milli_pt/ST_pretrainedmodel_public_dataset/coco/st_yolodv2milli_actrelu_pt_coco_320/st_yolodv2milli_actrelu_pt_coco_320_config.yaml",
         "model": _ZOO / "st_yolodv2milli_pt/ST_pretrainedmodel_public_dataset/coco/st_yolodv2milli_actrelu_pt_coco_320/st_yolodv2milli_actrelu_pt_coco_320_qdq_int8.onnx",
         "family": "st_yolodv2milli_pt",
+        "framework": "torch",
         "readme": _MD_st_yolodv2milli_pt,
         "variant": "st_yolodv2milli_actrelu_pt_coco_320",
         "hyperparameters": "actrelu",
@@ -335,6 +345,7 @@ MODEL_REGISTRY: list[dict] = [
         "config": _ZOO / "st_yolodv2milli_pt/ST_pretrainedmodel_public_dataset/coco/st_yolodv2milli_actrelu_pt_coco_640/st_yolodv2milli_actrelu_pt_coco_640_config.yaml",
         "model": _ZOO / "st_yolodv2milli_pt/ST_pretrainedmodel_public_dataset/coco/st_yolodv2milli_actrelu_pt_coco_640/st_yolodv2milli_actrelu_pt_coco_640_qdq_int8.onnx",
         "family": "st_yolodv2milli_pt",
+        "framework": "torch",
         "readme": _MD_st_yolodv2milli_pt,
         "variant": "st_yolodv2milli_actrelu_pt_coco_640",
         "hyperparameters": "actrelu",
@@ -347,6 +358,7 @@ MODEL_REGISTRY: list[dict] = [
         "config": _ZOO / "st_yolodv2milli_pt/ST_pretrainedmodel_public_dataset/coco_person/st_yolodv2milli_actrelu_pt_coco_person_192/st_yolodv2milli_actrelu_pt_coco_person_192_config.yaml",
         "model": _ZOO / "st_yolodv2milli_pt/ST_pretrainedmodel_public_dataset/coco_person/st_yolodv2milli_actrelu_pt_coco_person_192/st_yolodv2milli_actrelu_pt_coco_person_192_qdq_int8.onnx",
         "family": "st_yolodv2milli_pt",
+        "framework": "torch",
         "readme": _MD_st_yolodv2milli_pt,
         "variant": "st_yolodv2milli_actrelu_pt_coco_person_192",
         "hyperparameters": "actrelu",
@@ -358,6 +370,7 @@ MODEL_REGISTRY: list[dict] = [
         "config": _ZOO / "st_yolodv2milli_pt/ST_pretrainedmodel_public_dataset/coco_person/st_yolodv2milli_actrelu_pt_coco_person_256/st_yolodv2milli_actrelu_pt_coco_person_256_config.yaml",
         "model": _ZOO / "st_yolodv2milli_pt/ST_pretrainedmodel_public_dataset/coco_person/st_yolodv2milli_actrelu_pt_coco_person_256/st_yolodv2milli_actrelu_pt_coco_person_256_qdq_int8.onnx",
         "family": "st_yolodv2milli_pt",
+        "framework": "torch",
         "readme": _MD_st_yolodv2milli_pt,
         "variant": "st_yolodv2milli_actrelu_pt_coco_person_256",
         "hyperparameters": "actrelu",
@@ -369,6 +382,7 @@ MODEL_REGISTRY: list[dict] = [
         "config": _ZOO / "st_yolodv2milli_pt/ST_pretrainedmodel_public_dataset/coco_person/st_yolodv2milli_actrelu_pt_coco_person_320/st_yolodv2milli_actrelu_pt_coco_person_320_config.yaml",
         "model": _ZOO / "st_yolodv2milli_pt/ST_pretrainedmodel_public_dataset/coco_person/st_yolodv2milli_actrelu_pt_coco_person_320/st_yolodv2milli_actrelu_pt_coco_person_320_qdq_int8.onnx",
         "family": "st_yolodv2milli_pt",
+        "framework": "torch",
         "readme": _MD_st_yolodv2milli_pt,
         "variant": "st_yolodv2milli_actrelu_pt_coco_person_320",
         "hyperparameters": "actrelu",
@@ -381,6 +395,7 @@ MODEL_REGISTRY: list[dict] = [
         "config": _ZOO / "st_yolodv2tiny_pt/ST_pretrainedmodel_public_dataset/coco/st_yolodv2tiny_actrelu_pt_coco_192/st_yolodv2tiny_actrelu_pt_coco_192_config.yaml",
         "model": _ZOO / "st_yolodv2tiny_pt/ST_pretrainedmodel_public_dataset/coco/st_yolodv2tiny_actrelu_pt_coco_192/st_yolodv2tiny_actrelu_pt_coco_192_qdq_int8.onnx",
         "family": "st_yolodv2tiny_pt",
+        "framework": "torch",
         "readme": _MD_st_yolodv2tiny_pt,
         "variant": "st_yolodv2tiny_actrelu_pt_coco_192",
         "hyperparameters": "actrelu",
@@ -392,6 +407,7 @@ MODEL_REGISTRY: list[dict] = [
         "config": _ZOO / "st_yolodv2tiny_pt/ST_pretrainedmodel_public_dataset/coco/st_yolodv2tiny_actrelu_pt_coco_288/st_yolodv2tiny_actrelu_pt_coco_288_config.yaml",
         "model": _ZOO / "st_yolodv2tiny_pt/ST_pretrainedmodel_public_dataset/coco/st_yolodv2tiny_actrelu_pt_coco_288/st_yolodv2tiny_actrelu_pt_coco_288_qdq_int8.onnx",
         "family": "st_yolodv2tiny_pt",
+        "framework": "torch",
         "readme": _MD_st_yolodv2tiny_pt,
         "variant": "st_yolodv2tiny_actrelu_pt_coco_288",
         "hyperparameters": "actrelu",
@@ -403,6 +419,7 @@ MODEL_REGISTRY: list[dict] = [
         "config": _ZOO / "st_yolodv2tiny_pt/ST_pretrainedmodel_public_dataset/coco/st_yolodv2tiny_actrelu_pt_coco_640/st_yolodv2tiny_actrelu_pt_coco_640_config.yaml",
         "model": _ZOO / "st_yolodv2tiny_pt/ST_pretrainedmodel_public_dataset/coco/st_yolodv2tiny_actrelu_pt_coco_640/st_yolodv2tiny_actrelu_pt_coco_640_qdq_int8.onnx",
         "family": "st_yolodv2tiny_pt",
+        "framework": "torch",
         "readme": _MD_st_yolodv2tiny_pt,
         "variant": "st_yolodv2tiny_actrelu_pt_coco_640",
         "hyperparameters": "actrelu",
@@ -415,6 +432,7 @@ MODEL_REGISTRY: list[dict] = [
         "config": _ZOO / "st_yolodv2tiny_pt/ST_pretrainedmodel_public_dataset/coco_person/st_yolodv2tiny_actrelu_pt_coco_person_192/st_yolodv2tiny_actrelu_pt_coco_person_192_config.yaml",
         "model": _ZOO / "st_yolodv2tiny_pt/ST_pretrainedmodel_public_dataset/coco_person/st_yolodv2tiny_actrelu_pt_coco_person_192/st_yolodv2tiny_actrelu_pt_coco_person_192_qdq_int8.onnx",
         "family": "st_yolodv2tiny_pt",
+        "framework": "torch",
         "readme": _MD_st_yolodv2tiny_pt,
         "variant": "st_yolodv2tiny_actrelu_pt_coco_person_192",
         "hyperparameters": "actrelu",
@@ -426,6 +444,7 @@ MODEL_REGISTRY: list[dict] = [
         "config": _ZOO / "st_yolodv2tiny_pt/ST_pretrainedmodel_public_dataset/coco_person/st_yolodv2tiny_actrelu_pt_coco_person_256/st_yolodv2tiny_actrelu_pt_coco_person_256_config.yaml",
         "model": _ZOO / "st_yolodv2tiny_pt/ST_pretrainedmodel_public_dataset/coco_person/st_yolodv2tiny_actrelu_pt_coco_person_256/st_yolodv2tiny_actrelu_pt_coco_person_256_qdq_int8.onnx",
         "family": "st_yolodv2tiny_pt",
+        "framework": "torch",
         "readme": _MD_st_yolodv2tiny_pt,
         "variant": "st_yolodv2tiny_actrelu_pt_coco_person_256",
         "hyperparameters": "actrelu",
@@ -437,6 +456,7 @@ MODEL_REGISTRY: list[dict] = [
         "config": _ZOO / "st_yolodv2tiny_pt/ST_pretrainedmodel_public_dataset/coco_person/st_yolodv2tiny_actrelu_pt_coco_person_288/st_yolodv2tiny_actrelu_pt_coco_person_288_config.yaml",
         "model": _ZOO / "st_yolodv2tiny_pt/ST_pretrainedmodel_public_dataset/coco_person/st_yolodv2tiny_actrelu_pt_coco_person_288/st_yolodv2tiny_actrelu_pt_coco_person_288_qdq_int8.onnx",
         "family": "st_yolodv2tiny_pt",
+        "framework": "torch",
         "readme": _MD_st_yolodv2tiny_pt,
         "variant": "st_yolodv2tiny_actrelu_pt_coco_person_288",
         "hyperparameters": "actrelu",
@@ -455,6 +475,7 @@ MODEL_REGISTRY: list[dict] = [
         "dataset": "COCO-Person",
         "fmt": "Int8",
         "resolution": 192,
+        "output_data_type": "float32",
     },
     {
         "config": _ZOO / "st_yololcv1/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yololcv1_224/st_yololcv1_224_config.yaml",
@@ -466,6 +487,7 @@ MODEL_REGISTRY: list[dict] = [
         "dataset": "COCO-Person",
         "fmt": "Int8",
         "resolution": 224,
+        "output_data_type": "float32",
     },
     {
         "config": _ZOO / "st_yololcv1/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yololcv1_256/st_yololcv1_256_config.yaml",
@@ -477,6 +499,7 @@ MODEL_REGISTRY: list[dict] = [
         "dataset": "COCO-Person",
         "fmt": "Int8",
         "resolution": 256,
+        "output_data_type": "float32",
     },
     # ── st_yololcv1 (COCO-Person, W4A8) ──
     {
@@ -523,6 +546,7 @@ MODEL_REGISTRY: list[dict] = [
         "dataset": "COCO-Person",
         "fmt": "Int8",
         "resolution": 192,
+        "output_data_type": "float32",
     },
     {
         "config": _ZOO / "st_yoloxn/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yoloxn_d033_w025_256/st_yoloxn_d033_w025_256_config.yaml",
@@ -534,6 +558,7 @@ MODEL_REGISTRY: list[dict] = [
         "dataset": "COCO-Person",
         "fmt": "Int8",
         "resolution": 256,
+        "output_data_type": "float32",
     },
     {
         "config": _ZOO / "st_yoloxn/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yoloxn_d033_w025_320/st_yoloxn_d033_w025_320_config.yaml",
@@ -545,6 +570,7 @@ MODEL_REGISTRY: list[dict] = [
         "dataset": "COCO-Person",
         "fmt": "Int8",
         "resolution": 320,
+        "output_data_type": "float32",
     },
     {
         "config": _ZOO / "st_yoloxn/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yoloxn_d033_w025_416/st_yoloxn_d033_w025_416_config.yaml",
@@ -556,6 +582,7 @@ MODEL_REGISTRY: list[dict] = [
         "dataset": "COCO-Person",
         "fmt": "Int8",
         "resolution": 416,
+        "output_data_type": "float32",
     },
     {
         "config": _ZOO / "st_yoloxn/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yoloxn_d050_w040_256/st_yoloxn_d050_w040_256_config.yaml",
@@ -567,6 +594,7 @@ MODEL_REGISTRY: list[dict] = [
         "dataset": "COCO-Person",
         "fmt": "Int8",
         "resolution": 256,
+        "output_data_type": "float32",
     },
     {
         "config": _ZOO / "st_yoloxn/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yoloxn_d100_w025_480/st_yoloxn_d100_w025_480_config.yaml",
@@ -578,6 +606,7 @@ MODEL_REGISTRY: list[dict] = [
         "dataset": "COCO-Person",
         "fmt": "Int8",
         "resolution": 480,
+        "output_data_type": "float32",
     },
     # ── st_yoloxn (COCO-Person public, W4A8) ──
     {
@@ -669,6 +698,7 @@ MODEL_REGISTRY: list[dict] = [
         "dataset": "ST-Person",
         "fmt": "Int8",
         "resolution": 416,
+        "output_data_type": "float32",
     },
     {
         "config": _ZOO / "st_yoloxn/ST_pretrainedmodel_custom_dataset/st_person/st_yoloxn_d067_w025_416/st_yoloxn_d067_w025_416_config.yaml",
@@ -680,6 +710,7 @@ MODEL_REGISTRY: list[dict] = [
         "dataset": "ST-Person",
         "fmt": "Int8",
         "resolution": 416,
+        "output_data_type": "float32",
     },
     {
         "config": _ZOO / "st_yoloxn/ST_pretrainedmodel_custom_dataset/st_person/st_yoloxn_d100_w025_416/st_yoloxn_d100_w025_416_config.yaml",
@@ -691,6 +722,7 @@ MODEL_REGISTRY: list[dict] = [
         "dataset": "ST-Person",
         "fmt": "Int8",
         "resolution": 416,
+        "output_data_type": "float32",
     },
     {
         "config": _ZOO / "st_yoloxn/ST_pretrainedmodel_custom_dataset/st_person/st_yoloxn_d100_w025_480/st_yoloxn_d100_w025_480_config.yaml",
@@ -702,6 +734,7 @@ MODEL_REGISTRY: list[dict] = [
         "dataset": "ST-Person",
         "fmt": "Int8",
         "resolution": 480,
+        "output_data_type": "float32",
     },
     # ── st_yoloxn (custom dataset / ST-Person, W4A8) ──
     {
@@ -726,6 +759,7 @@ MODEL_REGISTRY: list[dict] = [
         "dataset": "COCO-Person",
         "fmt": "Int8",
         "resolution": 192,
+        "output_data_type": "float32",
     },
     {
         "config": _ZOO / "yolov8n/yolov8n_256_config.yaml",
@@ -737,6 +771,7 @@ MODEL_REGISTRY: list[dict] = [
         "dataset": "COCO-Person",
         "fmt": "Int8",
         "resolution": 256,
+        "output_data_type": "float32",
     },
     {
         "config": _ZOO / "yolov8n/yolov8n_256_config.yaml",
@@ -748,6 +783,7 @@ MODEL_REGISTRY: list[dict] = [
         "dataset": "COCO-Person",
         "fmt": "Int8",
         "resolution": 320,
+        "output_data_type": "float32",
     },
     {
         "config": _ZOO / "yolov8n/yolov8n_256_config.yaml",
@@ -759,6 +795,7 @@ MODEL_REGISTRY: list[dict] = [
         "dataset": "COCO-Person",
         "fmt": "Int8",
         "resolution": 416,
+        "output_data_type": "float32",
     },
     # ── yolo11n ──
     {
@@ -771,6 +808,7 @@ MODEL_REGISTRY: list[dict] = [
         "dataset": "COCO-Person",
         "fmt": "Int8",
         "resolution": 256,
+        "output_data_type": "float32",
     },
     # ── TinyissimoYOLO v8
     {
@@ -780,13 +818,15 @@ MODEL_REGISTRY: list[dict] = [
         / "tinyissimoyolo_v8_192"
         / "weights"
         / "best_saved_model"
-        / "best_int8.tflite",
+        / "best_full_integer_quant.tflite",
         "family": "tinyissimoyolo_v8",
         "variant": "tinyissimoyolo_v8_192",
         "hyperparameters": "",
         "dataset": "COCO-Person",
         "fmt": "Int8",
         "resolution": 192,
+        "input_data_type": "int8",
+        "output_data_type": "int8",
     },
     # ── yolo26 ──
     {
