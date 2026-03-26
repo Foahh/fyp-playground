@@ -92,10 +92,10 @@ YOLO_EXPORT_ENV=yolo-export TORCH_INDEX_URL=https://download.pytorch.org/whl/cu1
 ### Export
 
 ```sh
-python export_tflite.py --img_size 192
-python export_tflite.py --img_size 256
-python export_tflite.py --img_size 288
-python export_tflite.py --img_size 320
+python run_export_tflite.py --img_size 192
+python run_export_tflite.py --img_size 256
+python run_export_tflite.py --img_size 288
+python run_export_tflite.py --img_size 320
 ```
 
 By default, export reads checkpoints from `results/model/tinyissimoyolo_v8_<img_size>/weights/best.pt`.
@@ -103,7 +103,7 @@ By default, export reads checkpoints from `results/model/tinyissimoyolo_v8_<img_
 You can also export a specific checkpoint:
 
 ```sh
-python export_tflite.py --img_size 192 --weights results/model/tinyissimoyolo_v8_192/weights/best.pt
+python run_export_tflite.py --img_size 192 --weights results/model/tinyissimoyolo_v8_192/weights/best.pt
 ```
 
 ---

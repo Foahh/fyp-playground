@@ -8,9 +8,9 @@ After Ultralytics produces the SavedModel, a second pass re-quantizes with confi
 input/output dtypes (default: uint8 input / int8 output) matching STM32 deployment requirements.
 
 Usage:
-    python export_tflite.py --img_size 192
-    python export_tflite.py --img_size 256 --quant-input uint8 --quant-output int8
-    python export_tflite.py --img_size 192 --calib-dir /path/to/calibration/images
+    python run_export_tflite.py --img_size 192
+    python run_export_tflite.py --img_size 256 --quant-input uint8 --quant-output int8
+    python run_export_tflite.py --img_size 192 --calib-dir /path/to/calibration/images
 """
 
 from __future__ import annotations
@@ -19,6 +19,7 @@ import argparse
 import os
 import random
 import shutil
+import sys
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -29,9 +30,13 @@ from PIL import Image
 from ultralytics import YOLO
 
 ROOT = Path(__file__).resolve().parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from scripts.coco_yolo_data import materialize_coco_data_yaml
+
 RESULTS_SRC = ROOT / "external" / "TinyissimoYOLO" / "results"
 MODELS = ROOT / "results" / "model"
-DATA_YAML = ROOT / "external" / "TinyissimoYOLO" / "ultralytics" / "cfg" / "datasets" / "coco.yaml"
 
 QUANT_DTYPES = {
     "int8": tf.int8,
@@ -174,9 +179,7 @@ def main():
     if not ckpt.exists():
         raise FileNotFoundError(f"No checkpoint at {ckpt}")
 
-    data_yaml = DATA_YAML.resolve()
-    if not data_yaml.is_file():
-        raise FileNotFoundError(f"Dataset yaml not found: {data_yaml}")
+    data_yaml = Path(materialize_coco_data_yaml())
 
     # --- Step 1: Ultralytics export (produces SavedModel + onnx2tf TFLite) ---
     print(f"Loading {ckpt} ...")
@@ -203,8 +206,8 @@ def main():
     calib_dir = args.calib_dir or _resolve_calib_dir(data_yaml)
     if calib_dir is None or not calib_dir.is_dir():
         raise FileNotFoundError(
-            f"No calibration images found. Supply --calib-dir or ensure COCO images "
-            f"exist at the path referenced by {data_yaml}"
+            "No calibration images found. Pass --calib-dir or install COCO under "
+            "./datasets/coco (symlink to ~/datasets per README)."
         )
 
     tag = f"{args.quant_input[0]}{args.quant_output[0]}"  # e.g. "ui" for uint8/int8

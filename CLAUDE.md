@@ -101,14 +101,14 @@ Results are saved to `external/TinyissimoYOLO/results/tinyissimoyolo_v8_<size>/`
 conda activate yolo-export  # or your custom env name
 
 # Export single model (reads from external/TinyissimoYOLO/results/)
-python export_tflite.py --img_size 192
+python run_export_tflite.py --img_size 192
 
 # Export with custom checkpoint
-python export_tflite.py --img_size 192 --weights external/TinyissimoYOLO/results/tinyissimoyolo_v8_192/weights/best.pt
+python run_export_tflite.py --img_size 192 --weights external/TinyissimoYOLO/results/tinyissimoyolo_v8_192/weights/best.pt
 
 # Export all variants
 for size in 192 256 288 320; do
-  python export_tflite.py --img_size $size
+  python run_export_tflite.py --img_size $size
 done
 ```
 
@@ -137,7 +137,7 @@ Results CSV: `results/benchmark/benchmark_results.csv`
 | Path | Purpose |
 |------|---------|
 | `train_coco_person.py` | Training entry point (wrapper around Ultralytics YOLO) |
-| `export_tflite.py` | TFLite export with INT8 quantization |
+| `run_export_tflite.py` | TFLite export with INT8 quantization |
 | `run_benchmark.py` | Benchmark entry point (thin shim to scripts/benchmark/__main__.py) |
 | `conda_setup_*.py` | Environment creation scripts |
 | `load_coco.py` | COCO dataset loader |

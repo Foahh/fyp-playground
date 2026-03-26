@@ -9,14 +9,17 @@ Conda env: `python3 conda_setup_train.py` (repo root); deps: `external/Tinyissim
 """
 
 import argparse
+import sys
 from pathlib import Path
 
-from ultralytics import YOLO
-
 ROOT = Path(__file__).resolve().parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from scripts.coco_yolo_data import materialize_coco_data_yaml
+from ultralytics import YOLO
 TINY = ROOT / "external" / "TinyissimoYOLO"
 MODEL_YAML = str(TINY / "ultralytics/cfg/models/tinyissimo/tinyissimo-v8.yaml")
-DATA_YAML = str(TINY / "ultralytics/cfg/datasets/coco.yaml")
 PROJECT = str(TINY / "results")
 
 EPOCHS = 1000
@@ -57,8 +60,9 @@ def main():
         print(f"Creating new model from {MODEL_YAML} ...")
         model = YOLO(MODEL_YAML)
 
+    data_yaml = materialize_coco_data_yaml()
     model.train(
-        data=DATA_YAML,
+        data=data_yaml,
         classes=[0],  # filter to person class only
         single_cls=True,  # single-class mode
         imgsz=args.img_size,
