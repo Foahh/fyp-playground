@@ -45,8 +45,7 @@ python project.py benchmark --filter st_yoloxn_d033_w025_192
 ### Workflow commands
 
 ```sh
-python project.py train --img_size 192
-python project.py export --img_size 192
+python project.py train --size 192
 python project.py quant --img_size 192
 ```
 
@@ -121,44 +120,33 @@ pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
 From the repository root, outputs are written to:
 
 ```text
-external/TinyissimoYOLO/results/
+results/model/
 ```
 
-Run training for different image sizes:
+Run training for different input sizes (training auto-exports SavedModel after completion):
 
 ```sh
-python project.py train --img_size 192
-python project.py train --img_size 256
-python project.py train --img_size 288
-python project.py train --img_size 320
+python project.py train --size 192
+python project.py train --size 256
+python project.py train --size 288
+python project.py train --size 320
+```
+
+Force export-only (skip training) from the latest checkpoint:
+
+```sh
+python project.py train --size 192 --export
+```
+
+SavedModel export uses:
+
+```text
+results/model/tinyissimoyolo_v8_<size>/weights/best.pt
 ```
 
 ---
 
-## Export TinyissimoYOLO to TFLite INT8
-
-### Export model
-
-```sh
-python project.py export --img_size 192
-python project.py export --img_size 256
-python project.py export --img_size 288
-python project.py export --img_size 320
-```
-
-By default, export reads checkpoints from:
-
-```text
-results/model/tinyissimoyolo_v8_<img_size>/weights/best.pt
-```
-
-To export a specific checkpoint:
-
-```sh
-python project.py export \
-  --img_size 192 \
-  --weights results/model/tinyissimoyolo_v8_192/weights/best.pt
-```
+## Quantize to TFLite INT8
 
 ### Quantize SavedModel to TFLite INT8
 

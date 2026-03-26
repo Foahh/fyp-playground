@@ -16,15 +16,14 @@ LOCAL_COMMANDS = {
     "conda-yolo": "scripts/conda_setup_yolo.py",
     "conda-benchmark": "scripts/conda_setup_benchmark.py",
     "train": "scripts/run_train_tinyissimo_coco_person.py",
-    "export": "scripts/run_export.py",
     "quant": "scripts/run_quantize.py",
 }
 
 
 def _normalize_passthrough(args: list[str]) -> list[str]:
     # Allow both styles:
-    #   python project.py export -- --img_size 192
-    #   python project.py export --img_size 192
+    #   python project.py train -- --size 192 --export
+    #   python project.py train --size 192 --export
     if args and args[0] == "--":
         return args[1:]
     return args
