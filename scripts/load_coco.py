@@ -16,13 +16,40 @@ PERSON_YOLO_DIR = DATASETS_DIR / "coco_2017_person"
 
 
 def download_coco():
-    urls = [ASSETS_URL + "/coco2017labels.zip"]
-    download(urls, dir=DEST.parent, exist_ok=True)
-    urls = [
-        "http://images.cocodataset.org/zips/train2017.zip",
-        "http://images.cocodataset.org/zips/val2017.zip",
-    ]
-    download(urls, dir=DEST / "images", threads=8)
+    # Skip downloads when extracted COCO data already exists.
+    ann_dir = DEST / "annotations"
+    train_img_dir = DEST / "images" / "train2017"
+    val_img_dir = DEST / "images" / "val2017"
+
+    has_annotations = (
+        (ann_dir / "instances_train2017.json").is_file()
+        and (ann_dir / "instances_val2017.json").is_file()
+    )
+    has_train_images = train_img_dir.is_dir() and any(train_img_dir.iterdir())
+    has_val_images = val_img_dir.is_dir() and any(val_img_dir.iterdir())
+
+    if has_annotations and has_train_images and has_val_images:
+        print(f"COCO data already present under {DEST}, skipping download.")
+        return
+
+    if not has_annotations:
+        urls = [ASSETS_URL + "/coco2017labels.zip"]
+        download(urls, dir=DEST.parent, exist_ok=True)
+    else:
+        print("COCO annotations already present, skipping labels archive download.")
+
+    image_urls: list[str] = []
+    if not has_train_images:
+        image_urls.append("http://images.cocodataset.org/zips/train2017.zip")
+    else:
+        print("COCO train2017 images already present, skipping train archive download.")
+    if not has_val_images:
+        image_urls.append("http://images.cocodataset.org/zips/val2017.zip")
+    else:
+        print("COCO val2017 images already present, skipping val archive download.")
+
+    if image_urls:
+        download(image_urls, dir=DEST / "images", threads=8)
 
 
 def _resolve_coco_root() -> Path:
