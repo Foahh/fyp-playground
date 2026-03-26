@@ -5,6 +5,7 @@ from __future__ import annotations
 import struct
 import sys
 import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -146,6 +147,9 @@ class PowerMeasureSession:
     """Reads INA228 protobuf serial for the whole benchmark run; logs to power-measure.csv."""
 
     _CSV_HEADER = "host_time_iso,timestamp_us,avg_mw,duration_us,is_inference\n"
+    _HANDSHAKE_REQUEST = b"PM_PING\n"
+    _HANDSHAKE_ACK_PREFIX = "PM_ACK"
+    _HANDSHAKE_TIMEOUT_S = 2.0
 
     def __init__(self) -> None:
         self._stop = threading.Event()
@@ -184,6 +188,18 @@ class PowerMeasureSession:
             self._ser = None
             return False
 
+        if not self._perform_handshake():
+            print(
+                "WARNING: Power measurement disabled - no ACK from power monitor. "
+                "Ensure the device is running firmware with PM_PING/PM_ACK handshake support."
+            )
+            try:
+                self._ser.close()
+            except Exception:
+                pass
+            self._ser = None
+            return False
+
         path = POWER_MEASURE_CSV_PATH
         write_header = not path.exists() or path.stat().st_size == 0
         self._csv_fd = open(path, "a", encoding="utf-8", newline="")
@@ -195,6 +211,32 @@ class PowerMeasureSession:
         self._thread.start()
 
         return True
+
+    def _perform_handshake(self) -> bool:
+        assert self._ser is not None
+        try:
+            self._ser.reset_input_buffer()
+            self._ser.write(self._HANDSHAKE_REQUEST)
+            self._ser.flush()
+        except Exception:
+            return False
+
+        deadline = time.monotonic() + self._HANDSHAKE_TIMEOUT_S
+        while time.monotonic() < deadline:
+            try:
+                line = self._ser.readline()
+            except Exception:
+                return False
+            if not line:
+                continue
+            text = line.decode("utf-8", errors="ignore").strip()
+            if not text:
+                continue
+            if text.startswith(self._HANDSHAKE_ACK_PREFIX):
+                print(f"Power monitor ACK: {text}")
+                self._ser.reset_input_buffer()
+                return True
+        return False
 
     def stop(self) -> None:
         self._stop.set()
