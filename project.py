@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -18,10 +17,7 @@ LOCAL_COMMANDS = {
     "conda-benchmark": "scripts/conda_setup_benchmark.py",
     "train": "scripts/run_train_tinyissimo_coco_person.py",
     "export": "scripts/run_export.py",
-}
-
-DOCKER_COMMANDS = {
-    "quant": ("quantize", "scripts/run_quantize.py"),
+    "quant": "scripts/run_quantize.py",
 }
 
 
@@ -44,26 +40,11 @@ def _run_local(script: str, passthrough: list[str]) -> int:
     return _run(cmd)
 
 
-def _run_docker(service: str, script: str, passthrough: list[str]) -> int:
-    cmd = [
-        "docker",
-        "compose",
-        "run",
-        "--rm",
-        "--user",
-        f"{os.getuid()}:{os.getgid()}",
-        service,
-        script,
-        *_normalize_passthrough(passthrough),
-    ]
-    return _run(cmd)
-
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="FYP playground command runner")
     parser.add_argument(
         "command",
-        choices=[*LOCAL_COMMANDS.keys(), *DOCKER_COMMANDS.keys()],
+        choices=list(LOCAL_COMMANDS.keys()),
         help="Workflow command to execute",
     )
     parser.add_argument("args", nargs=argparse.REMAINDER, help="Arguments passed through to the target script")
@@ -72,11 +53,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    if args.command in LOCAL_COMMANDS:
-        return _run_local(LOCAL_COMMANDS[args.command], args.args)
-
-    service, script = DOCKER_COMMANDS[args.command]
-    return _run_docker(service, script, args.args)
+    return _run_local(LOCAL_COMMANDS[args.command], args.args)
 
 
 if __name__ == "__main__":

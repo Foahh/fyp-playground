@@ -3,7 +3,7 @@ Train TinyissimoYOLO v8 on COCO Person (single class).
 
 Run from the parent repository root (paths point into external/TinyissimoYOLO/):
     python scripts/run_train_tinyissimo_coco_person.py --img_size 192
-    python scripts/run_train_tinyissimo_coco_person.py --img_size 192 --resume
+    python scripts/run_train_tinyissimo_coco_person.py --img_size 192 --no-resume
 
 Dependencies are provided by the training Docker image (`docker/train.Dockerfile`).
 """
@@ -37,7 +37,9 @@ def parse_args():
         help="Input resolution (192, 256, 288, or 320)",
     )
     p.add_argument(
-        "--resume", action="store_true", help="Resume training from last checkpoint"
+        "--no-resume",
+        action="store_true",
+        help="Start a fresh run instead of resuming from last checkpoint",
     )
     p.add_argument("--optimizer", type=str, default="SGD")
     return p.parse_args()
@@ -50,8 +52,9 @@ def main():
 
     run_name = f"tinyissimoyolo_v8_{args.img_size}"
     weights_dir = Path(PROJECT) / run_name / "weights"
+    resume = not args.no_resume
 
-    if args.resume:
+    if resume:
         last_pt = weights_dir / "last.pt"
         if not last_pt.exists():
             raise FileNotFoundError(f"No checkpoint to resume from at {last_pt}")
@@ -74,7 +77,7 @@ def main():
         name=run_name,
         exist_ok=True,
         patience=100,
-        resume=args.resume,
+        resume=resume,
     )
     print(f"Done. Weights under {weights_dir}")
 

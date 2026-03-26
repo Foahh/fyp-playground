@@ -1,9 +1,9 @@
 """
-Export TinyissimoYOLO checkpoints to TensorFlow SavedModel only.
+Export TinyissimoYOLO checkpoints to TensorFlow SavedModel.
 
-This script performs stage-1 of a split pipeline:
+Pipeline:
   1) PyTorch/Ultralytics export: .pt -> SavedModel
-  2) (separate script) TensorFlow quantization: SavedModel -> TFLite
+  2) (separate script) Quantization: SavedModel -> TFLite
 
 Usage:
     python scripts/run_export.py --img_size 192

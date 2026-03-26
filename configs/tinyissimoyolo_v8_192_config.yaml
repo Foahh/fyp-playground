@@ -1,10 +1,11 @@
 general:
   num_threads_tflite: 8
 
+operation_mode: evaluation
+
 model:
   model_type: yolov8n
-
-operation_mode: evaluation
+  model_path: results/model/tinyissimoyolo_v8_192/quantized/tinyissimoyolo_v8_192_quant_pc_ui_od_coco-person.tflite
 
 dataset:
   dataset_name: coco

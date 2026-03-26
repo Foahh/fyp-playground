@@ -27,8 +27,7 @@ Before running any project components, initialize the Git submodules:
 git submodule update --init --recursive
 ```
 
-Use **Conda** as the default environment for training/export/benchmark workflows.
-Use **Docker** only for TensorFlow-based quantization (Since at this time TensorFlow don't support 50 series yet).
+Use **Conda** as the default environment for training/export/quantization/benchmark workflows.
 
 ---
 
@@ -48,7 +47,7 @@ python project.py benchmark --filter st_yoloxn_d033_w025_192
 ```sh
 python project.py train --img_size 192
 python project.py export --img_size 192
-python project.py quantize --img_size 192
+python project.py quant --img_size 192
 ```
 
 ---
@@ -138,12 +137,6 @@ python project.py train --img_size 320
 
 ## Export TinyissimoYOLO to TFLite INT8
 
-### Quantization Docker setup (TensorFlow only)
-
-```sh
-docker compose build quantize
-```
-
 ### Export model
 
 ```sh
@@ -170,8 +163,19 @@ python project.py export \
 ### Quantize SavedModel to TFLite INT8
 
 ```sh
-python project.py quantize \
+python project.py quant \
   --img_size 192
+```
+
+`project.py quant` now runs quantization through `stm32ai-modelzoo-services` and then
+evaluates the generated TFLite model by default.
+
+Useful options:
+
+```sh
+python project.py quant --img_size 192 --no-eval
+python project.py quant --img_size 192 --saved-model /path/to/saved_model
+python project.py quant --img_size 192 --out /path/to/output.tflite
 ```
 
 ---
