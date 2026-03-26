@@ -6,3 +6,4 @@ results/*
 *.npy
 ai_runner.log
 yolo26n.pt
+*.log

@@ -720,67 +720,6 @@ MODEL_REGISTRY: list[dict] = [
         "fmt": "Int8",
         "resolution": 480,
     },
-    # ── st_yoloxn (custom dataset / ST-Person, Int8) ──
-    {
-        "config": _ZOO / "st_yoloxn/ST_pretrainedmodel_custom_dataset/st_person/st_yoloxn_d033_w025_416/st_yoloxn_d033_w025_416_config.yaml",
-        "model": _ZOO / "st_yoloxn/ST_pretrainedmodel_custom_dataset/st_person/st_yoloxn_d033_w025_416/st_yoloxn_d033_w025_416_int8.tflite",
-        "family": "st_yoloxn",
-        "readme": _MD_st_yoloxn,
-        "variant": "st_yoloxn_d033_w025_416_st",
-        "hyperparameters": "d033_w025",
-        "dataset": "ST-Person",
-        "fmt": "Int8",
-        "resolution": 416,
-        "output_data_type": "float32",
-    },
-    {
-        "config": _ZOO / "st_yoloxn/ST_pretrainedmodel_custom_dataset/st_person/st_yoloxn_d067_w025_416/st_yoloxn_d067_w025_416_config.yaml",
-        "model": _ZOO / "st_yoloxn/ST_pretrainedmodel_custom_dataset/st_person/st_yoloxn_d067_w025_416/st_yoloxn_d067_w025_416_int8.tflite",
-        "family": "st_yoloxn",
-        "readme": _MD_st_yoloxn,
-        "variant": "st_yoloxn_d067_w025_416_st",
-        "hyperparameters": "d067_w025",
-        "dataset": "ST-Person",
-        "fmt": "Int8",
-        "resolution": 416,
-        "output_data_type": "float32",
-    },
-    {
-        "config": _ZOO / "st_yoloxn/ST_pretrainedmodel_custom_dataset/st_person/st_yoloxn_d100_w025_416/st_yoloxn_d100_w025_416_config.yaml",
-        "model": _ZOO / "st_yoloxn/ST_pretrainedmodel_custom_dataset/st_person/st_yoloxn_d100_w025_416/st_yoloxn_d100_w025_416_int8.tflite",
-        "family": "st_yoloxn",
-        "readme": _MD_st_yoloxn,
-        "variant": "st_yoloxn_d100_w025_416_st",
-        "hyperparameters": "d100_w025",
-        "dataset": "ST-Person",
-        "fmt": "Int8",
-        "resolution": 416,
-        "output_data_type": "float32",
-    },
-    {
-        "config": _ZOO / "st_yoloxn/ST_pretrainedmodel_custom_dataset/st_person/st_yoloxn_d100_w025_480/st_yoloxn_d100_w025_480_config.yaml",
-        "model": _ZOO / "st_yoloxn/ST_pretrainedmodel_custom_dataset/st_person/st_yoloxn_d100_w025_480/st_yoloxn_d100_w025_480_int8.tflite",
-        "family": "st_yoloxn",
-        "readme": _MD_st_yoloxn,
-        "variant": "st_yoloxn_d100_w025_480_st",
-        "hyperparameters": "d100_w025",
-        "dataset": "ST-Person",
-        "fmt": "Int8",
-        "resolution": 480,
-        "output_data_type": "float32",
-    },
-    # ── st_yoloxn (custom dataset / ST-Person, W4A8) ──
-    {
-        "config": _ZOO / "st_yoloxn/ST_pretrainedmodel_custom_dataset/st_person/st_yoloxn_d100_w025_480/st_yoloxn_d100_w025_480_config.yaml",
-        "model": _ZOO / "st_yoloxn/ST_pretrainedmodel_custom_dataset/st_person/st_yoloxn_d100_w025_480/st_yoloxn_d100_w025_480_qdq_w4_78.84%_w8_21.16%_a8_100%_map_47.33.onnx",
-        "family": "st_yoloxn",
-        "readme": _MD_st_yoloxn,
-        "variant": "st_yoloxn_d100_w025_480_st",
-        "hyperparameters": "d100_w025",
-        "dataset": "ST-Person",
-        "fmt": "W4A8",
-        "resolution": 480,
-    },
     # ── yolov8n (all share yolov8n_256 base config, model_path overridden) ──
     {
         "config": _ZOO / "yolov8n/yolov8n_256_config.yaml",
@@ -844,20 +783,20 @@ MODEL_REGISTRY: list[dict] = [
         "output_data_type": "float32",
     },
     # ── TinyissimoYOLO v8 ──
-    {
-        "config": _CONFIGS / "tinyissimoyolo_v8_192_config.yaml",
-        "model": Path("results")
-        / "model"
-        / "tinyissimoyolo_v8_192"
-        / "quantized"
-        / "tinyissimoyolo_v8_192_quant_pc_ui_od_coco-person.tflite",
-        "family": "tinyissimoyolo_v8",
-        "variant": "tinyissimoyolo_v8_192",
-        "hyperparameters": "",
-        "dataset": "COCO-Person",
-        "fmt": "Int8",
-        "resolution": 192,
-    },
+    # {
+    #     "config": _CONFIGS / "tinyissimoyolo_v8_192_config.yaml",
+    #     "model": Path("results")
+    #     / "model"
+    #     / "tinyissimoyolo_v8_192"
+    #     / "quantized"
+    #     / "tinyissimoyolo_v8_192_quant_pc_ui_od_coco-person.tflite",
+    #     "family": "tinyissimoyolo_v8",
+    #     "variant": "tinyissimoyolo_v8_192",
+    #     "hyperparameters": "",
+    #     "dataset": "COCO-Person",
+    #     "fmt": "Int8",
+    #     "resolution": 192,
+    # },
     # ── yolo26 ──
     {
         "config": _CONFIGS / "yolo26_config.yaml",
