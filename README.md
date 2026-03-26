@@ -254,3 +254,9 @@ Run the full benchmark suite for all variants:
 ```sh
 python scripts/run_benchmark.py
 ```
+
+Run nominal first, pause 5 seconds, then overdrive before going to bed:
+
+```sh
+python scripts/run_benchmark_nominal_overdrive.py
+```
