@@ -6,9 +6,9 @@ This script performs stage-1 of a split pipeline:
   2) (separate script) TensorFlow quantization: SavedModel -> TFLite
 
 Usage:
-    python run_export.py --img_size 192
-    python run_export.py --img_size 256 --skip-sync
-    python run_export.py --img_size 320 --weights /path/to/best.pt
+    python scripts/run_export.py --img_size 192
+    python scripts/run_export.py --img_size 256 --skip-sync
+    python scripts/run_export.py --img_size 320 --weights /path/to/best.pt
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ import sys
 from contextlib import contextmanager
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 

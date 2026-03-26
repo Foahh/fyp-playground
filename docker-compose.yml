@@ -9,7 +9,7 @@ services:
       - .:/workspace
     tty: true
     stdin_open: true
-    command: ["train_coco_person.py", "--help"]
+    command: ["scripts/train_coco_person.py", "--help"]
 
   export:
     build:
@@ -21,5 +21,18 @@ services:
       - .:/workspace
     tty: true
     stdin_open: true
-    command: ["run_export.py", "--help"]
+    command: ["scripts/run_export.py", "--help"]
+
+  quantize:
+    build:
+      context: .
+      dockerfile: docker/quantize.Dockerfile
+    image: fyp-playground-quantize:latest
+    working_dir: /workspace
+    volumes:
+      - .:/workspace
+    tty: true
+    stdin_open: true
+    gpus: all
+    command: ["scripts/run_quantize.py", "--help"]
 

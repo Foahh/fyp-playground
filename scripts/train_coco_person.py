@@ -2,8 +2,8 @@
 Train TinyissimoYOLO v8 on COCO Person (single class).
 
 Run from the parent repository root (paths point into external/TinyissimoYOLO/):
-    python train_coco_person.py --img_size 192
-    python train_coco_person.py --img_size 192 --resume
+    python scripts/train_coco_person.py --img_size 192
+    python scripts/train_coco_person.py --img_size 192 --resume
 
 Dependencies are provided by the training Docker image (`docker/train.Dockerfile`).
 """
@@ -12,7 +12,7 @@ import argparse
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 

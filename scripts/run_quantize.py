@@ -6,9 +6,10 @@ This script performs stage-2 of a split pipeline:
   2) TensorFlow quantization: SavedModel -> TFLite
 
 Usage:
-    python run_quantize.py --img_size 192 --saved-model-dir results/model/tinyissimoyolo_v8_192/weights/best_saved_model
-    python run_quantize.py --img_size 256 --saved-model-dir ... --quant-input uint8 --quant-output int8
-    python run_quantize.py --img_size 192 --saved-model-dir ... --calib-dir /path/to/calibration/images
+    python scripts/run_quantize.py --img_size 192
+    python scripts/run_quantize.py --img_size 256 --quant-input uint8 --quant-output int8
+    python scripts/run_quantize.py --img_size 192 --calib-dir /path/to/calibration/images
+    python scripts/run_quantize.py --img_size 192 --saved-model-dir /custom/path/best_saved_model
 """
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ import tensorflow as tf
 import yaml
 from PIL import Image
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
@@ -35,6 +36,7 @@ QUANT_DTYPES = {
     "float": None,
 }
 NUM_CALIB_IMAGES = 500
+MODELS = ROOT / "results" / "model"
 
 
 def _resolve_calib_dir(data_yaml: Path) -> Path | None:
@@ -93,6 +95,40 @@ def _quantize(
     return output_path
 
 
+def _resolve_saved_model_dir(img_size: int, override: Path | None) -> Path:
+    if override is not None:
+        saved_model_dir = override.resolve()
+        if not saved_model_dir.is_dir():
+            raise FileNotFoundError(f"No SavedModel directory at {saved_model_dir}")
+        return saved_model_dir
+
+    weights_dir = MODELS / f"tinyissimoyolo_v8_{img_size}" / "weights"
+    if not weights_dir.is_dir():
+        raise FileNotFoundError(
+            f"No weights directory at {weights_dir}. Run export first: "
+            f"python project.py export --img_size {img_size}"
+        )
+
+    default_dir = weights_dir / "best_saved_model"
+    if default_dir.is_dir():
+        return default_dir
+
+    candidates = sorted(p for p in weights_dir.glob("*_saved_model") if p.is_dir())
+    if len(candidates) == 1:
+        return candidates[0]
+    if len(candidates) > 1:
+        joined = ", ".join(str(p.name) for p in candidates)
+        raise FileNotFoundError(
+            "Multiple SavedModel directories found under "
+            f"{weights_dir}: {joined}. Pass --saved-model-dir explicitly."
+        )
+
+    raise FileNotFoundError(
+        f"No SavedModel found under {weights_dir}. Run export first: "
+        f"python project.py export --img_size {img_size}"
+    )
+
+
 def parse_args():
     p = argparse.ArgumentParser(description="Quantize SavedModel to TFLite")
     p.add_argument(
@@ -105,8 +141,11 @@ def parse_args():
     p.add_argument(
         "--saved-model-dir",
         type=Path,
-        required=True,
-        help="Path to SavedModel directory (e.g. .../best_saved_model)",
+        default=None,
+        help=(
+            "Optional SavedModel path. If omitted, auto-detected from "
+            "results/model/tinyissimoyolo_v8_<img_size>/weights/"
+        ),
     )
     p.add_argument(
         "--quant-input",
@@ -137,9 +176,7 @@ def parse_args():
 
 def main():
     args = parse_args()
-    saved_model_dir = args.saved_model_dir.resolve()
-    if not saved_model_dir.is_dir():
-        raise FileNotFoundError(f"No SavedModel directory at {saved_model_dir}")
+    saved_model_dir = _resolve_saved_model_dir(args.img_size, args.saved_model_dir)
 
     data_yaml = Path(materialize_coco_data_yaml())
     calib_dir = args.calib_dir or _resolve_calib_dir(data_yaml)
