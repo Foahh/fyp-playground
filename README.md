@@ -214,13 +214,15 @@ ST_BENCHMARK_ENV=my-benchmark-env python3 conda_setup_benchmark.py
 - ESPS3-C3 connected with INA228
 - Arduino IDE available to flash `external/fyp-power-measure/fyp-power-measure.ino`
 
-### Optional power measurement (`avg_power_mW`)
+### Optional power measurement
 
-To enable inference-window `avg_power_mW` logging (INA228 + ESP32-C6), follow:
+To enable inference-window power logging (INA228 + ESP32-C6), follow:
 
 - [external/fyp-power-measure/README.md](external/fyp-power-measure/README.md)
 
 This guide covers wiring, Arduino sketch flashing, required ST Edge AI patching, CLI flags (`--power-serial`, `--power-baud`, `--validation-count`), and troubleshooting.
+
+In `results/benchmark/benchmark_results.csv`, inference-window power is stored in `avg_power_inf_mW` (with related fields `avg_power_idle_mW`, `avg_power_delta_mW`, `avg_power_inf_ms`, and `avg_energy_inf_mJ`).
 
 When power serial is enabled, the benchmark also appends a continuous log to:
 
