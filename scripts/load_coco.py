@@ -24,7 +24,13 @@ COCO_DOWNLOADS: list[tuple[str, Path]] = [
 ]
 
 
-def _resumable_download(url: str, dest_dir: Path, use_wget: bool = False) -> Path:
+def _resumable_download(
+    url: str,
+    dest_dir: Path,
+    use_wget: bool = False,
+    ca_certificate: str | None = None,
+    check_certificate: bool = True,
+) -> Path:
     """Download a file with resume support. Uses aria2c by default, wget as fallback."""
     dest_dir.mkdir(parents=True, exist_ok=True)
     filename = url.rsplit("/", 1)[-1]
@@ -37,6 +43,10 @@ def _resumable_download(url: str, dest_dir: Path, use_wget: bool = False) -> Pat
     if use_wget:
         print(f"  Downloading (wget) {url} -> {dest_file}")
         cmd = ["wget", "-c", "--tries=5", "--timeout=60", "-O", str(dest_file), url]
+        if ca_certificate:
+            cmd[1:1] = [f"--ca-certificate={ca_certificate}"]
+        if not check_certificate:
+            cmd[1:1] = ["--no-check-certificate"]
     else:
         print(f"  Downloading (aria2c) {url} -> {dest_file}")
         cmd = [
@@ -51,6 +61,10 @@ def _resumable_download(url: str, dest_dir: Path, use_wget: bool = False) -> Pat
             "--out", filename,
             url,
         ]
+        if ca_certificate:
+            cmd[1:1] = [f"--ca-certificate={ca_certificate}"]
+        if not check_certificate:
+            cmd[1:1] = ["--check-certificate=false"]
     subprocess.run(cmd, check=True)
 
     if not dest_file.exists() or not zipfile.is_zipfile(dest_file):
@@ -77,7 +91,11 @@ def _extract_zip(zip_path: Path, extract_to: Path) -> None:
             print(f"    Skipped {existing}/{len(members)} already-extracted entries")
 
 
-def download_coco(use_wget: bool = False):
+def download_coco(
+    use_wget: bool = False,
+    ca_certificate: str | None = None,
+    check_certificate: bool = True,
+):
     ann_dir = DEST / "annotations"
     train_img_dir = DEST / "images" / "train2017"
     val_img_dir = DEST / "images" / "val2017"
@@ -106,7 +124,12 @@ def download_coco(use_wget: bool = False):
             print(f"COCO val2017 images already present, skipping {name}.")
             continue
 
-        zip_path = _resumable_download(url, dest_dir, use_wget=use_wget)
+        zip_path = _resumable_download(
+            url, dest_dir,
+            use_wget=use_wget,
+            ca_certificate=ca_certificate,
+            check_certificate=check_certificate,
+        )
         _extract_zip(zip_path, dest_dir)
 
 
@@ -299,9 +322,21 @@ def main():
         "--wget", action="store_true",
         help="Use wget instead of aria2c for downloads (single-connection)",
     )
+    parser.add_argument(
+        "--ca-certificate", metavar="FILE",
+        help="Path to CA certificate bundle (forwarded to aria2c/wget)",
+    )
+    parser.add_argument(
+        "--no-check-certificate", action="store_true",
+        help="Disable server certificate verification (forwarded to aria2c/wget)",
+    )
     args = parser.parse_args()
 
-    download_coco(use_wget=args.wget)
+    download_coco(
+        use_wget=args.wget,
+        ca_certificate=args.ca_certificate,
+        check_certificate=not args.no_check_certificate,
+    )
     generate_person_yolo_dataset()
     generate_person_annotations()
 
