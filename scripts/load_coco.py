@@ -24,8 +24,8 @@ COCO_DOWNLOADS: list[tuple[str, Path]] = [
 ]
 
 
-def _resumable_download(url: str, dest_dir: Path) -> Path:
-    """Download a file with aria2c for resumable, multi-connection downloads."""
+def _resumable_download(url: str, dest_dir: Path, use_wget: bool = False) -> Path:
+    """Download a file with resume support. Uses aria2c by default, wget as fallback."""
     dest_dir.mkdir(parents=True, exist_ok=True)
     filename = url.rsplit("/", 1)[-1]
     dest_file = dest_dir / filename
@@ -34,19 +34,23 @@ def _resumable_download(url: str, dest_dir: Path) -> Path:
         print(f"  Already downloaded and valid: {dest_file}")
         return dest_file
 
-    print(f"  Downloading (resumable, multi-connection) {url} -> {dest_file}")
-    cmd = [
-        "aria2c",
-        "--continue=true",
-        "--max-connection-per-server=8",
-        "--split=8",
-        "--min-split-size=10M",
-        "--max-tries=5",
-        "--timeout=60",
-        "--dir", str(dest_dir),
-        "--out", filename,
-        url,
-    ]
+    if use_wget:
+        print(f"  Downloading (wget) {url} -> {dest_file}")
+        cmd = ["wget", "-c", "--tries=5", "--timeout=60", "-O", str(dest_file), url]
+    else:
+        print(f"  Downloading (aria2c) {url} -> {dest_file}")
+        cmd = [
+            "aria2c",
+            "--continue=true",
+            "--max-connection-per-server=8",
+            "--split=8",
+            "--min-split-size=10M",
+            "--max-tries=5",
+            "--timeout=60",
+            "--dir", str(dest_dir),
+            "--out", filename,
+            url,
+        ]
     subprocess.run(cmd, check=True)
 
     if not dest_file.exists() or not zipfile.is_zipfile(dest_file):
@@ -73,7 +77,7 @@ def _extract_zip(zip_path: Path, extract_to: Path) -> None:
             print(f"    Skipped {existing}/{len(members)} already-extracted entries")
 
 
-def download_coco():
+def download_coco(use_wget: bool = False):
     ann_dir = DEST / "annotations"
     train_img_dir = DEST / "images" / "train2017"
     val_img_dir = DEST / "images" / "val2017"
@@ -102,7 +106,7 @@ def download_coco():
             print(f"COCO val2017 images already present, skipping {name}.")
             continue
 
-        zip_path = _resumable_download(url, dest_dir)
+        zip_path = _resumable_download(url, dest_dir, use_wget=use_wget)
         _extract_zip(zip_path, dest_dir)
 
 
@@ -288,7 +292,16 @@ def generate_person_yolo_dataset() -> None:
 
 
 def main():
-    download_coco()
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Download and prepare COCO datasets")
+    parser.add_argument(
+        "--wget", action="store_true",
+        help="Use wget instead of aria2c for downloads (single-connection)",
+    )
+    args = parser.parse_args()
+
+    download_coco(use_wget=args.wget)
     generate_person_yolo_dataset()
     generate_person_annotations()
 
