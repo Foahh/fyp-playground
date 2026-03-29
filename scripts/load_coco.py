@@ -1,11 +1,11 @@
 import json
 import os
+import subprocess
+import zipfile
 from pathlib import Path
 
 import tensorflow as tf
 from pycocotools.coco import COCO
-from ultralytics.utils import ASSETS_URL
-from ultralytics.utils.downloads import download
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DATASETS_DIR = Path(
@@ -14,9 +14,66 @@ DATASETS_DIR = Path(
 DEST = DATASETS_DIR / "coco"
 PERSON_YOLO_DIR = DATASETS_DIR / "coco_2017_person"
 
+COCO_DOWNLOADS: list[tuple[str, Path]] = [
+    (
+        "https://github.com/ultralytics/assets/releases/download/v0.0.0/coco2017labels.zip",
+        DEST.parent,
+    ),
+    ("http://images.cocodataset.org/zips/train2017.zip", DEST / "images"),
+    ("http://images.cocodataset.org/zips/val2017.zip", DEST / "images"),
+]
+
+
+def _resumable_download(url: str, dest_dir: Path) -> Path:
+    """Download a file with aria2c for resumable, multi-connection downloads."""
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    filename = url.rsplit("/", 1)[-1]
+    dest_file = dest_dir / filename
+
+    if dest_file.exists() and zipfile.is_zipfile(dest_file):
+        print(f"  Already downloaded and valid: {dest_file}")
+        return dest_file
+
+    print(f"  Downloading (resumable, multi-connection) {url} -> {dest_file}")
+    cmd = [
+        "aria2c",
+        "--continue=true",
+        "--max-connection-per-server=8",
+        "--split=8",
+        "--min-split-size=10M",
+        "--max-tries=5",
+        "--timeout=60",
+        "--dir", str(dest_dir),
+        "--out", filename,
+        url,
+    ]
+    subprocess.run(cmd, check=True)
+
+    if not dest_file.exists() or not zipfile.is_zipfile(dest_file):
+        raise RuntimeError(
+            f"Download appears incomplete or corrupt: {dest_file}. "
+            "Delete it and re-run to start fresh, or re-run to resume."
+        )
+    return dest_file
+
+
+def _extract_zip(zip_path: Path, extract_to: Path) -> None:
+    """Extract a zip, skipping files that already exist on disk."""
+    print(f"  Extracting {zip_path.name} -> {extract_to}")
+    with zipfile.ZipFile(zip_path) as zf:
+        members = zf.namelist()
+        existing = 0
+        for member in members:
+            target = extract_to / member
+            if target.exists():
+                existing += 1
+                continue
+            zf.extract(member, extract_to)
+        if existing:
+            print(f"    Skipped {existing}/{len(members)} already-extracted entries")
+
 
 def download_coco():
-    # Skip downloads when extracted COCO data already exists.
     ann_dir = DEST / "annotations"
     train_img_dir = DEST / "images" / "train2017"
     val_img_dir = DEST / "images" / "val2017"
@@ -32,24 +89,21 @@ def download_coco():
         print(f"COCO data already present under {DEST}, skipping download.")
         return
 
-    if not has_annotations:
-        urls = [ASSETS_URL + "/coco2017labels.zip"]
-        download(urls, dir=DEST.parent, exist_ok=True)
-    else:
-        print("COCO annotations already present, skipping labels archive download.")
+    for url, dest_dir in COCO_DOWNLOADS:
+        name = url.rsplit("/", 1)[-1]
 
-    image_urls: list[str] = []
-    if not has_train_images:
-        image_urls.append("http://images.cocodataset.org/zips/train2017.zip")
-    else:
-        print("COCO train2017 images already present, skipping train archive download.")
-    if not has_val_images:
-        image_urls.append("http://images.cocodataset.org/zips/val2017.zip")
-    else:
-        print("COCO val2017 images already present, skipping val archive download.")
+        if name == "coco2017labels.zip" and has_annotations:
+            print(f"COCO annotations already present, skipping {name}.")
+            continue
+        if name == "train2017.zip" and has_train_images:
+            print(f"COCO train2017 images already present, skipping {name}.")
+            continue
+        if name == "val2017.zip" and has_val_images:
+            print(f"COCO val2017 images already present, skipping {name}.")
+            continue
 
-    if image_urls:
-        download(image_urls, dir=DEST / "images", threads=8)
+        zip_path = _resumable_download(url, dest_dir)
+        _extract_zip(zip_path, dest_dir)
 
 
 def _resolve_coco_root() -> Path:
