@@ -3,6 +3,8 @@ Train TinyissimoYOLO v8 on COCO Person (single class).
 
 Run from the parent repository root (outputs under results/model/):
     python scripts/run_train_tinyissimo_coco_person.py --size 192
+    python scripts/run_train_tinyissimo_coco_person.py --size 192 --profile paper
+    python scripts/run_train_tinyissimo_coco_person.py --size 192 --profile powerful
     python scripts/run_train_tinyissimo_coco_person.py --size 192 --no-resume
     python scripts/run_train_tinyissimo_coco_person.py --size 192 --export
 
@@ -28,8 +30,32 @@ TINY = ROOT / "external" / "TinyissimoYOLO"
 MODEL_YAML = str(TINY / "ultralytics/cfg/models/tinyissimo/tinyissimo-v8.yaml")
 PROJECT = str(ROOT / "results" / "model")
 
-EPOCHS = 1000
-BATCH = -1  # -1 = AutoBatch
+def run_name_for(size: int, profile: str) -> str:
+    base = f"tinyissimoyolo_v8_{size}"
+    if profile == "paper":
+        return base
+    return f"{base}_{profile}"
+
+
+def train_profile_kwargs(profile: str) -> dict:
+    """Hyperparameters and infra for model.train(); profile-specific only."""
+    if profile == "paper":
+        return {
+            "batch": 64,
+            "lr0": 0.001,
+            "warmup_epochs": 3.0,
+            "warmup_bias_lr": 0.01,
+        }
+    if profile == "powerful":
+        return {
+            "batch": 256,
+            "lr0": 0.004,
+            "warmup_epochs": 5.0,
+            "warmup_bias_lr": 0.04,
+            "workers": 8,
+            "cache": "ram",
+        }
+    raise ValueError(f"Unknown profile: {profile!r}")
 
 
 @contextmanager
@@ -42,8 +68,10 @@ def working_directory(path: Path):
         os.chdir(prev)
 
 
-def export_saved_model(size: int, weights: Path | None = None) -> Path:
-    run_name = f"tinyissimoyolo_v8_{size}"
+def export_saved_model(
+    size: int, weights: Path | None = None, profile: str = "paper"
+) -> Path:
+    run_name = run_name_for(size, profile)
     weights_dir = Path(PROJECT) / run_name / "weights"
     data_yaml = Path(materialize_coco_data_yaml())
     ckpt = (weights or (weights_dir / "best.pt")).resolve()
@@ -89,6 +117,20 @@ def parse_args():
         action="store_true",
         help="Export SavedModel only (skip training); useful to force export from latest checkpoint",
     )
+    p.add_argument(
+        "--profile",
+        choices=("paper", "powerful"),
+        default="paper",
+        help=(
+            "Training preset: TinyissimoYOLO paper (batch 64, paper-aligned LR/schedule) or "
+            "powerful (batch 256, linearly scaled LR, workers=8, cache=ram)"
+        ),
+    )
+    p.add_argument(
+        "--device",
+        default=None,
+        help="Ultralytics device (e.g. 0, 0,1 for multi-GPU, cpu); default is auto",
+    )
     return p.parse_args()
 
 
@@ -97,12 +139,12 @@ def main():
     if not TINY.is_dir():
         raise FileNotFoundError(f"Expected TinyissimoYOLO at {TINY}")
 
-    run_name = f"tinyissimoyolo_v8_{args.size}"
+    run_name = run_name_for(args.size, args.profile)
     weights_dir = Path(PROJECT) / run_name / "weights"
     resume = not args.no_resume
 
     if args.export:
-        saved_model_dir = export_saved_model(size=args.size)
+        saved_model_dir = export_saved_model(size=args.size, profile=args.profile)
         print(f"Done. Exported SavedModel at {saved_model_dir}")
         return
 
@@ -124,24 +166,44 @@ def main():
         data_cfg = yaml.safe_load(f)
     print(f"Using dataset YAML: {data_yaml}")
     print(f"Dataset root: {data_cfg.get('path')}")
+    print(f"Training profile: {args.profile}")
 
-    model.train(
-        data=data_yaml,
-        classes=[0],  # filter to person class only
-        single_cls=True,  # single-class mode
-        imgsz=args.size,
-        epochs=EPOCHS,
-        batch=BATCH,
-        optimizer=args.optimizer,
-        project=PROJECT,
-        name=run_name,
-        exist_ok=True,
-        patience=100,
-        resume=resume,
-    )
+    train_kw: dict = {
+        "data": data_yaml,
+        "classes": [0],
+        "single_cls": True,
+        "imgsz": args.size,
+        "epochs": 1000,
+        "optimizer": "SGD",
+        "lrf": 0.01,
+        "momentum": 0.937,
+        "cos_lr": True,
+        "warmup_momentum": 0.8,
+        "weight_decay": 0.0005,
+        "amp": True,
+        "hsv_h": 0.015,
+        "hsv_s": 0.7,
+        "hsv_v": 0.4,
+        "fliplr": 0.5,
+        "translate": 0.1,
+        "scale": 0.5,
+        "mosaic": 1.0,
+        "deterministic": False,
+        "project": PROJECT,
+        "name": run_name,
+        "exist_ok": True,
+        "patience": 0,
+        "resume": resume,
+        **train_profile_kwargs(args.profile),
+    }
+    if args.device:
+        train_kw["device"] = args.device
+
+    model.train(**train_kw)
+
     print(f"Training done. Weights under {weights_dir}")
 
-    saved_model_dir = export_saved_model(size=args.size)
+    saved_model_dir = export_saved_model(size=args.size, profile=args.profile)
     print(f"Done. Exported SavedModel at {saved_model_dir}")
 
 
