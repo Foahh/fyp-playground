@@ -2,9 +2,17 @@
 Train TinyissimoYOLO v8 on COCO Person (single class).
 
 Run from the parent repository root (outputs under results/model/):
-    python scripts/run_train_tinyissimo_coco_person.py --size 192
-    python scripts/run_train_tinyissimo_coco_person.py --size 192 --no-resume
-    python scripts/run_train_tinyissimo_coco_person.py --size 192 --export
+    python scripts/run_train_tinyissimo_coco_person.py --size 256
+    python scripts/run_train_tinyissimo_coco_person.py --size 256 --no-resume
+    python scripts/run_train_tinyissimo_coco_person.py --size 256 --export
+
+    # Single GPU, maximise throughput:
+    python scripts/run_train_tinyissimo_coco_person.py --size 256 \
+        --device 0 --batch 512 --workers 16 --cache ram
+
+    # Dual GPU (DDP), maximise throughput:
+    python scripts/run_train_tinyissimo_coco_person.py --size 256 \
+        --device 0,1 --batch 1024 --workers 12 --cache ram
 
 Dependencies are provided by the training Docker image (`docker/train.Dockerfile`).
 """
@@ -29,7 +37,6 @@ MODEL_YAML = str(TINY / "ultralytics/cfg/models/tinyissimo/tinyissimo-v8.yaml")
 PROJECT = str(ROOT / "results" / "model")
 
 EPOCHS = 1000
-BATCH = -1  # -1 = AutoBatch
 
 
 @contextmanager
@@ -89,6 +96,32 @@ def parse_args():
         action="store_true",
         help="Export SavedModel only (skip training); useful to force export from latest checkpoint",
     )
+    p.add_argument(
+        "--batch",
+        type=int,
+        default=-1,
+        help="Batch size per training step. Use -1 for AutoBatch (single-GPU only). "
+        "Must be set explicitly for multi-GPU (e.g. --batch 1024 for two GPUs).",
+    )
+    p.add_argument(
+        "--workers",
+        type=int,
+        default=8,
+        help="Dataloader worker threads per GPU rank (default: 8).",
+    )
+    p.add_argument(
+        "--cache",
+        type=str,
+        default="False",
+        choices=["False", "ram", "disk"],
+        help="Dataset caching strategy: False (no cache), ram, or disk (default: False).",
+    )
+    p.add_argument(
+        "--device",
+        type=str,
+        default="",
+        help="CUDA device(s) to use, e.g. '0', '0,1', or 'cpu' (default: auto-select).",
+    )
     return p.parse_args()
 
 
@@ -125,14 +158,28 @@ def main():
     print(f"Using dataset YAML: {data_yaml}")
     print(f"Dataset root: {data_cfg.get('path')}")
 
+    num_gpus = len(args.device.split(",")) if args.device else 1
+    if num_gpus > 1 and args.batch == -1:
+        print(
+            "WARNING: AutoBatch (--batch -1) is incompatible with multi-GPU training. "
+            "Ultralytics will fall back to batch=16. "
+            "Pass --batch explicitly, e.g. --batch 1024."
+        )
+
+    cache = False if args.cache == "False" else args.cache
+
     model.train(
         data=data_yaml,
         classes=[0],  # filter to person class only
         single_cls=True,  # single-class mode
         imgsz=args.size,
         epochs=EPOCHS,
-        batch=BATCH,
+        batch=args.batch,
         optimizer=args.optimizer,
+        device=args.device if args.device else None,
+        workers=args.workers,
+        cache=cache,
+        deterministic=False,
         project=PROJECT,
         name=run_name,
         exist_ok=True,
