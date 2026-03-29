@@ -1,0 +1,40 @@
+dataset:
+  # converter.py expects: coco_format | pascal_voc_format | kitti_format
+  format: pascal_voc_format
+  class_names: [hand, helmet, head, person, tool]
+  dataset_name: fyp_merged
+
+  # Used by dataset_create_tfs.py
+  training_path: ./datasets/fyp_merged/train
+  validation_path: ./datasets/fyp_merged/val
+  test_path: ./datasets/fyp_merged/test
+
+  # Used by dataset_analysis.py (point to one split, typically train)
+  dataset_path: ./datasets/fyp_merged/train
+
+pascal_voc_format:
+  images_path: ./datasets/fyp_sources/voc/train/images
+  xml_files_path: ./datasets/fyp_sources/voc/train/xml
+  export_dir: ./datasets/fyp_merged/train
+
+coco_format:
+  images_path: ./datasets/fyp_sources/coco/train/images
+  json_annotations_file_path: ./datasets/fyp_sources/coco/train/annotations.json
+  export_dir: ./datasets/fyp_merged/train
+
+kitti_format:
+  images_path: ./datasets/fyp_sources/kitti/train/images
+  annotations_dir: ./datasets/fyp_sources/kitti/train/labels
+  export_dir: ./datasets/fyp_merged/train
+
+settings:
+  # If null, dataset_create_tfs computes max detections from training set.
+  max_detections: 40
+  # false keeps background images; true drops images with no labels.
+  exclude_unlabeled_images: false
+  # Used by dataset_analysis.py when enabled.
+  max_percentage_filtered: 1
+
+hydra:
+  run:
+    dir: ./finetune/outputs/dataset/${now:%Y_%m_%d_%H_%M_%S}

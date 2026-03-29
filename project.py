@@ -17,6 +17,8 @@ LOCAL_COMMANDS = {
     "conda-benchmark": "scripts/conda_setup_benchmark.py",
     "train": "scripts/run_train_tinyissimo_coco_person.py",
     "quant": "scripts/run_quantize.py",
+    "finetune-dataset": "scripts/run_finetune_dataset.py",
+    "finetune": "scripts/run_finetune.py",
 }
 
 
