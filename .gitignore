@@ -4,6 +4,7 @@ __pycache__/
 
 results/*
 !results/benchmark_nominal/
+!results/benchmark_overdrive/
 !results/benchmark_parsed.csv
 
 *.npy
