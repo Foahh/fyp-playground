@@ -175,12 +175,32 @@ def _step_generate(entry: ModelEntry) -> tuple[str, str, int]:
         output_chpos,
     ]
 
-    return _run_streaming(
+    get_logger("workflow").info(
+        "Generate step started",
+        step="generate",
+        variant=entry.variant,
+        fmt=entry.fmt,
+        model_path=model_path,
+        input_dtype=entry.input_data_type,
+        output_dtype=entry.output_data_type,
+        output_chpos=output_chpos,
+    )
+    t0 = time.monotonic()
+    out, err, rc = _run_streaming(
         cmd,
         cwd=str(N6_WORKDIR),
         timeout=600,
         log_header=f"\n=== GENERATE | {entry.variant} | {entry.fmt} ===",
     )
+    elapsed = time.monotonic() - t0
+    get_logger("workflow").info(
+        "Generate step completed",
+        step="generate",
+        variant=entry.variant,
+        rc=rc,
+        elapsed_s=f"{elapsed:.3f}",
+    )
+    return out, err, rc
 
 
 def _step_load(entry: ModelEntry) -> tuple[str, str, int]:
@@ -196,16 +216,42 @@ def _step_load(entry: ModelEntry) -> tuple[str, str, int]:
         str(config_path),
     ]
 
-    return _run_streaming(
+    get_logger("workflow").info(
+        "Load step started",
+        step="load",
+        variant=entry.variant,
+        fmt=entry.fmt,
+        config_path=str(config_path),
+    )
+    t0 = time.monotonic()
+    out, err, rc = _run_streaming(
         cmd,
         cwd=str(n6_dir),
         timeout=600,
         log_header=f"\n=== LOAD | {entry.variant} | {entry.fmt} ===",
     )
+    elapsed = time.monotonic() - t0
+    get_logger("workflow").info(
+        "Load step completed",
+        step="load",
+        variant=entry.variant,
+        rc=rc,
+        elapsed_s=f"{elapsed:.3f}",
+    )
+    return out, err, rc
 
 
 def _step_validate(entry: ModelEntry, n_runs: int = 10) -> tuple[str, str, int]:
     """Step 3: Use ai_runner to run multiple inferences for accurate power measurement."""
+
+    get_logger("workflow").info(
+        "Validate step started",
+        step="validate",
+        variant=entry.variant,
+        fmt=entry.fmt,
+        n_runs=n_runs,
+    )
+    t0 = time.monotonic()
 
     try:
         # Import ai_runner from STEdgeAI installation
@@ -214,6 +260,7 @@ def _step_validate(entry: ModelEntry, n_runs: int = 10) -> tuple[str, str, int]:
             sys.path.insert(0, str(stedgeai_scripts))
         from stm_ai_runner import AiRunner
     except ImportError as e:
+        get_logger("workflow").error("Validate import failed", step="validate", variant=entry.variant, error=str(e))
         return "", f"Failed to import ai_runner: {e}", 1
 
     output_lines = []
@@ -223,19 +270,15 @@ def _step_validate(entry: ModelEntry, n_runs: int = 10) -> tuple[str, str, int]:
     try:
         output_lines.append(f"Running {n_runs} inferences using ai_runner...")
         runner = AiRunner(logger=_quiet_ai_runner_logger())
-        _append_stdout_log("VALIDATE_STEP connect serial:921600")
         runner.connect("serial:921600")
 
         if not runner.is_connected:
             err = runner.get_error()
-            _append_stdout_log(f"VALIDATE_STEP connect failed: {err}")
+            _append_stdout_log(f"Connect failed: {err}")
             return "", f"Failed to connect to device: {err}", 1
-
-        _append_stdout_log("VALIDATE_STEP connected")
 
         # Generate random input (batch_size=1)
         inputs = runner.generate_rnd_inputs(batch_size=1)
-        _append_stdout_log("VALIDATE_STEP begin inference loop")
 
         # Run inference n_runs times
         durations = []
@@ -245,20 +288,20 @@ def _step_validate(entry: ModelEntry, n_runs: int = 10) -> tuple[str, str, int]:
             if profile['c_durations']:
                 d_ms = profile['c_durations'][0]
                 durations.append(d_ms)
-                _append_stdout_log(
-                    f"VALIDATE_INFERENCE run={i + 1}/{n_runs} duration_ms={d_ms:.6f}"
-                )
             else:
-                _append_stdout_log(
-                    f"VALIDATE_INFERENCE run={i + 1}/{n_runs} duration_ms=(none)"
-                )
+                d_ms = None
 
             # Sleep 50ms between runs for power measurement denoising
             time.sleep(0.05)
-            get_logger("workflow").info("Inference done", variant=entry.variant, run=f"{i+1}/{n_runs}", duration_ms=d_ms)
+            get_logger("workflow").info(
+                "Inference run completed",
+                step="validate",
+                variant=entry.variant,
+                run=f"{i+1}/{n_runs}",
+                duration_ms=f"{d_ms:.3f}" if d_ms else None,
+            )
 
         runner.disconnect()
-        _append_stdout_log("VALIDATE_STEP disconnected")
 
         # Format output
         if durations:
@@ -271,10 +314,28 @@ def _step_validate(entry: ModelEntry, n_runs: int = 10) -> tuple[str, str, int]:
                 f"VALIDATE_SUMMARY n={len(durations)} avg_ms={avg_ms:.6f} min_ms={min_ms:.6f} max_ms={max_ms:.6f}"
             )
 
+        elapsed = time.monotonic() - t0
+        get_logger("workflow").info(
+            "Validate step completed",
+            step="validate",
+            variant=entry.variant,
+            rc=0,
+            elapsed_s=f"{elapsed:.3f}",
+            inferences_completed=len(durations),
+            avg_ms=f"{avg_ms:.3f}" if durations else None,
+        )
         return "\n".join(output_lines), "", 0
 
     except Exception as e:
-        _append_stdout_log(f"VALIDATE_STEP exception: {e}")
+        elapsed = time.monotonic() - t0
+        _append_stdout_log(f"Validate exception: {e}")
+        get_logger("workflow").error(
+            "Validate step failed",
+            step="validate",
+            variant=entry.variant,
+            error=str(e),
+            elapsed_s=f"{elapsed:.3f}",
+        )
         return "\n".join(output_lines), f"Error during multi-inference: {e}", 1
 
 
@@ -299,13 +360,30 @@ def _step_evaluate(entry: ModelEntry) -> tuple[str, str, int]:
     env["TQDM_DISABLE"] = "1"
     # Force TensorFlow host evaluation onto CPU to avoid CUDA runtime instability (I am using 5060...).
     env["CUDA_VISIBLE_DEVICES"] = "-1"
-    return _run_streaming(
+
+    get_logger("workflow").info(
+        "Evaluate step started",
+        step="evaluate",
+        variant=entry.variant,
+        fmt=entry.fmt,
+    )
+    t0 = time.monotonic()
+    out, err, rc = _run_streaming(
         cmd,
         cwd=str(SERVICES_DIR),
         timeout=3600,
         env=env,
         log_header=f"\n=== EVALUATE | {entry.variant} | {entry.fmt} ===",
     )
+    elapsed = time.monotonic() - t0
+    get_logger("workflow").info(
+        "Evaluate step completed",
+        step="evaluate",
+        variant=entry.variant,
+        rc=rc,
+        elapsed_s=f"{elapsed:.3f}",
+    )
+    return out, err, rc
 
 
 @dataclass
@@ -368,6 +446,18 @@ def run_benchmark(entry: ModelEntry, validation_count: int) -> EvalResult:
         if res.generate_rc != 0:
             return res
 
+        # Parse and log generate metrics
+        from ..io.parsing import parse_metrics
+        gen_metrics = parse_metrics(res.generate_out, res.generate_err)
+        get_logger("workflow").info(
+            "Generate metrics extracted",
+            step="generate",
+            variant=entry.variant,
+            internal_ram_kib=gen_metrics.get("internal_ram_kib", ""),
+            external_ram_kib=gen_metrics.get("external_ram_kib", ""),
+            weights_flash_kib=gen_metrics.get("weights_flash_kib", ""),
+        )
+
         # Step 2: Build & Flash
         get_logger("workflow").info("Building and flashing", variant=entry.variant)
         res.load_out, res.load_err, res.load_rc = _step_load(entry)
@@ -405,6 +495,17 @@ def run_benchmark(entry: ModelEntry, validation_count: int) -> EvalResult:
                 _append_stdout_log(res.validate_out)
             if res.validate_err:
                 _append_stdout_log(res.validate_err)
+
+            # Parse and log validate metrics
+            val_metrics = parse_metrics(res.validate_out, res.validate_err)
+            get_logger("workflow").info(
+                "Validate metrics extracted",
+                step="validate",
+                variant=entry.variant,
+                inference_time_ms=val_metrics.get("inference_time_ms", ""),
+                inf_per_sec=val_metrics.get("inf_per_sec", ""),
+            )
+
             if validate_lines:
                 metrics = compute_power_metrics(validate_lines, validation_count)
                 res.pm_avg_inf_mW = metrics["pm_avg_inf_mW"]
@@ -414,6 +515,18 @@ def run_benchmark(entry: ModelEntry, validation_count: int) -> EvalResult:
                 res.pm_avg_idle_ms = metrics["pm_avg_idle_ms"]
                 res.pm_avg_inf_mJ = metrics["pm_avg_inf_mJ"]
                 res.pm_avg_idle_mJ = metrics["pm_avg_idle_mJ"]
+                get_logger("workflow").info(
+                    "Power metrics computed",
+                    step="validate",
+                    variant=entry.variant,
+                    pm_avg_inf_mW=f"{res.pm_avg_inf_mW:.3f}" if res.pm_avg_inf_mW else "",
+                    pm_avg_idle_mW=f"{res.pm_avg_idle_mW:.3f}" if res.pm_avg_idle_mW else "",
+                    pm_avg_delta_mW=f"{res.pm_avg_delta_mW:.3f}" if res.pm_avg_delta_mW else "",
+                    pm_avg_inf_ms=f"{res.pm_avg_inf_ms:.3f}" if res.pm_avg_inf_ms else "",
+                    pm_avg_idle_ms=f"{res.pm_avg_idle_ms:.3f}" if res.pm_avg_idle_ms else "",
+                    pm_avg_inf_mJ=f"{res.pm_avg_inf_mJ:.3f}" if res.pm_avg_inf_mJ else "",
+                    pm_avg_idle_mJ=f"{res.pm_avg_idle_mJ:.3f}" if res.pm_avg_idle_mJ else "",
+                )
             elif is_power_session_active():
                 get_logger("workflow").warning("Power active but no samples captured", variant=entry.variant)
             if res.validate_rc != 0:
@@ -426,6 +539,15 @@ def run_benchmark(entry: ModelEntry, validation_count: int) -> EvalResult:
                     res.evaluate_err = "TIMEOUT: host evaluation exceeded 1 hour"
                     res.evaluate_rc = -1
                 get_logger("workflow").info("Evaluation complete", variant=entry.variant, rc=res.evaluate_rc)
+
+                # Parse and log evaluate metrics
+                eval_metrics = parse_metrics(res.evaluate_out, res.evaluate_err)
+                get_logger("workflow").info(
+                    "Evaluate metrics extracted",
+                    step="evaluate",
+                    variant=entry.variant,
+                    ap_50=eval_metrics.get("ap_50", ""),
+                )
         finally:
             if not validate_window_closed:
                 end_validate_capture()
