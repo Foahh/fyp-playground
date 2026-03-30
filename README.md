@@ -1,6 +1,6 @@
 # FYP Playground
 
-Workspace for FYP research, model training, export, quantization, and on-device benchmarking.
+Workspace for FYP research, model training, INT8 TFLite quantization, and on-device benchmarking.
 
 **STEdgeAI version:** `4.0`
 
@@ -12,7 +12,7 @@ This repository provides a unified workflow for:
 
 - dataset setup
 - model training
-- model export and quantization
+- model training and INT8 TFLite quantization (Ultralytics)
 - benchmarking on STM32 hardware
 
 For most workflows, use `project.py` as the main entry point.
@@ -27,17 +27,16 @@ Before running any project components, initialize the Git submodules:
 git submodule update --init --recursive
 ```
 
-Use **Conda** as the default environment for training/export/quantization/benchmark workflows.
+Use **Conda** as the default environment for training, quantization, and benchmark workflows.
 
 ### Conda environments by workflow
 
-There are **three** conda envs (defaults shown). Override names with env vars if needed.
+There are **two** conda envs (defaults shown). Override names with env vars if needed.
 
 | Purpose | Default env name | One-time setup |
 |--------|------------------|----------------|
-| Dataset download/prep (`load_coco.py`, `load_finetune_data.py`, Dataset Ninja) | `dataset` (`ST_DATASET_ENV`) | `python project.py conda-dataset` |
-| TinyissimoYOLO training / export (`run_train_tinyissimo_coco_person.py`) | `yolo` (`ST_YOLO_ENV`) | `python project.py conda-yolo` |
-| Quantization, on-device benchmark, Model Zoo finetune helpers | `stzoo` (`ST_STZOO_ENV`) | `python project.py conda-benchmark` |
+| Dataset download/prep (`load_coco.py`, `load_finetune_data.py`), TinyissimoYOLO training (`run_train_tinyissimo_coco_person.py`), INT8 TFLite quantization (`run_quantize.py`) | `yolo` (`ST_YOLO_ENV`) | `python project.py conda-yolo` |
+| On-device benchmark, Model Zoo finetune helpers | `stzoo` (`ST_STZOO_ENV`) | `python project.py conda-benchmark` |
 
 Before each step, run `conda activate <env>` for the row that matches the command.
 
@@ -51,17 +50,16 @@ Use `project.py` as the single entry point for common workflows.
 
 | Command | Conda env |
 |---------|-----------|
-| `dataset-coco`, `dataset-finetune` | `dataset` |
-| `train` | `yolo` |
-| `quant`, `benchmark`, `finetune-dataset`, `finetune` | `stzoo` |
-| `conda-dataset`, `conda-yolo`, `conda-benchmark` | none (run from base or any env with `conda` available) |
+| `dataset-coco`, `dataset-finetune`, `train`, `quant` | `yolo` |
+| `benchmark`, `finetune-dataset`, `finetune` | `stzoo` |
+| `conda-yolo`, `conda-benchmark` | none (run from base or any env with `conda` available) |
 
 ### Local commands
 
-**Env: `dataset`** — COCO download:
+**Env: `yolo`** — COCO download:
 
 ```sh
-conda activate dataset
+conda activate yolo
 python project.py dataset-coco
 ```
 
@@ -81,10 +79,10 @@ conda activate yolo
 python project.py train --size 192
 ```
 
-**Env: `stzoo`** — quantization:
+**Env: `yolo`** — INT8 TFLite quantization (after training):
 
 ```sh
-conda activate stzoo
+conda activate yolo
 python project.py quant --img_size 192
 ```
 
@@ -112,12 +110,12 @@ Log out and back in for the group change to take effect.
 
 ## Dataset Setup
 
-**Conda environment:** `dataset` — create it with `python project.py conda-dataset`, then `conda activate dataset`.
+**Conda environment:** `yolo` — same as training (`python project.py conda-yolo`, then `conda activate yolo`).
 
 Prepare datasets (default: `./datasets` under project root):
 
 ```sh
-conda activate dataset
+conda activate yolo
 mkdir -p ./datasets
 python ./scripts/load_coco.py
 ```
@@ -125,7 +123,7 @@ python ./scripts/load_coco.py
 To store datasets elsewhere, set `DATASETS_DIR`:
 
 ```sh
-conda activate dataset
+conda activate yolo
 DATASETS_DIR=~/datasets python ./scripts/load_coco.py
 ```
 
@@ -170,7 +168,7 @@ From the repository root, outputs are written to:
 results/model/
 ```
 
-Run training for different input sizes (training auto-exports SavedModel after completion):
+Run training for different input sizes (checkpoints only; quantize to TFLite separately):
 
 ```sh
 conda activate yolo
@@ -180,14 +178,7 @@ python project.py train --size 288
 python project.py train --size 320
 ```
 
-Force export-only (skip training) from the latest checkpoint:
-
-```sh
-conda activate yolo
-python project.py train --size 192 --export
-```
-
-SavedModel export uses:
+Weights are written under:
 
 ```text
 results/model/tinyissimoyolo_v8_<size>/weights/best.pt
@@ -197,33 +188,42 @@ results/model/tinyissimoyolo_v8_<size>/weights/best.pt
 
 ## Quantize to TFLite INT8
 
-**Conda environment:** `stzoo` — `python project.py conda-benchmark`, then `conda activate stzoo`.
+**Conda environment:** `yolo` (same as training; Ultralytics `model.export(format="tflite", int8=True, …)` via ONNX → onnx2tf).
 
-### Quantize SavedModel to TFLite INT8
+### Export INT8 TFLite from `best.pt`
 
 ```sh
-conda activate stzoo
-python project.py quant \
-  --img_size 192
+conda activate yolo
+python project.py quant --img_size 192
 ```
 
-`project.py quant` now runs quantization through `stm32ai-modelzoo-services` and then
-evaluates the generated TFLite model by default.
+Ultralytics writes the INT8 TFLite next to the checkpoint (no separate `quantized/` copy). With the default `best.pt` layout that is:
 
-Useful options (still with `stzoo` activated):
+```text
+results/model/tinyissimoyolo_v8_<size>/weights/best_saved_model/best_int8.tflite
+```
+
+The script prints this path at the end as the artifact. By default it runs Ultralytics validation on the test split after export; metrics and plots go under:
+
+```text
+results/model/tinyissimoyolo_v8_<size>/weights/best_saved_model/val_int8/
+```
+
+Optional flags:
 
 ```sh
-conda activate stzoo
+conda activate yolo
 python project.py quant --img_size 192 --no-eval
-python project.py quant --img_size 192 --saved-model /path/to/saved_model
-python project.py quant --img_size 192 --out /path/to/output.tflite
+python project.py quant --img_size 192 --checkpoint /path/to/best.pt
 ```
+
+To evaluate with the STM32 model zoo host pipeline instead, use `configs/tinyissimoyolo_v8_192_config.yaml` (update `model.model_path` if your checkpoint stem or export location differs) and run `stm32ai_main.py` from the `stzoo` environment as documented in `external/stm32ai-modelzoo-services`.
 
 ---
 
 ## Benchmark on STM32N6570-DK
 
-**Conda environment:** `stzoo` — same as quantization (`python project.py conda-benchmark`).
+**Conda environment:** `stzoo` — create with `python project.py conda-benchmark` (quantization uses the `yolo` env above).
 
 This benchmark performs on-device evaluation for all supported model variants and saves results to:
 

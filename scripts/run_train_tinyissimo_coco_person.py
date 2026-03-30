@@ -6,15 +6,12 @@ Run from the parent repository root (outputs under results/model/):
     python scripts/run_train_tinyissimo_coco_person.py --size 192 --profile paper
     python scripts/run_train_tinyissimo_coco_person.py --size 192 --profile powerful
     python scripts/run_train_tinyissimo_coco_person.py --size 192 --no-resume
-    python scripts/run_train_tinyissimo_coco_person.py --size 192 --export
 
-Dependencies are provided by the training Docker image (`docker/train.Dockerfile`).
+Quantization to INT8 TFLite is handled separately by run_quantize.py.
 """
 
 import argparse
-import os
 import sys
-from contextlib import contextmanager
 from pathlib import Path
 
 import yaml
@@ -29,6 +26,7 @@ from ultralytics import YOLO
 TINY = ROOT / "external" / "TinyissimoYOLO"
 MODEL_YAML = str(TINY / "ultralytics/cfg/models/tinyissimo/tinyissimo-v8.yaml")
 PROJECT = str(ROOT / "results" / "model")
+
 
 def run_name_for(size: int, profile: str) -> str:
     base = f"tinyissimoyolo_v8_{size}"
@@ -58,45 +56,6 @@ def train_profile_kwargs(profile: str) -> dict:
     raise ValueError(f"Unknown profile: {profile!r}")
 
 
-@contextmanager
-def working_directory(path: Path):
-    prev = Path.cwd()
-    os.chdir(path)
-    try:
-        yield
-    finally:
-        os.chdir(prev)
-
-
-def export_saved_model(
-    size: int, weights: Path | None = None, profile: str = "paper"
-) -> Path:
-    run_name = run_name_for(size, profile)
-    weights_dir = Path(PROJECT) / run_name / "weights"
-    data_yaml = Path(materialize_coco_data_yaml())
-    ckpt = (weights or (weights_dir / "best.pt")).resolve()
-    if not ckpt.exists():
-        raise FileNotFoundError(f"No checkpoint at {ckpt}")
-
-    print(f"Loading {ckpt} ...")
-    model = YOLO(str(ckpt))
-    ckpt_stem = Path(model.ckpt_path).stem if model.ckpt_path else "best"
-
-    print(f"Exporting SavedModel in {PROJECT} (imgsz={size}, data={data_yaml}) ...")
-    with working_directory(Path(PROJECT)):
-        model.export(
-            format="saved_model",
-            int8=False,
-            data=str(data_yaml),
-            imgsz=[size, size],
-        )
-
-    saved_model_dir = weights_dir / f"{ckpt_stem}_saved_model"
-    if not saved_model_dir.is_dir():
-        raise FileNotFoundError(f"SavedModel export not found at {saved_model_dir}")
-    return saved_model_dir
-
-
 def parse_args():
     p = argparse.ArgumentParser(description="Train TinyissimoYOLO v8 on COCO Person")
     p.add_argument(
@@ -112,11 +71,6 @@ def parse_args():
         help="Start a fresh run instead of resuming from last checkpoint",
     )
     p.add_argument("--optimizer", type=str, default="SGD")
-    p.add_argument(
-        "--export",
-        action="store_true",
-        help="Export SavedModel only (skip training); useful to force export from latest checkpoint",
-    )
     p.add_argument(
         "--profile",
         choices=("paper", "powerful"),
@@ -142,11 +96,6 @@ def main():
     run_name = run_name_for(args.size, args.profile)
     weights_dir = Path(PROJECT) / run_name / "weights"
     resume = not args.no_resume
-
-    if args.export:
-        saved_model_dir = export_saved_model(size=args.size, profile=args.profile)
-        print(f"Done. Exported SavedModel at {saved_model_dir}")
-        return
 
     if resume:
         last_pt = weights_dir / "last.pt"
@@ -202,9 +151,6 @@ def main():
     model.train(**train_kw)
 
     print(f"Training done. Weights under {weights_dir}")
-
-    saved_model_dir = export_saved_model(size=args.size, profile=args.profile)
-    print(f"Done. Exported SavedModel at {saved_model_dir}")
 
 
 if __name__ == "__main__":

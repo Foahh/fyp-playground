@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Create conda env for YOLO training/export dependencies.
+"""Create conda env for YOLO training, INT8 TFLite quantization, and dataset prep.
 
-For ``load_coco.py`` / ``load_finetune_data.py`` and Dataset Ninja downloads,
-use ``conda_setup_dataset.py`` (Python 3.11 + ``dataset-tools``).
+Includes Ultralytics and TensorFlow (via ``requirements-yolo.txt``) for
+``run_train_tinyissimo_coco_person.py``, ``run_quantize.py``,
+``load_coco.py``, and ``load_finetune_data.py``.
 """
 
 from __future__ import annotations

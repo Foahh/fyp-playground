@@ -12,10 +12,10 @@ metu_alet          METU-ALET tool detection in the wild (hazard subset of 49 cla
 
 Environment
 -----------
-Use the dataset conda env (Python 3.11; ``dataset-tools`` does not install on 3.12)::
+Use the ``yolo`` conda env (same as COCO prep / training)::
 
-    python scripts/conda_setup_dataset.py
-    conda activate dataset    # or $ST_DATASET_ENV
+    python project.py conda-yolo
+    conda activate yolo    # or $ST_YOLO_ENV
 
 Usage
 -----
@@ -318,7 +318,7 @@ def convert_ego2hands() -> None:
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  Dataset Ninja (Supervisely format) — shared download + conversion
-#  Requires ``dataset-tools`` (Python <=3.11): ``scripts/conda_setup_dataset.py``.
+#  Optional: ``pip install dataset-tools`` if using Ninja downloads.
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def _is_hazard_class(name: str) -> bool:

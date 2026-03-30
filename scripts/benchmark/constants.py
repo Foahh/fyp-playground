@@ -787,20 +787,21 @@ MODEL_REGISTRY: list[dict] = [
         "output_data_type": "float32",
     },
     # ── TinyissimoYOLO v8 ──
-    # {
-    #     "config": _CONFIGS / "tinyissimoyolo_v8_192_config.yaml",
-    #     "model": Path("results")
-    #     / "model"
-    #     / "tinyissimoyolo_v8_192"
-    #     / "quantized"
-    #     / "tinyissimoyolo_v8_192_quant_pc_ui_od_coco-person.tflite",
-    #     "family": "tinyissimoyolo_v8",
-    #     "variant": "tinyissimoyolo_v8_192",
-    #     "hyperparameters": "",
-    #     "dataset": "COCO-Person",
-    #     "fmt": "Int8",
-    #     "resolution": 192,
-    # },
+    {
+        "config": _CONFIGS / "tinyissimoyolo_v8_192_config.yaml",
+        "model": Path("results")
+        / "model"
+        / "tinyissimoyolo_v8_192"
+        / "weights"
+        / "best_saved_model"
+        / "best_int8.tflite",
+        "family": "tinyissimoyolo_v8",
+        "variant": "tinyissimoyolo_v8_192",
+        "hyperparameters": "",
+        "dataset": "COCO-Person",
+        "fmt": "Int8",
+        "resolution": 192,
+    },
     # ── yolo26 ──
     {
         "config": _CONFIGS / "yolo26_config.yaml",

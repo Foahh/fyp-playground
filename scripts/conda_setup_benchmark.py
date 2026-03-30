@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Create conda env for STM32 benchmarking dependencies.
 
-For COCO / finetune dataset prep, use ``conda_setup_dataset.py`` instead.
+Dataset download / prep uses the ``yolo`` env (``conda_setup_yolo.py``).
 """
 
 from __future__ import annotations

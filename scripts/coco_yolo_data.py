@@ -85,6 +85,7 @@ def materialize_coco_data_yaml(require_person: bool = False) -> str:
         cfg["train"] = "train2017.txt"
         cfg["val"] = "val2017.txt"
         cfg["names"] = ["person"]
+        cfg.pop("test", None)
     tmp = tempfile.NamedTemporaryFile(
         mode="w",
         suffix=".yaml",
