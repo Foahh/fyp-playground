@@ -441,7 +441,6 @@ def run_benchmark(entry: ModelEntry, validation_count: int) -> EvalResult:
 
     try:
         # Step 1: Generate
-        get_logger("workflow").info("Generating C code", variant=entry.variant)
         res.generate_out, res.generate_err, res.generate_rc = _step_generate(entry)
         if res.generate_rc != 0:
             return res
@@ -459,7 +458,6 @@ def run_benchmark(entry: ModelEntry, validation_count: int) -> EvalResult:
         )
 
         # Step 2: Build & Flash
-        get_logger("workflow").info("Building and flashing", variant=entry.variant)
         res.load_out, res.load_err, res.load_rc = _step_load(entry)
         if res.load_rc != 0:
             return res
@@ -467,7 +465,6 @@ def run_benchmark(entry: ModelEntry, validation_count: int) -> EvalResult:
         time.sleep(1)
 
         # Steps 3–4: Validate on device (power) and host-side evaluation — independent I/O, run concurrently.
-        get_logger("workflow").info("Validating on device", variant=entry.variant, count=validation_count)
         validate_t0 = time.monotonic()
         begin_validate_capture()
         executor = ThreadPoolExecutor(max_workers=2)

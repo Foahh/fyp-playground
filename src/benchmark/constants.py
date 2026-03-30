@@ -37,6 +37,8 @@ CSV_COLUMNS = [
     "internal_ram_kib",
     "external_ram_kib",
     "weights_flash_kib",
+    "input_buffer_kib",
+    "output_buffer_kib",
     "inference_time_ms",
     "inf_per_sec",
     "ap_50",

@@ -244,6 +244,8 @@ def _run_benchmark_loop(
                 "internal_ram_kib": metrics.get("internal_ram_kib", ""),
                 "external_ram_kib": metrics.get("external_ram_kib", ""),
                 "weights_flash_kib": metrics.get("weights_flash_kib", ""),
+                "input_buffer_kib": metrics.get("input_buffer_kib", ""),
+                "output_buffer_kib": metrics.get("output_buffer_kib", ""),
                 "inference_time_ms": metrics.get("inference_time_ms", ""),
                 "inf_per_sec": metrics.get("inf_per_sec", ""),
                 "ap_50": metrics.get("ap_50", ""),
