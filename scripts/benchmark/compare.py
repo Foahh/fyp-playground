@@ -15,15 +15,18 @@ Modes (see ``--mode``):
 - **readme-nominal** — same, but measured file is ``benchmark_nominal/benchmark_results.csv``.
 
 - **nominal-overdrive** — nominal vs overdrive ``benchmark_results.csv`` (delta = overdrive − nominal)
-  for every shared config and metric column; ``stedgeai_version`` is listed when present on either side.
+  for every shared config and metric column, **including inference power** (``pm_avg_inf_*``) when present;
+  ``pm_avg_idle_*`` and ``pm_avg_delta_mW`` are omitted (idle/delta splits are not comparable across runs).
+  ``stedgeai_version`` is listed when present on either side.
 
 For readme modes, ``stedgeai_version`` is also listed per matched row (README-parsed vs measured
 ``benchmark_results``); values are compared as strings (delta column shows ``≠`` when they differ).
 
 Output is grouped by ``model_variant`` with plain-text tables (no pass/fail).
 
-Use ``--min-abs-delta-pct PCT`` to hide metric rows whose numeric ``|delta_pct|`` is below PCT;
-rows without a numeric ``delta_pct`` (e.g. ``stedgeai_version``, baseline zero) stay listed.
+Use ``--delta-pct PCT`` to hide metric rows whose numeric ``|delta_pct|`` is below PCT. Rows
+without a numeric ``delta_pct`` (e.g. baseline zero) stay listed; ``stedgeai_version`` rows with
+the same value on both sides are omitted.
 """
 
 from __future__ import annotations
@@ -36,7 +39,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .constants import BASE_DIR, CSV_COLUMNS_NO_POWER
+from .constants import BASE_DIR, CSV_COLUMNS, CSV_COLUMNS_NO_POWER
 
 
 RESULTS_DIR = BASE_DIR / "results"
@@ -61,6 +64,24 @@ METRIC_COLS = tuple(
     c
     for c in CSV_COLUMNS_NO_POWER
     if c not in IDENTITY_COLS and c not in ("host_time_iso", "stedgeai_version")
+)
+
+# Device CSV metrics for nominal-overdrive: all CSV columns except identity/version/time and
+# idle/delta power fields (not accurate for cross-run compare).
+_BENCH_PAIR_OMIT_POWER = frozenset(
+    (
+        "pm_avg_idle_mW",
+        "pm_avg_idle_ms",
+        "pm_avg_idle_mJ",
+        "pm_avg_delta_mW",
+    )
+)
+METRIC_COLS_BENCH_PAIR = tuple(
+    c
+    for c in CSV_COLUMNS
+    if c not in IDENTITY_COLS
+    and c not in ("host_time_iso", "stedgeai_version")
+    and c not in _BENCH_PAIR_OMIT_POWER
 )
 
 # Per-variant subtable (model name is printed as a section heading above).
@@ -227,11 +248,13 @@ def filter_rows_by_abs_delta_pct(
     rows: list[dict[str, str]],
     min_abs_pct: float,
 ) -> list[dict[str, str]]:
-    """Keep rows with no numeric ``delta_pct``, or whose ``|delta_pct|`` is >= ``min_abs_pct``."""
+    """Apply ``--delta-pct`` filter: drop small numeric |Δ%%|; drop matching ``stedgeai_version`` rows."""
     if min_abs_pct < 0:
         raise ValueError("min_abs_pct must be non-negative")
     out: list[dict[str, str]] = []
     for r in rows:
+        if r.get("metric") == "stedgeai_version" and not (r.get("delta") or "").strip():
+            continue
         v = _parse_delta_pct_value(r.get("delta_pct", ""))
         if v is None or abs(v) >= min_abs_pct:
             out.append(r)
@@ -364,7 +387,7 @@ def compare_nominal_to_overdrive(nominal_path: Path, overdrive_path: Path) -> Co
             continue
         out.matched_rows += 1
         res_s = str(_resolution_int(nrow.get("resolution")))
-        for col in METRIC_COLS:
+        for col in METRIC_COLS_BENCH_PAIR:
             if _blank(nrow.get(col)) and _blank(orow.get(col)):
                 continue
             pr, br = metric_floats(col, nrow.get(col, ""), orow.get(col, ""))
@@ -467,12 +490,12 @@ def print_comparison_report(
     result: ComparisonResult,
     *,
     delta_rows_before_filter: int | None = None,
-    min_abs_delta_pct: float | None = None,
+    delta_pct: float | None = None,
 ) -> None:
     print(result.headline)
-    if min_abs_delta_pct is not None and delta_rows_before_filter is not None:
+    if delta_pct is not None and delta_rows_before_filter is not None:
         print(
-            f"(filtered: |Δ%| ≥ {min_abs_delta_pct:g}% — "
+            f"(filtered: |Δ%| ≥ {delta_pct:g}% — "
             f"{len(result.delta_rows)} of {delta_rows_before_filter} row(s))"
         )
     print()
@@ -593,13 +616,13 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     p.add_argument(
-        "--min-abs-delta-pct",
+        "--delta-pct",
         type=float,
         default=None,
         metavar="PCT",
         help=(
-            "Hide metric rows whose numeric |delta_pct| is below PCT (e.g. 5 keeps |Δ|≥5%%). "
-            "Rows without a numeric Δ%% are always shown."
+            "Hide metric rows whose numeric |delta_pct| is below PCT (e.g. 5 → keep |Δ|≥5%%). "
+            "Rows without a numeric Δ%% stay listed; matching stedgeai_version rows are omitted."
         ),
     )
     args = p.parse_args(argv)
@@ -648,20 +671,20 @@ def main(argv: list[str] | None = None) -> int:
         result = compare_nominal_to_overdrive(args.nominal, args.overdrive)
 
     before_filter: int | None = None
-    if args.min_abs_delta_pct is not None:
-        if args.min_abs_delta_pct < 0:
-            print("error: --min-abs-delta-pct must be >= 0", file=sys.stderr)
+    if args.delta_pct is not None:
+        if args.delta_pct < 0:
+            print("error: --delta-pct must be >= 0", file=sys.stderr)
             return 2
         before_filter = len(result.delta_rows)
         result.delta_rows = filter_rows_by_abs_delta_pct(
             result.delta_rows,
-            args.min_abs_delta_pct,
+            args.delta_pct,
         )
 
     print_comparison_report(
         result,
         delta_rows_before_filter=before_filter,
-        min_abs_delta_pct=args.min_abs_delta_pct,
+        delta_pct=args.delta_pct,
     )
     return 0
 

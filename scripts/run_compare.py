@@ -32,7 +32,7 @@ from benchmark.compare import (  # noqa: E402
 # If argv has no subcommand and starts with `-`, we default to `all` or `compare`.
 # These flags are only valid on `compare` / compare_main — default to `compare` when seen.
 _COMPARE_ONLY_FLAGS = frozenset(
-    ("--mode", "--benchmark", "--nominal", "--min-abs-delta-pct")
+    ("--mode", "--benchmark", "--nominal", "--delta-pct")
 )
 
 
@@ -76,11 +76,11 @@ def _cmd_all(argv: list[str]) -> int:
         help=f"Overdrive benchmark_results.csv (default: {DEFAULT_OVERDRIVE_CSV})",
     )
     p.add_argument(
-        "--min-abs-delta-pct",
+        "--delta-pct",
         type=float,
         default=None,
         metavar="PCT",
-        help="Hide metric rows below PCT |Δ%%|; non-numeric Δ%% rows always shown (compare subcommand).",
+        help="Hide metric rows below PCT |Δ%%|; same as compare subcommand.",
     )
     args = p.parse_args(argv)
 
@@ -101,19 +101,19 @@ def _cmd_all(argv: list[str]) -> int:
         headline="README vs overdrive (delta = measured − readme)",
     )
     before_filter: int | None = None
-    if args.min_abs_delta_pct is not None:
-        if args.min_abs_delta_pct < 0:
-            print("error: --min-abs-delta-pct must be >= 0", file=sys.stderr)
+    if args.delta_pct is not None:
+        if args.delta_pct < 0:
+            print("error: --delta-pct must be >= 0", file=sys.stderr)
             return 2
         before_filter = len(result.delta_rows)
         result.delta_rows = filter_rows_by_abs_delta_pct(
-            result.delta_rows, args.min_abs_delta_pct
+            result.delta_rows, args.delta_pct
         )
 
     print_comparison_report(
         result,
         delta_rows_before_filter=before_filter,
-        min_abs_delta_pct=args.min_abs_delta_pct,
+        delta_pct=args.delta_pct,
     )
     return 0
 

@@ -354,7 +354,7 @@ That directory comes from the **`stm32ai-modelzoo`** Git submodule. If it is mis
 | `compare` | Delta tables only — requires CSVs already on disk (see flags below). |
 | `all` | Parse then compare README vs **overdrive** `benchmark_results.csv` (delta = measured − readme). |
 
-If the first argument looks like a `compare`-only flag (`--mode`, `--benchmark`, `--nominal`, `--min-abs-delta-pct`), the runner inserts the `compare` subcommand automatically (e.g. `python project.py compare --mode readme-nominal`).
+If the first argument looks like a `compare`-only flag (`--mode`, `--benchmark`, `--nominal`, `--delta-pct`), the runner inserts the `compare` subcommand automatically (e.g. `python project.py compare --mode readme-nominal`).
 
 ### Default files
 
@@ -392,6 +392,6 @@ python project.py compare compare --mode readme-nominal
 python project.py compare compare --mode nominal-overdrive
 ```
 
-Optional: `--parsed`, `--nominal`, `--overdrive`, `--benchmark` (alias for the measured file in readme-* modes), and `--min-abs-delta-pct PCT` to hide metric rows with \|Δ%\| below `PCT`. Full flag list: `python project.py compare compare --help`.
+Optional: `--parsed`, `--nominal`, `--overdrive`, `--benchmark` (alias for the measured file in readme-* modes), and `--delta-pct PCT` to hide metric rows with \|Δ%\| below `PCT` (matching `stedgeai_version` rows are omitted). Full flag list: `python project.py compare compare --help`.
 
 Output is plain-text tables grouped by `model_variant` (no pass/fail); see the module docstring in [`scripts/benchmark/compare.py`](scripts/benchmark/compare.py) for column semantics and edge cases.
