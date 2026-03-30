@@ -9,14 +9,9 @@ from typing import Optional
 import structlog
 from rich.logging import RichHandler
 
-from .constants import ERROR_LOG, STDOUT_LOG
+from ..paths import BENCHMARK_LOG
 
 _configured = False
-
-
-class _NotErrorFilter(logging.Filter):
-    def filter(self, record: logging.LogRecord) -> bool:
-        return record.levelno < logging.ERROR
 
 
 def configure_logging(*, rich_tracebacks: bool = True) -> None:
@@ -25,8 +20,7 @@ def configure_logging(*, rich_tracebacks: bool = True) -> None:
     if _configured:
         return
 
-    ERROR_LOG.parent.mkdir(parents=True, exist_ok=True)
-    STDOUT_LOG.parent.mkdir(parents=True, exist_ok=True)
+    BENCHMARK_LOG.parent.mkdir(parents=True, exist_ok=True)
 
     timestamper = structlog.processors.TimeStamper(fmt="iso")
 
@@ -53,9 +47,10 @@ def configure_logging(*, rich_tracebacks: bool = True) -> None:
         structlog.stdlib.add_logger_name,
         timestamper,
     ]
+    # No ANSI in the message body
     formatter = structlog.stdlib.ProcessorFormatter(
         foreign_pre_chain=pre_chain,
-        processor=structlog.dev.ConsoleRenderer(colors=True),
+        processor=structlog.dev.ConsoleRenderer(colors=False),
     )
 
     plain_formatter = structlog.stdlib.ProcessorFormatter(
@@ -76,18 +71,12 @@ def configure_logging(*, rich_tracebacks: bool = True) -> None:
     rich_handler.setLevel(logging.INFO)
     rich_handler.setFormatter(formatter)
 
-    stdout_audit = logging.FileHandler(STDOUT_LOG, encoding="utf-8", mode="a")
-    stdout_audit.setLevel(logging.INFO)
-    stdout_audit.setFormatter(plain_formatter)
-    stdout_audit.addFilter(_NotErrorFilter())
-
-    err_audit = logging.FileHandler(ERROR_LOG, encoding="utf-8", mode="a")
-    err_audit.setLevel(logging.ERROR)
-    err_audit.setFormatter(plain_formatter)
+    file_audit = logging.FileHandler(BENCHMARK_LOG, encoding="utf-8", mode="a")
+    file_audit.setLevel(logging.INFO)
+    file_audit.setFormatter(plain_formatter)
 
     root.addHandler(rich_handler)
-    root.addHandler(stdout_audit)
-    root.addHandler(err_audit)
+    root.addHandler(file_audit)
 
     _configured = True
 
@@ -95,6 +84,36 @@ def configure_logging(*, rich_tracebacks: bool = True) -> None:
 def get_logger(name: Optional[str] = None) -> structlog.stdlib.BoundLogger:
     configure_logging()
     return structlog.get_logger(name)
+
+
+def log_benchmark_start(total: int, completed: int, **kwargs) -> None:
+    """Log benchmark run start with configuration."""
+    logger = get_logger("benchmark")
+    logger.info("Benchmark started", total=total, completed=completed, **kwargs)
+
+
+def log_model_start(index: int, total: int, variant: str, fmt: str, **kwargs) -> None:
+    """Log model evaluation start."""
+    logger = get_logger("benchmark")
+    logger.info(f"[{index}/{total}] Starting", variant=variant, format=fmt, **kwargs)
+
+
+def log_model_done(index: int, total: int, variant: str, **kwargs) -> None:
+    """Log model evaluation completion."""
+    logger = get_logger("benchmark")
+    logger.info(f"[{index}/{total}] Done", variant=variant, **kwargs)
+
+
+def log_model_skip(index: int, total: int, variant: str, reason: str) -> None:
+    """Log skipped model."""
+    logger = get_logger("benchmark")
+    logger.info(f"[{index}/{total}] Skipped", variant=variant, reason=reason)
+
+
+def log_model_fail(index: int, total: int, variant: str, step: str, error: str) -> None:
+    """Log model evaluation failure."""
+    logger = get_logger("benchmark")
+    logger.error(f"[{index}/{total}] Failed", variant=variant, step=step, error=error)
 
 
 def typer_install_exception_hook() -> None:

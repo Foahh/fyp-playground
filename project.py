@@ -10,40 +10,23 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 
-LOCAL_COMMANDS = {
-    "dataset-coco": "src/dataset/load_coco.py",
-    "dataset-finetune": "src/dataset/load_finetune_data.py",
-    "benchmark": "src/benchmark/run_benchmark_nominal_overdrive.py",
-    "compare": "src/benchmark/run_compare.py",
-    "conda-ml": "src/conda/conda_setup_ml.py",
-    "conda-bhmk": "src/conda/conda_setup_bhmk.py",
+LOCAL_COMMANDS: dict[str, str] = {
+    "download-coco": "src/dataset/run_download_coco_dataset.py",
+    "download-finetune": "src/dataset/run_download_finetune_dataset.py",
+    "benchmark": "src/benchmark/run_benchmark.py",
+    "compare-runs": "src/benchmark/run_compare.py",
+    "verify-model-dtypes": "src/benchmark/run_check_model_dtypes.py",
+    "parse-modelzoo-readme": "src/benchmark/run_parse_modelzoo_readme.py",
+    "setup-conda-ml": "src/conda/run_conda_setup_ml.py",
+    "setup-conda-bhmk": "src/conda/run_conda_setup_bhmk.py",
     "train": "src/ml/run_train_tinyissimo_coco_person.py",
-    "quant": "src/ml/run_quantize.py",
-    "finetune-dataset": "src/ml/run_finetune_dataset.py",
+    "quantize": "src/ml/run_quantize.py",
+    "prepare-finetune-dataset": "src/ml/run_prepare_finetune_dataset.py",
     "finetune": "src/ml/run_finetune.py",
 }
 
 
-def _normalize_passthrough(args: list[str]) -> list[str]:
-    # Allow both styles:
-    #   python project.py train -- --size 192 --export
-    #   python project.py train --size 192 --export
-    if args and args[0] == "--":
-        return args[1:]
-    return args
-
-
-def _run(cmd: list[str]) -> int:
-    print("+", " ".join(cmd))
-    return subprocess.run(cmd, cwd=ROOT, check=False).returncode
-
-
-def _run_local(script: str, passthrough: list[str]) -> int:
-    cmd = [sys.executable, str(ROOT / script), *_normalize_passthrough(passthrough)]
-    return _run(cmd)
-
-
-def parse_args() -> argparse.Namespace:
+def main() -> int:
     parser = argparse.ArgumentParser(description="FYP playground command runner")
     parser.add_argument(
         "command",
@@ -51,12 +34,16 @@ def parse_args() -> argparse.Namespace:
         help="Workflow command to execute",
     )
     parser.add_argument("args", nargs=argparse.REMAINDER, help="Arguments passed through to the target script")
-    return parser.parse_args()
+    args = parser.parse_args()
 
+    # Normalize passthrough args (allow both "-- --flag" and "--flag" styles)
+    passthrough = args.args[1:] if args.args and args.args[0] == "--" else args.args
 
-def main() -> int:
-    args = parse_args()
-    return _run_local(LOCAL_COMMANDS[args.command], args.args)
+    script_path = LOCAL_COMMANDS[args.command]
+    module_path = script_path.replace("/", ".").replace(".py", "")
+    cmd = [sys.executable, "-m", module_path, *passthrough]
+    print("+", " ".join(cmd))
+    return subprocess.run(cmd, cwd=ROOT, check=False).returncode
 
 
 if __name__ == "__main__":

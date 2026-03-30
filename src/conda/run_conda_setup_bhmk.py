@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Create conda env for STM32 benchmarking dependencies.
 
-Dataset download / prep uses the ``fyp-ml`` env (``conda_setup_ml.py``).
+Dataset download / prep uses the ``fyp-ml`` env (``run_conda_setup_ml.py``).
 """
 
 from __future__ import annotations
@@ -11,11 +11,7 @@ import platform
 import sys
 from pathlib import Path
 
-_SRC = Path(__file__).resolve().parent.parent
-if str(_SRC) not in sys.path:
-    sys.path.insert(0, str(_SRC))
-
-from conda.conda_setup_common import (
+from src.conda.conda_setup_common import (
     conda_prefix,
     conda_run,
     ensure_conda_env,

@@ -1,25 +1,38 @@
 """CLI entry point for the benchmark package."""
 
+from __future__ import annotations
+
 import datetime
+import sys
+from pathlib import Path
 import os
 import re
 import shlex
-import sys
-from pathlib import Path
+import time
 
 import typer
 
-from .constants import CSV_PATH, POWER_MEASURE_CSV_PATH, ensure_dirs
-from .logutil import configure_logging, typer_install_exception_hook
-from .models import load_models
-from .parsing import parse_metrics, _parse_network_c_info
-from .results import append_result, load_completed, log_error, log_stdout
-from .power_serial import (
+from .paths import CSV_PATH, N6_WORKDIR, POWER_MEASURE_CSV_PATH
+from .utils.logutil import (
+    configure_logging,
+    typer_install_exception_hook,
+    log_benchmark_start,
+    log_model_start,
+    log_model_done,
+    log_model_skip,
+    log_model_fail,
+)
+from .core.models import load_models
+from .io.parsing import parse_metrics, _parse_network_c_info
+from .io.results import append_result, load_completed
+from .utils.logutil import get_logger
+from .execution.power_serial import (
     get_power_session_effective_port,
     start_power_session,
     stop_power_session,
 )
-from .workflow import _get_st_ai_output_dir, get_stedgeai_version, run_evaluation
+from .execution import workflow
+from .execution.workflow import _get_st_ai_output_dir, get_stedgeai_version
 
 APP_CONFIG_PATH = (
     Path(os.environ["STEDGEAI_CORE_DIR"])
@@ -84,9 +97,9 @@ def run_benchmark(
         help="Number of inference runs for validation",
     ),
     mode: str = typer.Option(
-        "nominal",
+        "all",
         "--mode",
-        help="nominal | norminal | overdrive | override (patch app_config.h)",
+        help="nominal | norminal | overdrive | override | all (patch app_config.h)",
     ),
 ) -> None:
     if getattr(ctx, "resilient_parsing", False):
@@ -95,7 +108,35 @@ def run_benchmark(
     configure_logging()
     typer_install_exception_hook()
 
-    ensure_dirs()
+    N6_WORKDIR.mkdir(parents=True, exist_ok=True)
+
+    if mode == "all":
+        _run_all_modes(filter_substr, power_serial, power_baud, validation_count)
+    else:
+        _run_single_mode(mode, filter_substr, power_serial, power_baud, validation_count)
+
+
+def _run_all_modes(
+    filter_substr: str,
+    power_serial: str | None,
+    power_baud: int,
+    validation_count: int,
+) -> None:
+    """Run benchmark in nominal mode, pause, then overdrive mode."""
+    _run_single_mode("nominal", filter_substr, power_serial, power_baud, validation_count)
+    get_logger("benchmark").info("Pausing for 5.0 seconds between modes...")
+    time.sleep(5.0)
+    _run_single_mode("overdrive", filter_substr, power_serial, power_baud, validation_count)
+
+
+def _run_single_mode(
+    mode: str,
+    filter_substr: str,
+    power_serial: str | None,
+    power_baud: int,
+    validation_count: int,
+) -> None:
+    """Run benchmark for a single mode."""
     _apply_benchmark_mode(mode)
 
     power_running = start_power_session(power_serial, power_baud)
@@ -110,34 +151,17 @@ def run_benchmark(
     completed = load_completed()
     total = len(entries)
 
-    cmd_line = " ".join(shlex.quote(a) for a in sys.argv)
-    eff_port = get_power_session_effective_port()
-    power_port_line = (
-        f"\n  power_serial_open: {eff_port}"
-        if eff_port
-        else ""
-    )
     mode_out = "overdrive" if mode == "override" else ("nominal" if mode == "norminal" else mode)
-    args_block = (
-        f"Command: {cmd_line}\n"
-        f"  --filter: {filter_substr or '(none)'}\n"
-        f"  --power-serial: {power_serial or '(auto-detect)'}\n"
-        f"  --power-baud: {power_baud}\n"
-        f"  --validation-count: {validation_count}\n"
-        f"  --mode: {mode_out}\n"
-        f"  stedgeai_version: {stedgeai_version}\n"
-        f"  app_config: {APP_CONFIG_PATH}\n"
-        f"  power_measurement_active: {power_running}"
-        f"{power_port_line}"
+    log_benchmark_start(
+        total=total,
+        completed=len(completed),
+        filter=filter_substr or None,
+        mode=mode_out,
+        validation_count=validation_count,
+        stedgeai_version=stedgeai_version,
+        power_active=power_running,
+        power_port=get_power_session_effective_port(),
     )
-    header = (
-        f"\n{'='*60}\n"
-        f"Benchmark run started: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-        f"Total entries: {total}  |  Already completed: {len(completed)}\n"
-        f"{args_block}\n"
-        f"{'='*60}"
-    )
-    log_stdout(header)
 
     try:
         _run_benchmark_loop(
@@ -165,33 +189,30 @@ def _run_benchmark_loop(
         tag = f"[{i}/{total}]"
 
         if key in completed:
-            msg = f"{tag} SKIPPED: {entry.variant} ({entry.fmt}) — already in CSV"
-            log_stdout(msg)
+            log_model_skip(i, total, entry.variant, "already in CSV")
             continue
 
-        model_header = (
-            f"\n{'-'*60}\n"
-            f"{tag} START\n"
-            f"  Model   : {entry.variant}\n"
-            f"  Family  : {entry.family}\n"
-            f"  Format  : {entry.fmt}\n"
-            f"  Dataset : {entry.dataset}\n"
-            f"  Res     : {entry.resolution}\n"
-            f"  Path    : {entry.model_path}\n"
-            f"{'-'*60}"
+        log_model_start(
+            i,
+            total,
+            entry.variant,
+            entry.fmt,
+            family=entry.family,
+            dataset=entry.dataset,
+            resolution=entry.resolution,
         )
-        log_stdout(model_header)
 
         try:
-            res = run_evaluation(entry, validation_count)
+            res = workflow.run_benchmark(entry, validation_count)
 
-            failed = res.failed_step
-            if failed:
-                err_msg = f"{tag} FAILED at {failed}: {entry.variant} ({entry.fmt})\n"
-                err_msg += f"  stdout: {res.combined_stdout[-1000:]}\n"
-                err_msg += f"  stderr: {res.combined_stderr[-1000:]}\n"
-                log_error(err_msg)
-                log_stdout(f"{tag} FAILED: {entry.variant} ({entry.fmt}) — {failed}")
+            if res.failed_step:
+                log_model_fail(
+                    i,
+                    total,
+                    entry.variant,
+                    res.failed_step,
+                    res.combined_stderr[-500:] if res.combined_stderr else "no stderr",
+                )
                 continue
 
             metrics = parse_metrics(res.combined_stdout, res.combined_stderr)
@@ -200,19 +221,14 @@ def _run_benchmark_loop(
             if cinfo_path.exists():
                 _parse_network_c_info(cinfo_path, metrics)
 
-            missing = []
-            if not metrics.get("inference_time_ms"):
-                missing.append("inference_time_ms")
-            if not metrics.get("inf_per_sec"):
-                missing.append("inf_per_sec")
-            if not metrics.get("ap_50"):
-                missing.append("ap_50")
-            if res.pm_avg_inf_mW is None:
-                missing.append("pm_avg_inf_mW")
-
-            if missing:
-                warn_msg = f"  ⚠ WARNING: Missing metrics: {', '.join(missing)}"
-                log_stdout(warn_msg)
+            missing = [
+                k for k, v in {
+                    "inference_time_ms": metrics.get("inference_time_ms"),
+                    "inf_per_sec": metrics.get("inf_per_sec"),
+                    "ap_50": metrics.get("ap_50"),
+                    "pm_avg_inf_mW": res.pm_avg_inf_mW,
+                }.items() if not v
+            ]
 
             row = {
                 "host_time_iso": datetime.datetime.now(
@@ -270,29 +286,25 @@ def _run_benchmark_loop(
 
             append_result(row)
 
-            ap = metrics.get("ap_50", "N/A")
-            inf = metrics.get("inference_time_ms", "N/A")
-            power_parts: list[str] = []
-            if res.pm_avg_inf_mW is not None:
-                power_parts.append(f"pm_avg_inf={res.pm_avg_inf_mW:.1f}mW")
-            if res.pm_avg_idle_mW is not None:
-                power_parts.append(f"pm_avg_idle={res.pm_avg_idle_mW:.1f}mW")
-            if res.pm_avg_delta_mW is not None:
-                power_parts.append(f"pm_avg_delta={res.pm_avg_delta_mW:.1f}mW")
-
-            power_str = f", {', '.join(power_parts)}" if power_parts else ""
-            done_msg = f"{tag} DONE: ap_50={ap}, inference={inf}ms{power_str}"
-            log_stdout(done_msg)
+            log_model_done(
+                i,
+                total,
+                entry.variant,
+                ap_50=metrics.get("ap_50"),
+                inference_ms=metrics.get("inference_time_ms"),
+                pm_inf_mW=res.pm_avg_inf_mW,
+                pm_delta_mW=res.pm_avg_delta_mW,
+                missing=missing or None,
+            )
 
         except Exception as exc:
-            err_msg = f"{tag} EXCEPTION: {entry.variant} ({entry.fmt}): {exc}\n"
-            log_error(err_msg)
-            log_stdout(f"{tag} ERROR: {entry.variant} ({entry.fmt}) — {exc}")
+            log_model_fail(i, total, entry.variant, "exception", str(exc))
 
-    footer = f"\nBenchmark complete. Results in: {CSV_PATH}"
-    if power_running:
-        footer += f"\nINA228 log: {POWER_MEASURE_CSV_PATH}"
-    log_stdout(footer)
+    get_logger("benchmark").info(
+        "Benchmark complete",
+        results_csv=str(CSV_PATH),
+        power_csv=str(POWER_MEASURE_CSV_PATH) if power_running else None,
+    )
 
 
 def main() -> None:

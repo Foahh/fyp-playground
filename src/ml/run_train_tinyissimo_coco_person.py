@@ -10,18 +10,15 @@ Run from the repository root (outputs under results/model/):
 Quantization to INT8 TFLite is handled separately by run_quantize.py.
 """
 
-import argparse
 import sys
 from pathlib import Path
 
+import typer
 import yaml
 
-SRC = Path(__file__).resolve().parent.parent
-ROOT = SRC.parent
-if str(SRC) not in sys.path:
-    sys.path.insert(0, str(SRC))
+ROOT = Path(__file__).resolve().parents[2]
 
-from dataset.coco_yolo_data import materialize_coco_data_yaml
+from src.dataset.dataset_common import materialize_coco_data_yaml
 from ultralytics import YOLO
 
 TINY = ROOT / "external" / "TinyissimoYOLO"
@@ -57,46 +54,29 @@ def train_profile_kwargs(profile: str) -> dict:
     raise ValueError(f"Unknown profile: {profile!r}")
 
 
-def parse_args():
-    p = argparse.ArgumentParser(description="Train TinyissimoYOLO v8 on COCO Person")
-    p.add_argument(
-        "--size",
-        type=int,
-        required=True,
-        choices=[192, 256, 288, 320],
-        help="Input resolution (192, 256, 288, or 320)",
-    )
-    p.add_argument(
-        "--no-resume",
-        action="store_true",
-        help="Start a fresh run instead of resuming from last checkpoint",
-    )
-    p.add_argument("--optimizer", type=str, default="SGD")
-    p.add_argument(
-        "--profile",
-        choices=("paper", "powerful"),
-        default="paper",
-        help=(
-            "Training preset: TinyissimoYOLO paper (batch 64, paper-aligned LR/schedule) or "
-            "powerful (batch 256, linearly scaled LR, workers=8, cache=ram)"
-        ),
-    )
-    p.add_argument(
-        "--device",
-        default=None,
-        help="Ultralytics device (e.g. 0, 0,1 for multi-GPU, cpu); default is auto",
-    )
-    return p.parse_args()
+app = typer.Typer()
 
 
-def main():
-    args = parse_args()
+@app.command()
+def main(
+    size: int = typer.Option(..., help="Input resolution (192, 256, 288, or 320)"),
+    no_resume: bool = typer.Option(False, help="Start a fresh run instead of resuming from last checkpoint"),
+    optimizer: str = typer.Option("SGD"),
+    profile: str = typer.Option("paper", help="Training preset: paper (batch 64) or powerful (batch 256, workers=8, cache=ram)"),
+    device: str | None = typer.Option(None, help="Ultralytics device (e.g. 0, 0,1 for multi-GPU, cpu); default is auto"),
+):
+    if size not in [192, 256, 288, 320]:
+        typer.echo(f"Error: size must be one of [192, 256, 288, 320]", err=True)
+        raise typer.Exit(1)
+    if profile not in ("paper", "powerful"):
+        typer.echo(f"Error: profile must be 'paper' or 'powerful'", err=True)
+        raise typer.Exit(1)
     if not TINY.is_dir():
         raise FileNotFoundError(f"Expected TinyissimoYOLO at {TINY}")
 
-    run_name = run_name_for(args.size, args.profile)
+    run_name = run_name_for(size, profile)
     weights_dir = Path(PROJECT) / run_name / "weights"
-    resume = not args.no_resume
+    resume = not no_resume
 
     if resume:
         last_pt = weights_dir / "last.pt"
@@ -116,13 +96,13 @@ def main():
         data_cfg = yaml.safe_load(f)
     print(f"Using dataset YAML: {data_yaml}")
     print(f"Dataset root: {data_cfg.get('path')}")
-    print(f"Training profile: {args.profile}")
+    print(f"Training profile: {profile}")
 
     train_kw: dict = {
         "data": data_yaml,
         "classes": [0],
         "single_cls": True,
-        "imgsz": args.size,
+        "imgsz": size,
         "epochs": 1000,
         "optimizer": "SGD",
         "lrf": 0.01,
@@ -144,10 +124,10 @@ def main():
         "exist_ok": True,
         "patience": 0,
         "resume": resume,
-        **train_profile_kwargs(args.profile),
+        **train_profile_kwargs(profile),
     }
-    if args.device:
-        train_kw["device"] = args.device
+    if device:
+        train_kw["device"] = device
 
     model.train(**train_kw)
 
@@ -155,4 +135,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    app()

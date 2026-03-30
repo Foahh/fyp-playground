@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import csv
 import re
+import sys
 from html import unescape
 from pathlib import Path
 from urllib.parse import unquote, urlparse
@@ -15,14 +16,9 @@ from urllib.parse import unquote, urlparse
 import markdown
 from bs4 import BeautifulSoup
 
-from .constants import (
-    BASE_DIR,
-    CSV_COLUMNS_NO_POWER,
-    METRIC_PARSED_CSV_PATH,
-    MODEL_REGISTRY,
-    MODELZOO_DIR,
-    ensure_dirs,
-)
+from src.benchmark.constants import CSV_COLUMNS_NO_POWER
+from src.benchmark.core.registry import load_model_registry
+from src.benchmark.paths import BASE_DIR, METRIC_PARSED_CSV_PATH, MODELZOO_DIR
 
 
 def _norm_header(h: str) -> str:
@@ -452,7 +448,7 @@ def build_metric_rows() -> list[dict[str, str]]:
     cache: dict[str, dict[str, dict]] = {}
     rows: list[dict[str, str]] = []
 
-    for reg in MODEL_REGISTRY:
+    for reg in load_model_registry():
         readme_rel = reg.get("readme")
         if readme_rel is None:
             family_metrics: dict[str, dict] = {}
@@ -501,7 +497,7 @@ def _parsed_metrics_empty(row: dict[str, str]) -> bool:
 
 
 def write_metric_parsed_csv(path: Path | None = None) -> tuple[Path, int]:
-    ensure_dirs()
+    METRIC_PARSED_CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
     out = path or METRIC_PARSED_CSV_PATH
     built = build_metric_rows()
     rows: list[dict[str, str]] = []

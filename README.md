@@ -35,13 +35,13 @@ Use `project.py` as the main entry point for most tasks.
 ```sh
 git submodule update --init --recursive
 
-python project.py conda-ml
-python project.py conda-bhmk
+python project.py setup-conda-ml
+python project.py setup-conda-bhmk
 
 conda activate fyp-ml
-python project.py dataset-coco
+python project.py download-coco
 python project.py train --size 192
-python project.py quant --size 192
+python project.py quantize --size 192
 
 conda activate fyp-bhmk
 python project.py benchmark
@@ -89,22 +89,22 @@ Two Conda environments are used by default:
 
 | Purpose | Default env | Setup |
 |---|---|---|
-| Dataset prep, TinyissimoYOLO training, INT8 quantization | `fyp-ml` (`ST_YOLO_ENV`) | `python project.py conda-ml` |
-| Benchmarking, README comparison, Model Zoo finetuning | `fyp-bhmk` (`ST_STZOO_ENV`) | `python project.py conda-bhmk` |
+| Dataset prep, TinyissimoYOLO training, INT8 quantization | `fyp-ml` (`ST_YOLO_ENV`) | `python project.py setup-conda-ml` |
+| Benchmarking, README comparison, Model Zoo finetuning | `fyp-bhmk` (`ST_STZOO_ENV`) | `python project.py setup-conda-bhmk` |
 
 Command mapping:
 
 | Command | Env |
 |---|---|
-| `dataset-coco`, `dataset-finetune`, `train`, `quant` | `fyp-ml` |
-| `benchmark`, `compare`, `finetune-dataset`, `finetune` | `fyp-bhmk` |
-| `conda-ml`, `conda-bhmk` | base or any env with `conda` |
+| `download-coco`, `download-finetune`, `train`, `quantize` | `fyp-ml` |
+| `benchmark`, `compare-runs`, `prepare-finetune-dataset`, `finetune`, `verify-model-dtypes`, `parse-modelzoo-readme` | `fyp-bhmk` |
+| `setup-conda-ml`, `setup-conda-bhmk` | base or any env with `conda` |
 
 Create both environments:
 
 ```sh
-python project.py conda-ml
-python project.py conda-bhmk
+python project.py setup-conda-ml
+python project.py setup-conda-bhmk
 ```
 
 ### Prepare datasets
@@ -119,13 +119,13 @@ Default dataset location is `./datasets`:
 
 ```sh
 mkdir -p ./datasets
-python project.py dataset-coco
+python project.py download-coco
 ```
 
 To use a different dataset directory:
 
 ```sh
-DATASETS_DIR=~/datasets python project.py dataset-coco
+DATASETS_DIR=~/datasets python project.py download-coco
 ```
 
 ---
@@ -140,7 +140,7 @@ Activate `fyp-ml`:
 conda activate fyp-ml
 ```
 
-`conda-ml` already installs PyTorch from the CUDA 12.8 wheel index. To reinstall manually:
+`setup-conda-ml` already installs PyTorch from the CUDA 12.8 wheel index. To reinstall manually:
 
 ```sh
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
@@ -183,12 +183,12 @@ conda activate fyp-ml
 
 Main command:
 
-- `python project.py quant --size 192`
+- `python project.py quantize --size 192`
 
 Optional examples:
 
-- `python project.py quant --size 192 --no-eval`
-- `python project.py quant --size 192 --checkpoint /path/to/best.pt`
+- `python project.py quantize --size 192 --no-eval`
+- `python project.py quantize --size 192 --checkpoint /path/to/best.pt`
 
 Default output:
 
@@ -252,9 +252,10 @@ conda activate fyp-bhmk
 
 Benchmark examples:
 
-- Single model: `PYTHONPATH=src python -m benchmark --filter st_yoloxn_d033_w025_192`
-- All supported variants: `PYTHONPATH=src python -m benchmark`
-- Nominal then overdrive: `python project.py benchmark`
+- Single model: `python project.py benchmark --filter st_yoloxn_d033_w025_192`
+- Nominal mode only: `python project.py benchmark --mode nominal`
+- Overdrive mode only: `python project.py benchmark --mode overdrive`
+- Both modes (default): `python project.py benchmark`
 
 ### Optional power measurement
 
@@ -276,7 +277,7 @@ results/benchmark_nominal/power_measure.csv
 
 ### Compare README metrics
 
-Use `project.py compare` in `fyp-bhmk` to parse STM32 Model Zoo README tables and compare them against measured results.
+Use `project.py compare-runs` in `fyp-bhmk` to parse STM32 Model Zoo README tables and compare them against measured results.
 
 Reference README files are scraped from:
 
@@ -294,10 +295,10 @@ Default files:
 
 Examples:
 
-- Refresh parsed CSV and compare to overdrive: `python project.py compare`
-- Parse only: `python project.py compare parse`
-- Compare README vs nominal: `python project.py compare compare --mode readme-nominal`
-- Compare nominal vs overdrive: `python project.py compare compare --mode nominal-overdrive`
+- Refresh parsed CSV and compare to overdrive: `python project.py compare-runs`
+- Parse only: `python project.py compare-runs parse`
+- Compare README vs nominal: `python project.py compare-runs compare --mode readme-nominal`
+- Compare nominal vs overdrive: `python project.py compare-runs compare --mode nominal-overdrive`
 
 Useful flags:
 
@@ -310,7 +311,7 @@ Useful flags:
 Full help:
 
 ```sh
-python project.py compare compare --help
+python project.py compare-runs compare --help
 ```
 
 ---
@@ -334,10 +335,10 @@ conda activate fyp-bhmk
 
 Examples:
 
-- Default: `python project.py finetune-dataset -- --config configs/finetune_dataset.yaml`
-- Skip format conversion: `python project.py finetune-dataset -- --config configs/finetune_dataset.yaml --skip-convert`
-- Run analysis: `python project.py finetune-dataset -- --config configs/finetune_dataset.yaml --analyze`
-- Pass Hydra override: `python project.py finetune-dataset -- --config configs/finetune_dataset.yaml --override hydra.run.dir=./configs/outputs/dataset/debug`
+- Default: `python project.py prepare-finetune-dataset -- --config configs/finetune_dataset.yaml`
+- Skip format conversion: `python project.py prepare-finetune-dataset -- --config configs/finetune_dataset.yaml --skip-convert`
+- Run analysis: `python project.py prepare-finetune-dataset -- --config configs/finetune_dataset.yaml --analyze`
+- Pass Hydra override: `python project.py prepare-finetune-dataset -- --config configs/finetune_dataset.yaml --override hydra.run.dir=./configs/outputs/dataset/debug`
 
 ### Run finetuning
 

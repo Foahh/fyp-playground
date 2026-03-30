@@ -1,4 +1,4 @@
-"""Shared helpers for conda_setup_*.py scripts."""
+"""Shared helpers for run_conda_setup_*.py scripts."""
 
 from __future__ import annotations
 

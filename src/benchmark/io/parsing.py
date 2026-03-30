@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 from typing import Optional
 
-from .constants import SERVICES_DIR
+from ..paths import SERVICES_DIR
 
 
 def _find_network_c_info() -> Optional[Path]:

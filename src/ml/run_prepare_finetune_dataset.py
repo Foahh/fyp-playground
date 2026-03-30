@@ -3,10 +3,11 @@
 
 from __future__ import annotations
 
-import argparse
 import subprocess
 import sys
 from pathlib import Path
+
+import typer
 
 ROOT = Path(__file__).resolve().parents[2]
 OD_ROOT = ROOT / "external" / "stm32ai-modelzoo-services" / "object_detection"
@@ -39,51 +40,29 @@ def _run(script: Path, config_file: Path, overrides: list[str]) -> None:
     subprocess.run(cmd, cwd=ROOT, check=True)
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Prepare dataset for ST Model Zoo finetuning (convert -> TFS -> optional analysis)."
-    )
-    parser.add_argument(
-        "--config",
-        type=Path,
-        required=True,
-        help="Path to the dataset config YAML used by ST Model Zoo dataset tools.",
-    )
-    parser.add_argument(
-        "--skip-convert",
-        action="store_true",
-        help="Skip converter.py and only run dataset_create_tfs.py.",
-    )
-    parser.add_argument(
-        "--analyze",
-        action="store_true",
-        help="Run dataset_analysis.py after TFS creation.",
-    )
-    parser.add_argument(
-        "--override",
-        action="append",
-        default=[],
-        metavar="KEY=VALUE",
-        help="Hydra override passed through to each invoked dataset tool. Repeat as needed.",
-    )
-    return parser.parse_args()
+app = typer.Typer()
 
 
-def main() -> int:
-    args = parse_args()
-    overrides = list(args.override)
+@app.command()
+def main(
+    config: Path = typer.Option(..., help="Path to the dataset config YAML used by ST Model Zoo dataset tools."),
+    skip_convert: bool = typer.Option(False, help="Skip converter.py and only run dataset_create_tfs.py."),
+    analyze: bool = typer.Option(False, help="Run dataset_analysis.py after TFS creation."),
+    override: list[str] = typer.Option([], help="Hydra override passed through to each invoked dataset tool. Repeat as needed."),
+) -> int:
+    overrides = list(override)
 
-    if not args.skip_convert:
-        _run(CONVERTER, args.config, overrides)
+    if not skip_convert:
+        _run(CONVERTER, config, overrides)
 
-    _run(CREATE_TFS, args.config, overrides)
+    _run(CREATE_TFS, config, overrides)
 
-    if args.analyze:
-        _run(ANALYSIS, args.config, overrides)
+    if analyze:
+        _run(ANALYSIS, config, overrides)
 
     print("Dataset preparation done.")
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(app())

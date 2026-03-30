@@ -2,7 +2,9 @@
 
 import csv
 
-from .constants import CSV_COLUMNS, CSV_PATH
+from ..constants import CSV_COLUMNS
+from ..paths import CSV_PATH
+from ..utils.logutil import configure_logging, get_logger
 
 
 def load_completed() -> set[tuple[str, str]]:
@@ -30,16 +32,12 @@ def append_result(row: dict):
 
 
 def log_error(msg: str):
-    """Log error to console (Rich), structlog pipeline, and ERROR_LOG."""
-    from .logutil import configure_logging, get_logger
-
+    """Log error to console (Rich), structlog pipeline, and BENCHMARK_LOG."""
     configure_logging()
     get_logger("benchmark").error(msg)
 
 
 def log_stdout(msg: str):
-    """Log to console, structlog pipeline, and STDOUT_LOG (non-error)."""
-    from .logutil import configure_logging, get_logger
-
+    """Log to console, structlog pipeline, and BENCHMARK_LOG (info level)."""
     configure_logging()
     get_logger("benchmark").info(msg)

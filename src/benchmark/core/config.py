@@ -1,11 +1,12 @@
 """Evaluation config builder: loads a model's base YAML and applies benchmark overrides."""
 
-from copy import deepcopy
 from pathlib import Path
 
 import yaml
 
-from .constants import (
+from ...common.utils import deep_merge
+from ..constants import SSD_FAMILIES
+from ..paths import (
     COCO_80_ANNOTATIONS,
     COCO_80_TFS_TEST,
     COCO_IMAGES,
@@ -15,17 +16,6 @@ from .constants import (
     STEDGEAI_PATH,
 )
 from .models import ModelEntry
-
-
-def _deep_merge(base: dict, override: dict) -> dict:
-    """Recursively merge *override* into *base*, returning a new dict."""
-    result = deepcopy(base)
-    for key, value in override.items():
-        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-            result[key] = _deep_merge(result[key], value)
-        else:
-            result[key] = deepcopy(value)
-    return result
 
 
 def build_eval_config(entry: ModelEntry) -> Path:
@@ -71,8 +61,6 @@ def build_eval_config(entry: ModelEntry) -> Path:
         overrides["dataset"] = {
             "test_images_path": COCO_IMAGES,
             "test_annotations_path": coco_annotations,
-            # Null out paths unused during evaluation; the base config may
-            # contain relative paths that do not resolve from the benchmark CWD.
             "quantization_path": None,
             "prediction_path": None,
         }
@@ -81,8 +69,6 @@ def build_eval_config(entry: ModelEntry) -> Path:
             "test_path": tfs_test,
         }
 
-    # Handle model_name vs model_path exclusivity.
-    # PyTorch models allow both; TF models don't (cfg_utils.py:691).
     base_model = base.get("model", {})
 
     if entry.framework == "torch":
@@ -91,13 +77,11 @@ def build_eval_config(entry: ModelEntry) -> Path:
     else:
         overrides["model"]["model_name"] = None
 
-    # Add input_shape when the base config doesn't provide it so that
-    # downstream preprocessing knows the target resolution.
     if not base_model.get("input_shape"):
         overrides["model"]["input_shape"] = [entry.resolution, entry.resolution, 3]
 
-    overrides = _deep_merge(overrides, entry.overrides)
-    merged = _deep_merge(base, overrides)
+    overrides = deep_merge(overrides, entry.overrides)
+    merged = deep_merge(base, overrides)
 
     config_path = SERVICES_DIR / "_benchmark_temp_config.yaml"
     with open(config_path, "w", encoding="utf-8") as f:

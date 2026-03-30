@@ -18,14 +18,12 @@ at the end.
 
 from __future__ import annotations
 
-import argparse
 import sys
 from pathlib import Path
 
-SRC = Path(__file__).resolve().parent.parent
-ROOT = SRC.parent
-if str(SRC) not in sys.path:
-    sys.path.insert(0, str(SRC))
+import typer
+
+ROOT = Path(__file__).resolve().parents[2]
 
 MODELS = ROOT / "results" / "model"
 
@@ -53,7 +51,7 @@ def _quantize(img_size: int, pt_path: Path) -> Path:
     """Export quantized INT8 TFLite via Ultralytics; return path Ultralytics wrote."""
     from ultralytics import YOLO
 
-    from dataset.coco_yolo_data import materialize_coco_data_yaml
+    from dataset.dataset_common import materialize_coco_data_yaml
 
     data_yaml = materialize_coco_data_yaml()
 
@@ -88,7 +86,7 @@ def _eval_tflite_path(exported_float_io: Path) -> Path:
 def _evaluate(tflite_path: Path, img_size: int) -> None:
     """Run Ultralytics evaluation on the quantized TFLite model."""
     from ultralytics import YOLO
-    from dataset.coco_yolo_data import materialize_coco_data_yaml
+    from dataset.dataset_common import materialize_coco_data_yaml
 
     data_yaml = materialize_coco_data_yaml()
     # Keep val runs beside the TFLite (no separate quantized/ tree).
@@ -110,40 +108,26 @@ def _evaluate(tflite_path: Path, img_size: int) -> None:
         print("Metrics:", metrics.results_dict)
 
 
-def parse_args():
-    p = argparse.ArgumentParser(
-        description="Quantize model to INT8 TFLite via Ultralytics PTQ export"
-    )
-    p.add_argument(
-        "--size",
-        type=int,
-        required=True,
-        choices=[192, 256, 288, 320],
-        help="Must match training resolution",
-    )
-    p.add_argument(
-        "--checkpoint",
-        type=Path,
-        default=None,
-        help="Path to .pt checkpoint (default: auto-detect best.pt from results/model/)",
-    )
-    p.add_argument(
-        "--no-eval",
-        action="store_true",
-        help="Skip evaluation after quantization",
-    )
-    return p.parse_args()
+app = typer.Typer()
 
 
-def main():
-    args = parse_args()
-    pt_path = _resolve_checkpoint(args.size, args.checkpoint)
+@app.command()
+def main(
+    size: int = typer.Option(..., help="Must match training resolution"),
+    checkpoint: Path | None = typer.Option(None, help="Path to .pt checkpoint (default: auto-detect best.pt from results/model/)"),
+    no_eval: bool = typer.Option(False, help="Skip evaluation after quantization"),
+):
+    if size not in [192, 256, 288, 320]:
+        typer.echo(f"Error: size must be one of [192, 256, 288, 320]", err=True)
+        raise typer.Exit(1)
 
-    exported = _quantize(args.size, pt_path)
+    pt_path = _resolve_checkpoint(size, checkpoint)
+
+    exported = _quantize(size, pt_path)
     eval_path = _eval_tflite_path(exported)
 
-    if not args.no_eval:
-        _evaluate(eval_path, args.size)
+    if not no_eval:
+        _evaluate(eval_path, size)
 
     print()
     print("Export return path (often float I/O):")
@@ -156,11 +140,11 @@ def main():
             "Warning: *_full_integer_quant.tflite not found next to export; "
             "evaluated float-I/O model instead."
         )
-    if not args.no_eval:
+    if not no_eval:
         print("Ultralytics val output (metrics, plots):")
         print(f"  {eval_path.parent / 'val_int8'}")
     print("Done.")
 
 
 if __name__ == "__main__":
-    main()
+    app()

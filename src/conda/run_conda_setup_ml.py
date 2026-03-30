@@ -3,7 +3,7 @@
 
 Includes Ultralytics and TensorFlow (via repo-root ``requirements-ml.txt``) for
 ``src/ml/run_train_tinyissimo_coco_person.py``, ``src/ml/run_quantize.py``,
-``src/dataset/load_coco.py``, and ``src/dataset/load_finetune_data.py``.
+``src/dataset/run_download_coco_dataset.py``, and ``src/dataset/run_download_finetune_dataset.py``.
 """
 
 from __future__ import annotations
@@ -12,13 +12,9 @@ import os
 import sys
 from pathlib import Path
 
-_SRC = Path(__file__).resolve().parent.parent
-if str(_SRC) not in sys.path:
-    sys.path.insert(0, str(_SRC))
+PATCH_SCRIPT = Path(__file__).resolve().parent / "run_patch_ultralytics_per_channel_quant.py"
 
-PATCH_SCRIPT = Path(__file__).resolve().parent / "patch_ultralytics_per_channel_quant.py"
-
-from conda.conda_setup_common import (
+from src.conda.conda_setup_common import (
     conda_install,
     conda_run,
     ensure_conda_env,

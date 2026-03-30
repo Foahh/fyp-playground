@@ -1,14 +1,15 @@
-"""COCO data YAML with absolute paths for Ultralytics."""
+"""Shared dataset helpers (e.g. COCO data YAML with absolute paths for Ultralytics)."""
 
 from __future__ import annotations
 
-import os
 import tempfile
 from pathlib import Path
 
 import yaml
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+from ..common.paths import get_datasets_dir, get_repo_root
+
+REPO_ROOT = get_repo_root()
 COCO_TEMPLATE_YAML = (
     REPO_ROOT
     / "external"
@@ -18,19 +19,14 @@ COCO_TEMPLATE_YAML = (
     / "datasets"
     / "coco.yaml"
 )
-DEFAULT_DATASETS_ROOT = (REPO_ROOT / "datasets").resolve()
 
 
 def _candidate_coco_roots() -> list[Path]:
-    roots: list[Path] = []
-    env_root = os.environ.get("DATASETS_DIR")
-    if env_root:
-        base = Path(env_root).expanduser()
-        roots.append((base / "coco_2017_person").resolve())
-        roots.append((base / "coco").resolve())
-    roots.append((DEFAULT_DATASETS_ROOT / "coco_2017_person").resolve())
-    roots.append((DEFAULT_DATASETS_ROOT / "coco").resolve())
-    return roots
+    datasets_dir = get_datasets_dir()
+    return [
+        (datasets_dir / "coco_2017_person").resolve(),
+        (datasets_dir / "coco").resolve(),
+    ]
 
 
 def _is_person_split(root: Path) -> bool:
@@ -71,12 +67,12 @@ def materialize_coco_data_yaml(require_person: bool = False) -> str:
                 + ", ".join(
                     f"{p / 'train2017.txt'} and {p / 'val2017.txt'}" for p in tried
                 )
-                + ". Re-run src/dataset/load_coco.py (or ``python project.py dataset-coco``) to regenerate person splits."
+                + ". Re-run src/dataset/run_download_coco_dataset.py (or ``python project.py download-coco``) to regenerate person splits."
             )
         raise FileNotFoundError(
             "Missing COCO split files. Checked: "
             + ", ".join(f"{p / 'train2017.txt'} and {p / 'val2017.txt'}" for p in tried)
-            + ". Set DATASETS_DIR (optional) and run load_coco.py."
+            + ". Set DATASETS_DIR (optional) and run src/dataset/run_download_coco_dataset.py."
         )
     with COCO_TEMPLATE_YAML.open(encoding="utf-8") as f:
         cfg = yaml.safe_load(f)

@@ -12,45 +12,18 @@ from typing import Any, Optional
 
 from tenacity import Retrying, stop_after_attempt, wait_fixed
 
-from .constants import POWER_MEASURE_CSV_PATH
+from ..paths import POWER_MEASURE_CSV_PATH
 
 
-def _emit_stdout(msg: str) -> None:
+def _log(level: str, msg: str, **kwargs) -> None:
     try:
-        from .logutil import configure_logging, get_logger
-
-        configure_logging()
-        get_logger("power").info(msg)
+        from ..utils.logutil import get_logger
+        getattr(get_logger("power"), level)(msg, **kwargs)
     except Exception:
-        print(msg)
-
-
-def _emit_error(msg: str) -> None:
-    try:
-        from .logutil import configure_logging, get_logger
-
-        configure_logging()
-        get_logger("power").error(msg)
-    except Exception:
-        print(msg)
-
-
-def _format_sample_log_line(sample: dict) -> str:
-    # Stable, grep-friendly, single-line format.
-    host = datetime.now(timezone.utc).isoformat()
-    return (
-        "PM_SAMPLE "
-        f"host_time_iso={host} "
-        f"timestamp_us={sample['timestamp_us']} "
-        f"energy_j={sample['energy_j']:.9f} "
-        f"duration_us={sample['duration_us']} "
-        f"is_inference={int(sample['is_inference'])} "
-        f"avg_mw={sample['avg_mw']:.6f}"
-    )
-
+        print(f"[{level.upper()}] {msg}")
 
 # Add external/fyp-power-measure to path for protobuf import
-_pb_path = Path(__file__).resolve().parents[2] / "external" / "fyp-power-measure"
+_pb_path = Path(__file__).resolve().parents[3] / "external" / "fyp-power-measure"
 if str(_pb_path) not in sys.path:
     sys.path.insert(0, str(_pb_path))
 
@@ -108,7 +81,7 @@ def _auto_detect_esp32c6() -> Optional[str]:
             best_port = port.device
 
     if best_port and best_score > 0:
-        _emit_stdout(f"Auto-detected ESP32-C6 power monitor: {best_port} (score={best_score})")
+        _log("info", "Auto-detected power monitor", port=best_port, score=best_score)
 
     return best_port
 
@@ -226,21 +199,17 @@ class PowerMeasureSession:
 
     def start(self, port: Optional[str], baud: int) -> bool:
         if not _HAS_PROTOBUF:
-            _emit_error("WARNING: Power measurement disabled - protobuf module not found (pip install protobuf)")
+            _log("warning", "Power disabled: protobuf not found")
             return False
         try:
             import serial
         except ImportError:
-            _emit_error("WARNING: Power measurement disabled - pyserial module not found (pip install pyserial)")
+            _log("warning", "Power disabled: pyserial not found")
             return False
         if not port:
             port = _auto_detect_esp32c6()
         if not port:
-            _emit_error(
-                "WARNING: Power measurement disabled - could not find an ESP32-C6 power monitor serial port. "
-                "If the monitor is connected via USB, ensure USB CDC (\"USC-CDC\") is enabled on the ESP32 so it "
-                "appears as /dev/ttyACM* (or pass the correct device explicitly with --power-serial)."
-            )
+            _log("warning", "Power disabled: no ESP32-C6 found", hint="enable USB-CDC or use --power-serial")
             return False
 
         def _open_serial() -> Any:
@@ -257,7 +226,7 @@ class PowerMeasureSession:
             self._ser = retry_open(_open_serial)
             self.effective_port = str(self._ser.port)
         except Exception as e:
-            _emit_error(f"WARNING: Failed to connect to power measurement serial port {port}: {e}")
+            _log("error", "Failed to open power serial", port=port, error=str(e))
             self._ser = None
             return False
 
@@ -273,14 +242,11 @@ class PowerMeasureSession:
             )
             retry_hs(_handshake_or_raise)
         except Exception:
-            _emit_error(
-                "WARNING: Power measurement disabled - no ACK from power monitor. "
-                "Ensure the device is running firmware with PM_PING/PM_ACK handshake support."
-            )
+            _log("warning", "Power disabled: no handshake ACK", hint="check firmware PM_PING/PM_ACK support")
             try:
                 self._ser.close()
             except Exception as e:
-                _emit_error(f"WARNING: Failed to close power serial after handshake failure: {e}")
+                _log("error", "Failed to close serial after handshake", error=str(e))
             self._ser = None
             return False
 
@@ -303,7 +269,7 @@ class PowerMeasureSession:
             self._ser.write(self._HANDSHAKE_REQUEST)
             self._ser.flush()
         except Exception as e:
-            _emit_error(f"WARNING: Handshake write failed: {e}")
+            _log("error", "Handshake write failed", error=str(e))
             return False
 
         deadline = time.monotonic() + self._HANDSHAKE_TIMEOUT_S
@@ -311,7 +277,7 @@ class PowerMeasureSession:
             try:
                 line = self._ser.readline()
             except Exception as e:
-                _emit_error(f"WARNING: Handshake read failed: {e}")
+                _log("error", "Handshake read failed", error=str(e))
                 return False
             if not line:
                 continue
@@ -319,7 +285,7 @@ class PowerMeasureSession:
             if not text:
                 continue
             if text.startswith(self._HANDSHAKE_ACK_PREFIX):
-                _emit_stdout(f"Power monitor ACK: {text}")
+                _log("info", "Power monitor connected", ack=text)
                 self._ser.reset_input_buffer()
                 return True
         return False
@@ -333,13 +299,13 @@ class PowerMeasureSession:
             try:
                 self._ser.close()
             except Exception as e:
-                _emit_error(f"WARNING: Failed to close power serial: {e}")
+                _log("error", "Failed to close power serial", error=str(e))
             self._ser = None
         if self._csv_fd is not None:
             try:
                 self._csv_fd.close()
             except Exception as e:
-                _emit_error(f"WARNING: Failed to close power CSV file: {e}")
+                _log("error", "Failed to close power CSV", error=str(e))
             self._csv_fd = None
 
     def _write_csv_row(self, sample: dict) -> None:
@@ -388,7 +354,7 @@ class PowerMeasureSession:
                     if self._capture_validate:
                         self._validate_samples.append(sample)
             except Exception as e:
-                _emit_error(f"WARNING: Power serial reader loop error: {e}")
+                _log("error", "Power reader error", error=str(e))
                 continue
 
     def begin_validate_window(self) -> None:

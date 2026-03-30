@@ -14,20 +14,19 @@ Environment
 -----------
 Use the ``fyp-ml`` conda env (same as COCO prep / training)::
 
-    python project.py conda-ml
+    python project.py setup-conda-ml
     conda activate fyp-ml    # or $ST_YOLO_ENV
 
 Usage
 -----
-python load_finetune_data.py                          # all datasets
-python load_finetune_data.py --dataset ego2hands      # single dataset
-python load_finetune_data.py --skip-download          # convert only (pre-downloaded)
-python load_finetune_data.py --wget --no-check-certificate
+python src/dataset/run_download_finetune_dataset.py                      # all datasets
+python src/dataset/run_download_finetune_dataset.py --dataset ego2hands    # single dataset
+python src/dataset/run_download_finetune_dataset.py --skip-download        # convert only (pre-downloaded)
+python src/dataset/run_download_finetune_dataset.py --wget --no-check-certificate
 """
 
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import random
@@ -38,6 +37,7 @@ import zipfile
 from pathlib import Path
 
 import numpy as np
+import typer
 from PIL import Image
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -806,74 +806,47 @@ def merge_for_finetune() -> None:
 #  CLI
 # ═══════════════════════════════════════════════════════════════════════════════
 
-DATASET_CHOICES = ["ego2hands", "construction_tools", "metu_alet", "all"]
+app = typer.Typer()
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Download and prepare finetune datasets "
-        "(Ego2Hands, Construction Tools, METU-ALET)",
-    )
-    parser.add_argument(
-        "--dataset",
-        choices=DATASET_CHOICES,
-        default="all",
-        help="Dataset(s) to process (default: all)",
-    )
-    parser.add_argument(
-        "--wget",
-        action="store_true",
-        help="Use wget instead of aria2c for downloads",
-    )
-    parser.add_argument(
-        "--ca-certificate",
-        metavar="FILE",
-        help="Path to CA certificate bundle",
-    )
-    parser.add_argument(
-        "--no-check-certificate",
-        action="store_true",
-        help="Disable server certificate verification",
-    )
-    parser.add_argument(
-        "--skip-download",
-        action="store_true",
-        help="Skip download step; only run conversion on pre-downloaded data",
-    )
-    parser.add_argument(
-        "--skip-merge",
-        action="store_true",
-        help="Skip the final merge into fyp_merged/",
-    )
-    args = parser.parse_args()
+@app.command()
+def main(
+    dataset: str = typer.Option("all", help="Dataset(s) to process (ego2hands, construction_tools, metu_alet, all)"),
+    wget: bool = typer.Option(False, help="Use wget instead of aria2c for downloads"),
+    ca_certificate: str | None = typer.Option(None, help="Path to CA certificate bundle"),
+    no_check_certificate: bool = typer.Option(False, help="Disable server certificate verification"),
+    skip_download: bool = typer.Option(False, help="Skip download step; only run conversion on pre-downloaded data"),
+    skip_merge: bool = typer.Option(False, help="Skip the final merge into fyp_merged/"),
+) -> int:
+    if dataset not in ["ego2hands", "construction_tools", "metu_alet", "all"]:
+        typer.echo(f"Error: dataset must be one of [ego2hands, construction_tools, metu_alet, all]", err=True)
+        raise typer.Exit(1)
 
     dl_kwargs = dict(
-        use_wget=args.wget,
-        ca_certificate=args.ca_certificate,
-        check_certificate=not args.no_check_certificate,
+        use_wget=wget,
+        ca_certificate=ca_certificate,
+        check_certificate=not no_check_certificate,
     )
 
-    ds = args.dataset
-
-    if ds in ("ego2hands", "all"):
+    if dataset in ("ego2hands", "all"):
         print("\n=== Ego2Hands (hand detection) ===")
-        if not args.skip_download:
+        if not skip_download:
             download_ego2hands(**dl_kwargs)
         convert_ego2hands()
 
-    if ds in ("construction_tools", "all"):
+    if dataset in ("construction_tools", "all"):
         print("\n=== Construction Tools — Zenodo ===")
-        if not args.skip_download:
+        if not skip_download:
             download_construction_tools(**dl_kwargs)
         convert_construction_tools()
 
-    if ds in ("metu_alet", "all"):
+    if dataset in ("metu_alet", "all"):
         print("\n=== METU-ALET (tool detection) ===")
-        if not args.skip_download:
+        if not skip_download:
             download_metu_alet(**dl_kwargs)
         convert_metu_alet()
 
-    if not args.skip_merge:
+    if not skip_merge:
         print("\n=== Merging into fyp_merged/ ===")
         merge_for_finetune()
 
@@ -882,4 +855,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(app())

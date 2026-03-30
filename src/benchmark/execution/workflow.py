@@ -1,22 +1,25 @@
 """N6 on-target workflow orchestration: generate, load, validate, evaluate."""
 
 import json
+import logging
 import os
 import re
 import subprocess
 import sys
-import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
 from tenacity import Retrying, stop_after_attempt, wait_fixed
 
-from .config import build_eval_config
-from .constants import N6_WORKDIR, SERVICES_DIR, SSD_FAMILIES, STEDGEAI_PATH, STDOUT_LOG
-from .models import ModelEntry
+from ..constants import SSD_FAMILIES
+from ..paths import BENCHMARK_LOG, N6_WORKDIR, SERVICES_DIR, STEDGEAI_PATH
+from ..core.config import build_eval_config
+from ..core.models import ModelEntry
+from ..utils.logutil import get_logger
 from .power_serial import (
     begin_validate_capture,
     compute_power_metrics,
@@ -24,12 +27,10 @@ from .power_serial import (
     is_power_session_active,
 )
 
-_STEDGEAI_VERSION_CACHE: Optional[str] = None
-
 
 def _append_stdout_log(text: str) -> None:
-    """Append plain text to benchmark stdout log."""
-    with open(STDOUT_LOG, "a", encoding="utf-8") as fd:
+    """Append plain text to benchmark.log."""
+    with open(BENCHMARK_LOG, "a", encoding="utf-8") as fd:
         fd.write(text)
         if not text.endswith("\n"):
             fd.write("\n")
@@ -40,12 +41,9 @@ def _get_n6_scripts_dir() -> Path:
     return Path(os.environ["STEDGEAI_CORE_DIR"]) / "scripts" / "N6_scripts"
 
 
+@lru_cache(maxsize=1)
 def get_stedgeai_version() -> str:
     """Return normalized stedgeai version string, or ``unknown`` on failure."""
-    global _STEDGEAI_VERSION_CACHE
-    if _STEDGEAI_VERSION_CACHE is not None:
-        return _STEDGEAI_VERSION_CACHE
-
     def _probe_version() -> tuple[str, str, int]:
         return _run_streaming(
             [STEDGEAI_PATH, "--version"],
@@ -63,13 +61,11 @@ def get_stedgeai_version() -> str:
         if rc == 0:
             first = out.strip().splitlines()[0] if out.strip() else ""
             m = re.search(r"\bv?(\d+\.\d+\.\d+)\b", first)
-            _STEDGEAI_VERSION_CACHE = m.group(1) if m else "unknown"
-            return _STEDGEAI_VERSION_CACHE
+            return m.group(1) if m else "unknown"
     except Exception:
         pass
 
-    _STEDGEAI_VERSION_CACHE = "unknown"
-    return _STEDGEAI_VERSION_CACHE
+    return "unknown"
 
 
 def _get_st_ai_output_dir() -> Path:
@@ -80,6 +76,16 @@ def _get_st_ai_output_dir() -> Path:
 def _neuralart_profile() -> str:
     """Return the --st-neural-art argument with absolute path to user_neuralart.json."""
     return f"profile_O3@{_get_n6_scripts_dir() / 'user_neuralart.json'}"
+
+
+def _quiet_ai_runner_logger() -> logging.Logger:
+    """Logger that suppresses stm_ai_runner console/file noise (aligned with quiet ST tools)."""
+    log = logging.getLogger("fyp_benchmark.stm_ai_runner")
+    log.handlers.clear()
+    log.addHandler(logging.NullHandler())
+    log.setLevel(logging.CRITICAL)
+    log.propagate = False
+    return log
 
 
 def _write_n6_loader_config() -> Path:
@@ -105,53 +111,37 @@ def _write_n6_loader_config() -> Path:
 def _run_streaming(
     cmd: list, cwd: str, timeout: int, env=None, log_header: str = ""
 ) -> tuple[str, str, int]:
-    """Run a subprocess; capture stdout/stderr in memory and append to STDOUT_LOG only."""
-    proc = subprocess.Popen(
-        cmd,
-        cwd=cwd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        env=env,
-    )
-
-    stdout_lines: list[str] = []
-    stderr_lines: list[str] = []
-
-    _log_file = open(STDOUT_LOG, "a", encoding="utf-8")
-    if log_header:
-        _log_file.write(log_header + "\n")
-        _log_file.flush()
-
-    def _reader(pipe, lines, log_file):
-        for line in pipe:
-            lines.append(line)
-            log_file.write(line)
-            log_file.flush()
-
-    t_out = threading.Thread(
-        target=_reader, args=(proc.stdout, stdout_lines, _log_file)
-    )
-    t_err = threading.Thread(
-        target=_reader, args=(proc.stderr, stderr_lines, _log_file)
-    )
-    t_out.start()
-    t_err.start()
-
+    """Run a subprocess; capture stdout/stderr and append to BENCHMARK_LOG."""
     try:
-        proc.wait(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        t_out.join()
-        t_err.join()
-        _log_file.close()
+        result = subprocess.run(
+            cmd,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            env=env,
+        )
+        stdout, stderr, rc = result.stdout, result.stderr, result.returncode
+    except subprocess.TimeoutExpired as e:
+        stdout = e.stdout.decode() if e.stdout else ""
+        stderr = e.stderr.decode() if e.stderr else ""
+        rc = -1
+        # Re-raise after logging
+        with open(BENCHMARK_LOG, "a", encoding="utf-8") as f:
+            if log_header:
+                f.write(log_header + "\n")
+            f.write(stdout)
+            f.write(stderr)
         raise
 
-    t_out.join()
-    t_err.join()
-    _log_file.close()
+    # Append to log file
+    with open(BENCHMARK_LOG, "a", encoding="utf-8") as f:
+        if log_header:
+            f.write(log_header + "\n")
+        f.write(stdout)
+        f.write(stderr)
 
-    return "".join(stdout_lines), "".join(stderr_lines), proc.returncode
+    return stdout, stderr, rc
 
 
 def _step_generate(entry: ModelEntry) -> tuple[str, str, int]:
@@ -232,7 +222,7 @@ def _step_validate(entry: ModelEntry, n_runs: int = 10) -> tuple[str, str, int]:
     )
     try:
         output_lines.append(f"Running {n_runs} inferences using ai_runner...")
-        runner = AiRunner(debug=False)
+        runner = AiRunner(logger=_quiet_ai_runner_logger())
         _append_stdout_log("VALIDATE_STEP connect serial:921600")
         runner.connect("serial:921600")
 
@@ -265,6 +255,7 @@ def _step_validate(entry: ModelEntry, n_runs: int = 10) -> tuple[str, str, int]:
 
             # Sleep 50ms between runs for power measurement denoising
             time.sleep(0.05)
+            get_logger("workflow").info("Inference done", variant=entry.variant, run=f"{i+1}/{n_runs}", duration_ms=d_ms)
 
         runner.disconnect()
         _append_stdout_log("VALIDATE_STEP disconnected")
@@ -298,10 +289,14 @@ def _step_evaluate(entry: ModelEntry) -> tuple[str, str, int]:
         ".",
         "--config-name",
         "_benchmark_temp_config",
+        # Match stedgeai --quiet: no Hydra banners / default job logging on stderr.
+        "hydra/job_logging=disabled",
+        "hydra/hydra_logging=disabled",
     ]
 
     env = os.environ.copy()
     env["HYDRA_FULL_ERROR"] = "1"
+    env["TQDM_DISABLE"] = "1"
     # Force TensorFlow host evaluation onto CPU to avoid CUDA runtime instability (I am using 5060...).
     env["CUDA_VISIBLE_DEVICES"] = "-1"
     return _run_streaming(
@@ -362,19 +357,19 @@ class EvalResult:
         return None
 
 
-def run_evaluation(entry: ModelEntry, validation_count: int) -> EvalResult:
+def run_benchmark(entry: ModelEntry, validation_count: int) -> EvalResult:
     """Run the full doc-based 4-step benchmark workflow."""
     res = EvalResult()
 
     try:
         # Step 1: Generate
-        print("  → Generating C code...")
+        get_logger("workflow").info("Generating C code", variant=entry.variant)
         res.generate_out, res.generate_err, res.generate_rc = _step_generate(entry)
         if res.generate_rc != 0:
             return res
 
         # Step 2: Build & Flash
-        print("  → Building and flashing...")
+        get_logger("workflow").info("Building and flashing", variant=entry.variant)
         res.load_out, res.load_err, res.load_rc = _step_load(entry)
         if res.load_rc != 0:
             return res
@@ -382,9 +377,7 @@ def run_evaluation(entry: ModelEntry, validation_count: int) -> EvalResult:
         time.sleep(1)
 
         # Steps 3–4: Validate on device (power) and host-side evaluation — independent I/O, run concurrently.
-        print(
-            f"  → Validating on device ({validation_count}x inferences) and host evaluation (parallel)..."
-        )
+        get_logger("workflow").info("Validating on device", variant=entry.variant, count=validation_count)
         validate_t0 = time.monotonic()
         begin_validate_capture()
         executor = ThreadPoolExecutor(max_workers=2)
@@ -396,6 +389,7 @@ def run_evaluation(entry: ModelEntry, validation_count: int) -> EvalResult:
             fut_evaluate = executor.submit(_step_evaluate, entry)
             try:
                 res.validate_out, res.validate_err, res.validate_rc = fut_validate.result()
+                get_logger("workflow").info("Validation complete", variant=entry.variant, rc=res.validate_rc)
             finally:
                 validate_dt = time.monotonic() - validate_t0
                 validate_lines = end_validate_capture()
@@ -421,22 +415,17 @@ def run_evaluation(entry: ModelEntry, validation_count: int) -> EvalResult:
                 res.pm_avg_inf_mJ = metrics["pm_avg_inf_mJ"]
                 res.pm_avg_idle_mJ = metrics["pm_avg_idle_mJ"]
             elif is_power_session_active():
-                print(
-                    "  ⚠ WARNING: Power measurement active but no samples captured during validation"
-                )
+                get_logger("workflow").warning("Power active but no samples captured", variant=entry.variant)
             if res.validate_rc != 0:
-                print(
-                    f"  ⚠ Validation step failed (rc={res.validate_rc}); check benchmark_stdout.log VALIDATE block"
-                )
+                get_logger("workflow").warning("Validation failed", variant=entry.variant, rc=res.validate_rc)
 
             if fut_evaluate is not None:
                 try:
-                    res.evaluate_out, res.evaluate_err, res.evaluate_rc = (
-                        fut_evaluate.result()
-                    )
+                    res.evaluate_out, res.evaluate_err, res.evaluate_rc = fut_evaluate.result()
                 except subprocess.TimeoutExpired:
                     res.evaluate_err = "TIMEOUT: host evaluation exceeded 1 hour"
                     res.evaluate_rc = -1
+                get_logger("workflow").info("Evaluation complete", variant=entry.variant, rc=res.evaluate_rc)
         finally:
             if not validate_window_closed:
                 end_validate_capture()

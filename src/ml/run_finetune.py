@@ -3,10 +3,11 @@
 
 from __future__ import annotations
 
-import argparse
 import subprocess
 import sys
 from pathlib import Path
+
+import typer
 
 ROOT = Path(__file__).resolve().parents[2]
 STM32AI_MAIN = (
@@ -25,39 +26,25 @@ def _hydra_config_parts(config_file: Path) -> tuple[str, str]:
     return str(resolved.parent), resolved.stem
 
 
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Launch ST Model Zoo finetuning/e2e chained modes.")
-    parser.add_argument(
-        "--config",
-        type=Path,
-        required=True,
-        help="Path to finetune YAML config (Hydra config).",
-    )
-    parser.add_argument(
-        "--mode",
-        choices=["training", "chain_tqe", "chain_tqeb"],
-        default=None,
-        help="Optional operation_mode override.",
-    )
-    parser.add_argument(
-        "--override",
-        action="append",
-        default=[],
-        metavar="KEY=VALUE",
-        help="Additional Hydra override(s), repeated as needed.",
-    )
-    return parser.parse_args()
+app = typer.Typer()
 
 
-def main() -> int:
-    args = parse_args()
+@app.command()
+def main(
+    config: Path = typer.Option(..., help="Path to finetune YAML config (Hydra config)."),
+    mode: str | None = typer.Option(None, help="Optional operation_mode override (training, chain_tqe, chain_tqeb)."),
+    override: list[str] = typer.Option([], help="Additional Hydra override(s), repeated as needed."),
+) -> int:
+    if mode and mode not in ["training", "chain_tqe", "chain_tqeb"]:
+        typer.echo(f"Error: mode must be one of [training, chain_tqe, chain_tqeb]", err=True)
+        raise typer.Exit(1)
     if not STM32AI_MAIN.is_file():
         raise FileNotFoundError(f"Expected script not found: {STM32AI_MAIN}")
 
-    config_path, config_name = _hydra_config_parts(args.config)
-    overrides = list(args.override)
-    if args.mode:
-        overrides.append(f"operation_mode={args.mode}")
+    config_path, config_name = _hydra_config_parts(config)
+    overrides = list(override)
+    if mode:
+        overrides.append(f"operation_mode={mode}")
 
     cmd = [
         sys.executable,
@@ -72,4 +59,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(app())

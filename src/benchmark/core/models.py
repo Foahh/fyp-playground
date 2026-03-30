@@ -1,9 +1,10 @@
-"""ModelEntry dataclass and registry-based model loading."""
+"""ModelEntry dataclass and model loading."""
 
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .constants import BASE_DIR, MODEL_REGISTRY
+from .registry import load_model_registry
+from ..paths import BASE_DIR
 
 
 @dataclass
@@ -30,9 +31,9 @@ def _num_classes_for_dataset(dataset: str) -> int:
 
 
 def load_models() -> list[ModelEntry]:
-    """Build ModelEntry list from the explicit MODEL_REGISTRY."""
+    """Build ModelEntry list from the model registry."""
     entries: list[ModelEntry] = []
-    for reg in MODEL_REGISTRY:
+    for reg in load_model_registry():
         model_path = BASE_DIR / reg["model"]
         config_path = BASE_DIR / reg["config"]
 

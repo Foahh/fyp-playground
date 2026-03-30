@@ -31,7 +31,6 @@ the same value on both sides are omitted.
 
 from __future__ import annotations
 
-import sys
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -43,8 +42,9 @@ from rich.console import Console
 from rich.rule import Rule
 from rich.table import Table
 
-from .constants import BASE_DIR, CSV_COLUMNS, CSV_COLUMNS_NO_POWER
-from .logutil import configure_logging, typer_install_exception_hook
+from .constants import CSV_COLUMNS, CSV_COLUMNS_NO_POWER
+from .paths import BASE_DIR
+from .utils.logutil import configure_logging, typer_install_exception_hook
 
 
 RESULTS_DIR = BASE_DIR / "results"
@@ -782,7 +782,3 @@ def compare_main(argv: list[str] | None = None) -> int:
     except typer.Exit as e:
         return int(e.exit_code) if e.exit_code is not None else 0
     return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(compare_main(sys.argv[1:]))

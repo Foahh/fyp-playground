@@ -2,7 +2,7 @@
 
 Run in the same ``fyp-ml`` conda env as training / quantization::
 
-    python project.py conda-ml
+    python project.py setup-conda-ml
     conda activate fyp-ml    # or $ST_YOLO_ENV
 """
 
@@ -13,12 +13,12 @@ import zipfile
 from pathlib import Path
 
 import tensorflow as tf
+import typer
 from pycocotools.coco import COCO
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-DATASETS_DIR = Path(
-    os.environ.get("DATASETS_DIR", str(REPO_ROOT / "datasets"))
-).expanduser()
+from ..common.paths import get_datasets_dir
+
+DATASETS_DIR = get_datasets_dir()
 DEST = DATASETS_DIR / "coco"
 PERSON_YOLO_DIR = DATASETS_DIR / "coco_2017_person"
 
@@ -142,17 +142,8 @@ def download_coco(
 
 
 def _resolve_coco_root() -> Path:
-    candidates = [
-        DEST,
-        (Path.home() / "datasets" / "coco"),
-    ]
-    for root in candidates:
-        if (root / "annotations" / "instances_val2017.json").is_file():
-            return root
-    raise FileNotFoundError(
-        "Unable to locate COCO root with annotations. Checked: "
-        + ", ".join(str(c / "annotations" / "instances_val2017.json") for c in candidates)
-    )
+    from ..common.paths import resolve_coco_root
+    return resolve_coco_root()
 
 
 def generate_person_annotations():
@@ -322,28 +313,19 @@ def generate_person_yolo_dataset() -> None:
     )
 
 
-def main():
-    import argparse
+app = typer.Typer()
 
-    parser = argparse.ArgumentParser(description="Download and prepare COCO datasets")
-    parser.add_argument(
-        "--wget", action="store_true",
-        help="Use wget instead of aria2c for downloads (single-connection)",
-    )
-    parser.add_argument(
-        "--ca-certificate", metavar="FILE",
-        help="Path to CA certificate bundle (forwarded to aria2c/wget)",
-    )
-    parser.add_argument(
-        "--no-check-certificate", action="store_true",
-        help="Disable server certificate verification (forwarded to aria2c/wget)",
-    )
-    args = parser.parse_args()
 
+@app.command()
+def main(
+    wget: bool = typer.Option(False, help="Use wget instead of aria2c for downloads (single-connection)"),
+    ca_certificate: str | None = typer.Option(None, help="Path to CA certificate bundle (forwarded to aria2c/wget)"),
+    no_check_certificate: bool = typer.Option(False, help="Disable server certificate verification (forwarded to aria2c/wget)"),
+):
     download_coco(
-        use_wget=args.wget,
-        ca_certificate=args.ca_certificate,
-        check_certificate=not args.no_check_certificate,
+        use_wget=wget,
+        ca_certificate=ca_certificate,
+        check_certificate=not no_check_certificate,
     )
     generate_person_yolo_dataset()
     generate_person_annotations()
@@ -358,4 +340,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    app()
