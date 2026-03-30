@@ -101,15 +101,24 @@ def compute_power_metrics(samples: list[dict], num_inferences: int = 1) -> dict:
         }
 
     inference_samples = [s for s in samples if s.get("is_inference")]
-    idle_samples = [s for s in samples if not s.get("is_inference") and s.get("duration_us", 0) > 0]
+    idle_samples = [
+        s
+        for s in samples
+        if not s.get("is_inference") and s.get("duration_us", 0) > 0
+    ]
 
     # Compute inference metrics
     if inference_samples:
-        inf_energy_uw_us = sum(s["avg_mw"] * s["duration_us"] for s in inference_samples)
+        inf_energy_j = sum(float(s["energy_j"]) for s in inference_samples)
         inf_duration_us = sum(s["duration_us"] for s in inference_samples)
-        avg_power_inf = inf_energy_uw_us / inf_duration_us if inf_duration_us > 0 else None
+        inf_duration_s = inf_duration_us * 1e-6
+        avg_power_inf = (
+            (inf_energy_j / inf_duration_s) * 1000.0 if inf_duration_s > 0 else None
+        )
         avg_duration_ms = (inf_duration_us / num_inferences) / 1000.0 if inf_duration_us > 0 else None
-        avg_energy_mj = (inf_energy_uw_us / num_inferences) / 1000.0 if inf_energy_uw_us > 0 else None
+        avg_energy_mj = (
+            (inf_energy_j / num_inferences) * 1000.0 if inf_energy_j > 0 else None
+        )
     else:
         avg_power_inf = None
         avg_duration_ms = None
@@ -117,10 +126,11 @@ def compute_power_metrics(samples: list[dict], num_inferences: int = 1) -> dict:
 
     # Compute idle metrics
     if idle_samples:
-        idle_energy_uw_us = sum(s["avg_mw"] * s["duration_us"] for s in idle_samples)
+        idle_energy_j = sum(float(s["energy_j"]) for s in idle_samples)
         idle_duration_us = sum(s["duration_us"] for s in idle_samples)
+        idle_duration_s = idle_duration_us * 1e-6
         avg_power_idle = (
-            idle_energy_uw_us / idle_duration_us if idle_duration_us > 0 else None
+            (idle_energy_j / idle_duration_s) * 1000.0 if idle_duration_s > 0 else None
         )
         avg_idle_ms = (
             (idle_duration_us / num_inferences) / 1000.0
@@ -128,8 +138,8 @@ def compute_power_metrics(samples: list[dict], num_inferences: int = 1) -> dict:
             else None
         )
         avg_energy_idle_mj = (
-            (idle_energy_uw_us / num_inferences) / 1000.0
-            if idle_energy_uw_us > 0
+            (idle_energy_j / num_inferences) * 1000.0
+            if idle_energy_j > 0
             else None
         )
     else:
@@ -162,7 +172,7 @@ def compute_avg_power_mw(samples: list[dict]) -> Optional[float]:
 class PowerMeasureSession:
     """Reads INA228 protobuf serial for the whole benchmark run; logs to power_measure.csv."""
 
-    _CSV_HEADER = "host_time_iso,timestamp_us,avg_mw,duration_us,is_inference\n"
+    _CSV_HEADER = "host_time_iso,timestamp_us,energy_j,duration_us,is_inference,avg_mw\n"
     _HANDSHAKE_REQUEST = b"PM_PING\n"
     _HANDSHAKE_ACK_PREFIX = "PM_ACK"
     _HANDSHAKE_TIMEOUT_S = 2.0
@@ -279,8 +289,8 @@ class PowerMeasureSession:
             return
         host = datetime.now(timezone.utc).isoformat()
         self._csv_fd.write(
-            f"{host},{sample['timestamp_us']},{sample['avg_mw']},"
-            f"{sample['duration_us']},{int(sample['is_inference'])}\n"
+            f"{host},{sample['timestamp_us']},{sample['energy_j']},"
+            f"{sample['duration_us']},{int(sample['is_inference'])},{sample['avg_mw']}\n"
         )
         self._csv_fd.flush()
 
@@ -300,10 +310,19 @@ class PowerMeasureSession:
 
                 sample_pb = PowerSample()
                 sample_pb.ParseFromString(msg_bytes)
+                duration_us = int(sample_pb.duration_us)
+                energy_j = float(sample_pb.energy_j)
+                if duration_us <= 0:
+                    continue
+                if energy_j < 0.0:
+                    continue
+                duration_s = duration_us * 1e-6
+                avg_mw = (energy_j / duration_s) * 1000.0
                 sample = {
                     "timestamp_us": sample_pb.timestamp_us,
-                    "avg_mw": sample_pb.avg_mw,
-                    "duration_us": sample_pb.duration_us,
+                    "energy_j": energy_j,
+                    "avg_mw": avg_mw,
+                    "duration_us": duration_us,
                     "is_inference": sample_pb.is_inference,
                 }
                 self._write_csv_row(sample)
