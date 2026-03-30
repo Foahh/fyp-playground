@@ -1,3 +1,11 @@
+"""Download and prepare COCO datasets (YOLO layout, person subset, TFS exports).
+
+Run inside the dataset conda env::
+
+    python scripts/conda_setup_dataset.py
+    conda activate dataset    # or $ST_DATASET_ENV
+"""
+
 import json
 import os
 import subprocess

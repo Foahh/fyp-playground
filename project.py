@@ -11,10 +11,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 
 LOCAL_COMMANDS = {
-    "coco": "scripts/load_coco.py",
+    "dataset-coco": "scripts/load_coco.py",
+    "dataset-finetune": "scripts/load_finetune_data.py",
     "benchmark": "scripts/run_benchmark.py",
     "conda-yolo": "scripts/conda_setup_yolo.py",
     "conda-benchmark": "scripts/conda_setup_benchmark.py",
+    "conda-dataset": "scripts/conda_setup_dataset.py",
     "train": "scripts/run_train_tinyissimo_coco_person.py",
     "quant": "scripts/run_quantize.py",
     "finetune-dataset": "scripts/run_finetune_dataset.py",

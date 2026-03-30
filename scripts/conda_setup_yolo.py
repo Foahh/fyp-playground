@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Create conda env for YOLO training/export dependencies."""
+"""Create conda env for YOLO training/export dependencies.
+
+For ``load_coco.py`` / ``load_finetune_data.py`` and Dataset Ninja downloads,
+use ``conda_setup_dataset.py`` (Python 3.11 + ``dataset-tools``).
+"""
 
 from __future__ import annotations
 

@@ -10,6 +10,13 @@ ego2hands          Ego2Hands hand segmentation/detection (Box.com, ~2 k eval ima
 construction_tools Zenodo small construction-tool detection (hazard subset of 12 classes)
 metu_alet          METU-ALET tool detection in the wild (hazard subset of 49 classes)
 
+Environment
+-----------
+Use the dataset conda env (Python 3.11; ``dataset-tools`` does not install on 3.12)::
+
+    python scripts/conda_setup_dataset.py
+    conda activate dataset    # or $ST_DATASET_ENV
+
 Usage
 -----
 python load_finetune_data.py                          # all datasets
@@ -25,7 +32,8 @@ import json
 import os
 import random
 import subprocess
-import xml.etree.ElementTree as ET
+import tarfile
+import typing
 import zipfile
 from pathlib import Path
 
@@ -47,45 +55,22 @@ CONSTRUCTION_TOOLS_YOLO = DATASETS_DIR / "construction_tools"
 METU_ALET_RAW = DATASETS_DIR / "metu_alet_raw"
 METU_ALET_YOLO = DATASETS_DIR / "metu_alet"
 
-# ── Download URLs ────────────────────────────────────────────────────────────
+# ── Download URLs / dataset names ────────────────────────────────────────────
 EGO2HANDS_EVAL_URL = "https://app.box.com/s/gd1uywmyeodpwcyyi3dnyfrb8oybe8nx"
 
-ZENODO_DOWNLOADS: list[tuple[str, str]] = [
-    (
-        f"https://zenodo.org/records/6530106/files/DATA{i}.zip?download=1",
-        f"DATA{i}.zip",
-    )
-    for i in range(1, 5)
-]
-
-METU_ALET_SHAREPOINT_URL = (
-    "https://cengmetuedutr-my.sharepoint.com/:u:/g/personal/"
-    "skalkan_ceng_metu_edu_tr/"
-    "Ee9IYWHjbWxMrQNuVkuvlU0Buu3DgplFP7BBAWMyG06Qlw?download=1"
-)
+DTOOLS_CONSTRUCTION_TOOLS = "Detection of Small Size Construction Tools"
+DTOOLS_METU_ALET = "METU-ALET"
 
 # ── Class lists ──────────────────────────────────────────────────────────────
 EGO2HANDS_CLASSES = ["hand"]
 OUTPUT_TOOL_CLASSES = ["tool"]
 
-# Full Zenodo 12-class ordering (matches label IDs 0-11 in the raw dataset)
-_ZENODO_ALL_CLASSES = [
-    "bucket", "cutter", "drill", "grinder", "hammer", "knife",
-    "saw", "shovel", "spanner", "tacker", "trowel", "wrench",
-]
-
-# Zenodo class IDs that are hazardous to hands.  All remapped to class 0 ("tool").
-ZENODO_HAZARD_IDS: set[int] = {
-    _ZENODO_ALL_CLASSES.index(n)
-    for n in ("cutter", "drill", "grinder", "knife", "saw", "tacker")
-}
-
-# Keywords used to select hazardous classes from METU-ALET's 49 categories.
-# A class name that contains any of these tokens (case-insensitive) is kept.
+# A class name containing any of these tokens (case-insensitive) is kept as
+# hazardous.  Used for both Construction Tools and METU-ALET filtering.
 HAZARD_KEYWORDS: set[str] = {
     "axe", "blade", "chisel", "cleaver", "cutter", "drill",
     "grinder", "hatchet", "knife", "machete", "plier", "saw",
-    "scissor", "scythe", "shear", "sickle", "tacker",
+    "scissor", "scythe", "shear", "sickle", "snip", "staple", "tacker",
 }
 
 VAL_RATIO = 0.2
@@ -105,21 +90,20 @@ def _resumable_download(
     ca_certificate: str | None = None,
     check_certificate: bool = True,
 ) -> Path:
-    """Download a file with resume support (aria2c by default, wget as fallback)."""
+    """Download a file with resume support. Uses aria2c by default, wget as fallback."""
     dest_dir.mkdir(parents=True, exist_ok=True)
     if filename is None:
         filename = url.rsplit("/", 1)[-1].split("?")[0]
     dest_file = dest_dir / filename
 
-    if dest_file.exists() and dest_file.stat().st_size > 0:
-        print(f"  Already downloaded: {dest_file}")
+    if dest_file.exists() and zipfile.is_zipfile(dest_file):
+        print(f"  Already downloaded and valid: {dest_file}")
         return dest_file
 
     if use_wget:
-        print(f"  Downloading (wget) {url}")
+        print(f"  Downloading (wget) {url} -> {dest_file}")
         cmd: list[str] = [
             "wget", "-c", "--tries=5", "--timeout=60",
-            "--content-disposition",
             "-O", str(dest_file), url,
         ]
         if ca_certificate:
@@ -127,7 +111,7 @@ def _resumable_download(
         if not check_certificate:
             cmd[1:1] = ["--no-check-certificate"]
     else:
-        print(f"  Downloading (aria2c) {url}")
+        print(f"  Downloading (aria2c) {url} -> {dest_file}")
         cmd = [
             "aria2c",
             "--continue=true",
@@ -146,6 +130,12 @@ def _resumable_download(
             cmd[1:1] = ["--check-certificate=false"]
 
     subprocess.run(cmd, check=True)
+
+    if not dest_file.exists() or not zipfile.is_zipfile(dest_file):
+        raise RuntimeError(
+            f"Download appears incomplete or corrupt: {dest_file}. "
+            "Delete it and re-run to start fresh, or re-run to resume."
+        )
     return dest_file
 
 
@@ -237,6 +227,19 @@ def _write_yolo_label(path: Path, boxes: list[list[float]]) -> None:
             f.write(f"{cls_id} {coords}\n")
 
 
+def _extract_tars(directory: Path) -> None:
+    """Extract all .tar files found in *directory* (non-recursive)."""
+    for tar_path in sorted(directory.rglob("*.tar")):
+        marker = tar_path.with_suffix(".tar.extracted")
+        if marker.exists():
+            print(f"  {tar_path.name} already extracted")
+            continue
+        print(f"  Extracting {tar_path.name} …")
+        with tarfile.open(tar_path) as tf:
+            tf.extractall(path=tar_path.parent, filter="data")
+        marker.touch()
+
+
 def download_ego2hands(*, use_wget: bool = False, **dl_kwargs: object) -> None:
     """Download Ego2Hands eval set from Box.com.
 
@@ -245,12 +248,18 @@ def download_ego2hands(*, use_wget: bool = False, **dl_kwargs: object) -> None:
     """
     eval_dirs = list(EGO2HANDS_RAW.glob("**/eval_seq*_imgs"))
     if eval_dirs:
-        print(f"Ego2Hands eval data already present ({len(eval_dirs)} sequences)")
+        print(f"  Ego2Hands eval data already present ({len(eval_dirs)} sequences)")
+        return
+
+    tar_files = list(EGO2HANDS_RAW.rglob("*.tar"))
+    if tar_files:
+        _extract_tars(EGO2HANDS_RAW)
         return
 
     zip_path = EGO2HANDS_RAW / "ego2hands_eval.zip"
     if zip_path.exists() and zipfile.is_zipfile(zip_path):
         _extract_zip(zip_path, EGO2HANDS_RAW)
+        _extract_tars(EGO2HANDS_RAW)
         return
 
     print(
@@ -308,178 +317,9 @@ def convert_ego2hands() -> None:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-#  Construction Tools (Zenodo)  —  hazardous subset of 12-class YOLO labels
+#  Dataset Ninja (Supervisely format) — shared download + conversion
+#  Requires ``dataset-tools`` (Python <=3.11): ``scripts/conda_setup_dataset.py``.
 # ═══════════════════════════════════════════════════════════════════════════════
-
-def download_construction_tools(
-    *, use_wget: bool = False, **dl_kwargs: object
-) -> None:
-    """Download construction-tool images + YOLO labels from Zenodo (4 zips, ~110 GB)."""
-    raw_dir = CONSTRUCTION_TOOLS_RAW
-    for url, filename in ZENODO_DOWNLOADS:
-        zip_path = raw_dir / filename
-        marker = raw_dir / f".{filename}.extracted"
-        if marker.exists():
-            print(f"  {filename} already extracted")
-            continue
-
-        _resumable_download(url, raw_dir, filename, use_wget=use_wget, **dl_kwargs)
-
-        if zip_path.exists() and zipfile.is_zipfile(zip_path):
-            _extract_zip(zip_path, raw_dir)
-            marker.touch()
-
-
-def _filter_zenodo_labels(label_path: Path) -> list[list[float]] | None:
-    """Read a Zenodo YOLO label file, keep only hazardous classes, remap to 0."""
-    boxes: list[list[float]] = []
-    with label_path.open(encoding="utf-8") as f:
-        for line in f:
-            parts = line.strip().split()
-            if len(parts) < 5:
-                continue
-            cls_id = int(parts[0])
-            if cls_id not in ZENODO_HAZARD_IDS:
-                continue
-            boxes.append([0.0] + [float(v) for v in parts[1:5]])
-    return boxes if boxes else None
-
-
-def convert_construction_tools() -> None:
-    """Filter Zenodo labels to hazardous tools only and write train/val splits."""
-    raw_dir = CONSTRUCTION_TOOLS_RAW
-    out_dir = CONSTRUCTION_TOOLS_YOLO
-
-    all_items: list[tuple[Path, list[list[float]]]] = []
-    for img_path in _collect_images(raw_dir):
-        label_path = img_path.with_suffix(".txt")
-        if not label_path.exists():
-            continue
-        boxes = _filter_zenodo_labels(label_path)
-        if boxes is None:
-            continue
-        all_items.append((img_path, boxes))
-
-    if not all_items:
-        print("  No construction-tools images with hazardous labels found — skipping.")
-        return
-
-    hazard_names = sorted(
-        _ZENODO_ALL_CLASSES[i] for i in ZENODO_HAZARD_IDS
-    )
-    print(f"  Keeping hazardous classes: {hazard_names}")
-
-    train_items, val_items = _train_val_split(all_items)
-    written = 0
-
-    for split, items in [("train", train_items), ("val", val_items)]:
-        img_out = out_dir / "images" / split
-        lbl_out = out_dir / "labels" / split
-        img_out.mkdir(parents=True, exist_ok=True)
-        lbl_out.mkdir(parents=True, exist_ok=True)
-
-        for img_path, boxes in items:
-            _safe_symlink(img_path, img_out / img_path.name)
-            _write_yolo_label(lbl_out / (img_path.stem + ".txt"), boxes)
-            written += 1
-
-    _write_classes_txt(out_dir, OUTPUT_TOOL_CLASSES)
-    print(
-        f"  Construction Tools YOLO dataset written to {out_dir}: "
-        f"{written} images (train={len(train_items)}, val={len(val_items)})"
-    )
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-#  METU-ALET  —  hazardous tool detection (filtered from 49 classes)
-# ═══════════════════════════════════════════════════════════════════════════════
-
-def download_metu_alet(*, use_wget: bool = False, **dl_kwargs: object) -> None:
-    """Download METU-ALET dataset from SharePoint.
-
-    SharePoint personal-OneDrive links may not resolve with aria2c/wget.
-    Falls back to manual-download instructions when the automated attempt fails.
-    """
-    raw_dir = METU_ALET_RAW
-    if any(raw_dir.rglob("*.xml")) or any(raw_dir.rglob("*.json")):
-        print("  METU-ALET data already present")
-        return
-
-    zip_path = raw_dir / "metu_alet.zip"
-    if zip_path.exists() and zipfile.is_zipfile(zip_path):
-        _extract_zip(zip_path, raw_dir)
-        return
-
-    try:
-        _resumable_download(
-            METU_ALET_SHAREPOINT_URL, raw_dir, "metu_alet.zip",
-            use_wget=use_wget, **dl_kwargs,
-        )
-    except subprocess.CalledProcessError:
-        print(
-            "\n  SharePoint download failed (common for OneDrive personal links).\n"
-            "  Please download METU-ALET manually:\n"
-            "    1. Open  : https://cengmetuedutr-my.sharepoint.com/:u:/g/personal/"
-            "skalkan_ceng_metu_edu_tr/"
-            "Ee9IYWHjbWxMrQNuVkuvlU0Buu3DgplFP7BBAWMyG06Qlw\n"
-            f"    2. Save the archive to: {zip_path}\n"
-            "    3. Re-run this script.\n"
-        )
-        return
-
-    if zip_path.exists() and zipfile.is_zipfile(zip_path):
-        _extract_zip(zip_path, raw_dir)
-
-
-# ── METU-ALET format converters ─────────────────────────────────────────────
-
-def _voc_bbox_to_yolo(
-    xmin: float, ymin: float, xmax: float, ymax: float,
-    img_w: int, img_h: int,
-) -> tuple[float, float, float, float]:
-    cx = (xmin + xmax) / 2.0 / img_w
-    cy = (ymin + ymax) / 2.0 / img_h
-    w = (xmax - xmin) / img_w
-    h = (ymax - ymin) / img_h
-    return cx, cy, w, h
-
-
-def _parse_voc_xml(
-    xml_path: Path,
-) -> tuple[int, int, list[tuple[str, float, float, float, float]]]:
-    """Parse a Pascal-VOC annotation XML.
-
-    Returns (width, height, [(class_name, xmin, ymin, xmax, ymax), ...]).
-    """
-    tree = ET.parse(xml_path)
-    root = tree.getroot()
-    size_el = root.find("size")
-    width = int(size_el.findtext("width", "0"))
-    height = int(size_el.findtext("height", "0"))
-
-    objects: list[tuple[str, float, float, float, float]] = []
-    for obj in root.findall("object"):
-        name = obj.findtext("name", "unknown")
-        bb = obj.find("bndbox")
-        if bb is None:
-            continue
-        xmin = float(bb.findtext("xmin", "0"))
-        ymin = float(bb.findtext("ymin", "0"))
-        xmax = float(bb.findtext("xmax", "0"))
-        ymax = float(bb.findtext("ymax", "0"))
-        objects.append((name, xmin, ymin, xmax, ymax))
-    return width, height, objects
-
-
-def _find_image_for(stem: str, search_dirs: list[Path]) -> Path | None:
-    """Locate an image file by stem across multiple directories."""
-    for d in search_dirs:
-        for ext in (".jpg", ".jpeg", ".png", ".bmp"):
-            candidate = d / (stem + ext)
-            if candidate.exists():
-                return candidate
-    return None
-
 
 def _is_hazard_class(name: str) -> bool:
     """Return True if *name* matches any hazard keyword (substring, case-insensitive)."""
@@ -487,183 +327,149 @@ def _is_hazard_class(name: str) -> bool:
     return any(kw in lower for kw in HAZARD_KEYWORDS)
 
 
-def _convert_alet_voc(raw_dir: Path, out_dir: Path) -> None:
-    """Convert METU-ALET Pascal-VOC XML annotations to YOLO (hazardous tools only)."""
-    xml_files = sorted(raw_dir.rglob("*.xml"))
+def _dtools_download(dataset_name: str, dst_dir: Path) -> Path:
+    """Download a dataset via ``dataset-tools`` (Dataset Ninja).
 
-    img_dirs = sorted(
-        {p.parent for p in _collect_images(raw_dir)}
-        | {p.parent for p in xml_files}
-    )
+    Returns the Supervisely root directory (the one containing ``meta.json``).
+    """
+    import dataset_tools as dtools
 
-    kept_names: set[str] = set()
-    skipped_names: set[str] = set()
-    resolved: list[tuple[Path, list[list[float]]]] = []
+    meta_files = list(dst_dir.rglob("meta.json"))
+    if meta_files:
+        print(f"  Already downloaded: {meta_files[0].parent}")
+        return meta_files[0].parent
 
-    for xml_path in xml_files:
-        img_w, img_h, objects = _parse_voc_xml(xml_path)
-        if not objects or img_w == 0 or img_h == 0:
-            continue
+    dst_dir.mkdir(parents=True, exist_ok=True)
+    dtools.download(dataset=dataset_name, dst_dir=str(dst_dir))
 
-        img_path = _find_image_for(xml_path.stem, [xml_path.parent] + img_dirs)
-        if img_path is None:
-            continue
-
-        yolo_boxes: list[list[float]] = []
-        for name, xmin, ymin, xmax, ymax in objects:
-            if _is_hazard_class(name):
-                kept_names.add(name)
-                cx, cy, w, h = _voc_bbox_to_yolo(xmin, ymin, xmax, ymax, img_w, img_h)
-                yolo_boxes.append([0.0, cx, cy, w, h])
-            else:
-                skipped_names.add(name)
-
-        if yolo_boxes:
-            resolved.append((img_path, yolo_boxes))
-
-    if kept_names:
-        print(f"  Kept hazardous classes : {sorted(kept_names)}")
-    if skipped_names:
-        print(f"  Skipped non-hazardous  : {sorted(skipped_names)}")
-
-    _write_alet_splits(out_dir, resolved, OUTPUT_TOOL_CLASSES)
+    meta_files = list(dst_dir.rglob("meta.json"))
+    if not meta_files:
+        raise RuntimeError(
+            f"Download succeeded but no meta.json found under {dst_dir}. "
+            "Check the dataset-tools output."
+        )
+    return meta_files[0].parent
 
 
-def _convert_alet_coco(raw_dir: Path, out_dir: Path, json_path: Path) -> None:
-    """Convert METU-ALET COCO-JSON annotations to YOLO (hazardous tools only)."""
-    with json_path.open(encoding="utf-8") as f:
-        coco = json.load(f)
+def _convert_supervisely(
+    raw_dir: Path,
+    out_dir: Path,
+    class_filter: typing.Callable[[str], bool],
+    label: str,
+) -> None:
+    """Convert a Supervisely-format dataset to YOLO, keeping only filtered classes.
 
-    cat_names = {c["id"]: c["name"] for c in coco.get("categories", [])}
-    hazard_cat_ids = {cid for cid, name in cat_names.items() if _is_hazard_class(name)}
+    All kept classes are remapped to class 0 ("tool").
+    """
+    meta_files = list(raw_dir.rglob("meta.json"))
+    if not meta_files:
+        print(f"  No meta.json found in {raw_dir} — skipping conversion.")
+        return
+    sly_root = meta_files[0].parent
 
-    kept = sorted(cat_names[cid] for cid in hazard_cat_ids)
-    skipped = sorted(n for cid, n in cat_names.items() if cid not in hazard_cat_ids)
+    with meta_files[0].open(encoding="utf-8") as f:
+        meta = json.load(f)
+    all_classes = [c["title"] for c in meta.get("classes", [])]
+    kept = sorted(c for c in all_classes if class_filter(c))
+    skipped = sorted(c for c in all_classes if not class_filter(c))
     if kept:
         print(f"  Kept hazardous classes : {kept}")
     if skipped:
         print(f"  Skipped non-hazardous  : {skipped}")
 
-    img_info = {img["id"]: img for img in coco.get("images", [])}
-    anns_by_img: dict[int, list] = {}
-    for ann in coco.get("annotations", []):
-        if ann["category_id"] in hazard_cat_ids:
-            anns_by_img.setdefault(ann["image_id"], []).append(ann)
-
-    resolved: list[tuple[Path, list[list[float]]]] = []
-    for img_id, anns in anns_by_img.items():
-        info = img_info.get(img_id)
-        if info is None:
+    total = 0
+    for split_dir in sorted(sly_root.iterdir()):
+        if not split_dir.is_dir():
             continue
-        fname = Path(info["file_name"]).name
-        img_path = None
-        for candidate in raw_dir.rglob(fname):
-            img_path = candidate
-            break
-        if img_path is None:
+        img_dir = split_dir / "img"
+        ann_dir = split_dir / "ann"
+        if not img_dir.exists() or not ann_dir.exists():
             continue
 
-        img_w, img_h = info["width"], info["height"]
-        yolo_boxes: list[list[float]] = []
-        for ann in anns:
-            x, y, w, h = ann["bbox"]
-            cx = (x + w / 2) / img_w
-            cy = (y + h / 2) / img_h
-            yolo_boxes.append([0.0, cx, cy, w / img_w, h / img_h])
-        if yolo_boxes:
-            resolved.append((img_path, yolo_boxes))
-
-    _write_alet_splits(out_dir, resolved, OUTPUT_TOOL_CLASSES)
-
-
-def _convert_alet_yolo_existing(raw_dir: Path, out_dir: Path) -> None:
-    """Organise pre-existing YOLO txt labels into train/val."""
-    items: list[tuple[Path, Path]] = []
-    for img_path in _collect_images(raw_dir):
-        lbl = img_path.with_suffix(".txt")
-        if lbl.exists():
-            items.append((img_path, lbl))
-
-    if not items:
-        return
-
-    train_items, val_items = _train_val_split(items)
-    written = 0
-    for split, split_items in [("train", train_items), ("val", val_items)]:
-        img_out = out_dir / "images" / split
-        lbl_out = out_dir / "labels" / split
-        img_out.mkdir(parents=True, exist_ok=True)
-        lbl_out.mkdir(parents=True, exist_ok=True)
-        for img_path, lbl_path in split_items:
-            _safe_symlink(img_path, img_out / img_path.name)
-            _safe_symlink(lbl_path, lbl_out / lbl_path.name)
-            written += 1
-
-    print(
-        f"  METU-ALET YOLO dataset written to {out_dir}: "
-        f"{written} images (train={len(train_items)}, val={len(val_items)})"
-    )
-
-
-def _write_alet_splits(
-    out_dir: Path,
-    items: list[tuple[Path, list[list[float]]]],
-    class_names: list[str],
-) -> None:
-    train_items, val_items = _train_val_split(items)
-    written = 0
-    for split, split_items in [("train", train_items), ("val", val_items)]:
-        img_out = out_dir / "images" / split
-        lbl_out = out_dir / "labels" / split
+        split_name = split_dir.name
+        img_out = out_dir / "images" / split_name
+        lbl_out = out_dir / "labels" / split_name
         img_out.mkdir(parents=True, exist_ok=True)
         lbl_out.mkdir(parents=True, exist_ok=True)
 
-        for img_path, yolo_boxes in split_items:
-            if not yolo_boxes:
+        written = 0
+        for img_path in sorted(img_dir.iterdir()):
+            if img_path.suffix.lower() not in (".jpg", ".jpeg", ".png", ".bmp"):
                 continue
+            ann_path = ann_dir / (img_path.name + ".json")
+            if not ann_path.exists():
+                continue
+
+            with ann_path.open(encoding="utf-8") as f:
+                ann = json.load(f)
+
+            img_w = ann["size"]["width"]
+            img_h = ann["size"]["height"]
+            if img_w == 0 or img_h == 0:
+                continue
+
+            boxes: list[list[float]] = []
+            for obj in ann.get("objects", []):
+                if obj.get("geometryType") != "rectangle":
+                    continue
+                if not class_filter(obj.get("classTitle", "")):
+                    continue
+                pts = obj["points"]["exterior"]
+                x1, y1 = pts[0]
+                x2, y2 = pts[1]
+                cx = (x1 + x2) / 2.0 / img_w
+                cy = (y1 + y2) / 2.0 / img_h
+                w = abs(x2 - x1) / img_w
+                h = abs(y2 - y1) / img_h
+                boxes.append([0.0, cx, cy, w, h])
+
+            if not boxes:
+                continue
+
             _safe_symlink(img_path, img_out / img_path.name)
-            _write_yolo_label(lbl_out / (img_path.stem + ".txt"), yolo_boxes)
+            _write_yolo_label(lbl_out / (img_path.stem + ".txt"), boxes)
             written += 1
 
-    _write_classes_txt(out_dir, class_names)
-    print(
-        f"  METU-ALET YOLO dataset written to {out_dir}: "
-        f"{written} images, {len(class_names)} classes "
-        f"(train={len(train_items)}, val={len(val_items)})"
+        if written:
+            print(f"    {split_name}: {written} images")
+        total += written
+
+    _write_classes_txt(out_dir, OUTPUT_TOOL_CLASSES)
+    print(f"  {label} YOLO dataset written to {out_dir}: {total} images")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Construction Tools  —  hazardous subset of 12-class tool detection
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def download_construction_tools(**_dl_kwargs: object) -> None:
+    """Download construction-tool dataset via Dataset Ninja (dataset-tools)."""
+    _dtools_download(DTOOLS_CONSTRUCTION_TOOLS, CONSTRUCTION_TOOLS_RAW)
+
+
+def convert_construction_tools() -> None:
+    """Convert Construction Tools (Supervisely) to YOLO, hazardous classes only."""
+    _convert_supervisely(
+        CONSTRUCTION_TOOLS_RAW, CONSTRUCTION_TOOLS_YOLO,
+        _is_hazard_class, "Construction Tools",
     )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  METU-ALET  —  hazardous tool detection (filtered from 49 classes)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def download_metu_alet(**_dl_kwargs: object) -> None:
+    """Download METU-ALET dataset via Dataset Ninja (dataset-tools)."""
+    _dtools_download(DTOOLS_METU_ALET, METU_ALET_RAW)
 
 
 def convert_metu_alet() -> None:
-    """Auto-detect METU-ALET annotation format and convert to YOLO."""
-    raw_dir = METU_ALET_RAW
-    out_dir = METU_ALET_YOLO
-
-    if not raw_dir.exists():
-        print("  METU-ALET raw directory not found — skipping conversion.")
-        return
-
-    xml_files = list(raw_dir.rglob("*.xml"))
-    json_files = [
-        f for f in raw_dir.rglob("*.json")
-        if any(k in f.stem.lower() for k in ("instance", "annotation", "coco", "alet"))
-    ]
-    if not json_files:
-        json_files = list(raw_dir.rglob("*.json"))
-
-    if xml_files:
-        print(f"  Detected VOC XML annotations ({len(xml_files)} files)")
-        _convert_alet_voc(raw_dir, out_dir)
-    elif json_files:
-        print(f"  Detected COCO JSON annotations: {json_files[0].name}")
-        _convert_alet_coco(raw_dir, out_dir, json_files[0])
-    elif any(raw_dir.rglob("*.txt")) and _collect_images(raw_dir):
-        print("  Detected YOLO txt annotations")
-        _convert_alet_yolo_existing(raw_dir, out_dir)
-    else:
-        print(
-            "  Could not detect METU-ALET annotation format.\n"
-            f"  Check raw data at: {raw_dir}"
-        )
+    """Convert METU-ALET (Supervisely) to YOLO, hazardous classes only."""
+    _convert_supervisely(
+        METU_ALET_RAW, METU_ALET_YOLO,
+        _is_hazard_class, "METU-ALET",
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -821,7 +627,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    dl_kwargs = dict(
+    ego2hands_dl_kwargs = dict(
         use_wget=args.wget,
         ca_certificate=args.ca_certificate,
         check_certificate=not args.no_check_certificate,
@@ -832,19 +638,19 @@ def main() -> int:
     if ds in ("ego2hands", "all"):
         print("\n=== Ego2Hands (hand detection) ===")
         if not args.skip_download:
-            download_ego2hands(**dl_kwargs)
+            download_ego2hands(**ego2hands_dl_kwargs)
         convert_ego2hands()
 
     if ds in ("construction_tools", "all"):
-        print("\n=== Construction Tools — Zenodo ===")
+        print("\n=== Construction Tools — Dataset Ninja ===")
         if not args.skip_download:
-            download_construction_tools(**dl_kwargs)
+            download_construction_tools()
         convert_construction_tools()
 
     if ds in ("metu_alet", "all"):
-        print("\n=== METU-ALET (tool detection) ===")
+        print("\n=== METU-ALET — Dataset Ninja ===")
         if not args.skip_download:
-            download_metu_alet(**dl_kwargs)
+            download_metu_alet()
         convert_metu_alet()
 
     if not args.skip_merge:
