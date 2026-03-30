@@ -1,15 +1,10 @@
 dataset:
-  # converter.py expects: coco_format | pascal_voc_format | kitti_format
   format: pascal_voc_format
-  class_names: [hand, helmet, head, person, tool]
+  class_names: [hand, tool]
   dataset_name: fyp_merged
-
-  # Used by dataset_create_tfs.py
   training_path: ./datasets/fyp_merged/train
   validation_path: ./datasets/fyp_merged/val
   test_path: ./datasets/fyp_merged/test
-
-  # Used by dataset_analysis.py (point to one split, typically train)
   dataset_path: ./datasets/fyp_merged/train
 
 pascal_voc_format:
