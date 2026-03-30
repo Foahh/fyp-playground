@@ -4,7 +4,7 @@ The official ST Model Zoo NPU figures parsed from object_detection README tables
 measured in **overdrive mode** as part of the **default STM32Cube.AI configuration**
 (see each family README under *Performances → Metrics*, e.g. input/output allocated).
 That matches the high-performance supply/setup used for STM32N6570-DK reference
-benchmarking, not a separate “nominal vs overdrive” split on the README side.
+benchmarking, not a separate “underdrive vs overdrive” split on the README side.
 
 Modes (see ``--mode``):
 
@@ -12,9 +12,9 @@ Modes (see ``--mode``):
   (delta = measured − readme). Parsed rows with no metrics are skipped; empty parsed
   cells are not compared.
 
-- **readme-nominal** — same, but measured file is ``benchmark_nominal/benchmark_results.csv``.
+- **readme-underdrive** — same, but measured file is ``benchmark_underdrive/benchmark_results.csv``.
 
-- **nominal-overdrive** — nominal vs overdrive ``benchmark_results.csv`` (delta = overdrive − nominal)
+- **underdrive-overdrive** — underdrive vs overdrive ``benchmark_results.csv`` (delta = overdrive − underdrive)
   for every shared config and metric column, **including inference power** (``pm_avg_inf_*``) when present;
   ``pm_avg_idle_*`` and ``pm_avg_delta_mW`` are omitted (idle/delta splits are not comparable across runs).
   ``stedgeai_version`` is listed when present on either side.
@@ -49,11 +49,11 @@ from .utils.logutil import configure_logging, typer_install_exception_hook
 
 RESULTS_DIR = BASE_DIR / "results"
 DEFAULT_PARSED_CSV = RESULTS_DIR / "benchmark_parsed.csv"
-DEFAULT_NOMINAL_CSV = RESULTS_DIR / "benchmark_nominal" / "benchmark_results.csv"
+DEFAULT_UNDERDRIVE_CSV = RESULTS_DIR / "benchmark_underdrive" / "benchmark_results.csv"
 DEFAULT_OVERDRIVE_CSV = RESULTS_DIR / "benchmark_overdrive" / "benchmark_results.csv"
 DEFAULT_BENCHMARK_CSV = DEFAULT_OVERDRIVE_CSV
 
-COMPARE_MODES = ("readme-overdrive", "readme-nominal", "nominal-overdrive")
+COMPARE_MODES = ("readme-overdrive", "readme-underdrive", "underdrive-overdrive")
 
 IDENTITY_COLS = (
     "model_family",
@@ -110,7 +110,7 @@ PER_VARIANT_COLUMNS_BENCH_PAIR = (
     "format",
     "res",
     "metric",
-    "nominal",
+    "underdrive",
     "overdrive",
     "delta",
     "delta_pct",
@@ -127,7 +127,7 @@ class ComparisonResult:
     missing_in_benchmark: list[str] = field(default_factory=list)
     missing_in_parsed: list[str] = field(default_factory=list)
     duplicate_benchmark_keys: list[str] = field(default_factory=list)
-    duplicate_nominal_keys: list[str] = field(default_factory=list)
+    duplicate_underdrive_keys: list[str] = field(default_factory=list)
     missed_numeric_compare: int = 0
     delta_rows: list[dict[str, str]] = field(default_factory=list)
 
@@ -308,14 +308,14 @@ def _append_duplicate_labels(
     size_by_key: pd.Series,
     out: ComparisonResult,
     *,
-    nominal: bool,
+    underdrive: bool,
 ) -> None:
     for key_tuple, cnt in size_by_key.items():
         if cnt <= 1:
             continue
         kt = tuple(str(x) for x in (key_tuple if isinstance(key_tuple, tuple) else (key_tuple,)))
         lbl = key_label(kt)
-        dup_list = out.duplicate_nominal_keys if nominal else out.duplicate_benchmark_keys
+        dup_list = out.duplicate_underdrive_keys if underdrive else out.duplicate_benchmark_keys
         dup_list.extend([lbl] * (cnt - 1))
 
 
@@ -351,7 +351,7 @@ def compare_readme_to_bench(
     bench_n = _normalize_identity_df(bench_df)
 
     g_sizes = bench_n.groupby(list(KEY_MERGE), sort=False).size()
-    _append_duplicate_labels(g_sizes, out, nominal=False)
+    _append_duplicate_labels(g_sizes, out, underdrive=False)
 
     bench_first = bench_n.drop_duplicates(subset=list(KEY_MERGE), keep="first")
 
@@ -438,39 +438,41 @@ def compare_readme_to_bench(
     return out
 
 
-def compare_nominal_to_overdrive(nominal_path: Path, overdrive_path: Path) -> ComparisonResult:
-    nominal_df = load_csv_df(nominal_path)
+def compare_underdrive_to_overdrive(
+    underdrive_path: Path, overdrive_path: Path
+) -> ComparisonResult:
+    underdrive_df = load_csv_df(underdrive_path)
     over_df = load_csv_df(overdrive_path)
 
     out = ComparisonResult(
-        mode="nominal-overdrive",
-        headline="Nominal vs overdrive (delta = overdrive − nominal)",
+        mode="underdrive-overdrive",
+        headline="Underdrive vs overdrive (delta = overdrive − underdrive)",
         table_columns=PER_VARIANT_COLUMNS_BENCH_PAIR,
     )
 
-    nominal_n = _normalize_identity_df(nominal_df)
+    underdrive_n = _normalize_identity_df(underdrive_df)
     over_n = _normalize_identity_df(over_df)
 
     _append_duplicate_labels(
-        nominal_n.groupby(list(KEY_MERGE), sort=False).size(),
+        underdrive_n.groupby(list(KEY_MERGE), sort=False).size(),
         out,
-        nominal=True,
+        underdrive=True,
     )
     _append_duplicate_labels(
         over_n.groupby(list(KEY_MERGE), sort=False).size(),
         out,
-        nominal=False,
+        underdrive=False,
     )
 
-    nominal_first = nominal_n.drop_duplicates(subset=list(KEY_MERGE), keep="first")
+    underdrive_first = underdrive_n.drop_duplicates(subset=list(KEY_MERGE), keep="first")
     over_first = over_n.drop_duplicates(subset=list(KEY_MERGE), keep="first")
 
-    nominal_key_set = {
-        tuple(str(r[c]) for c in KEY_MERGE) for _, r in nominal_first.iterrows()
+    underdrive_key_set = {
+        tuple(str(r[c]) for c in KEY_MERGE) for _, r in underdrive_first.iterrows()
     }
 
     left_m = pd.merge(
-        nominal_first,
+        underdrive_first,
         over_first,
         on=list(KEY_MERGE),
         how="left",
@@ -486,7 +488,7 @@ def compare_nominal_to_overdrive(nominal_path: Path, overdrive_path: Path) -> Co
 
     for _, r in over_first.iterrows():
         k = tuple(str(r[c]) for c in KEY_MERGE)
-        if k not in nominal_key_set:
+        if k not in underdrive_key_set:
             out.missing_in_parsed.append(key_label(k))
 
     delta_src = left_m[left_m["_merge"] == "both"].drop(columns=["_merge"], errors="ignore")
@@ -508,7 +510,7 @@ def compare_nominal_to_overdrive(nominal_path: Path, overdrive_path: Path) -> Co
                     "format": _merged_side(mrow, "format", True),
                     "res": res_s,
                     "metric": col,
-                    "nominal": _fmt_num(pr) if pr is not None else nraw.strip(),
+                    "underdrive": _fmt_num(pr) if pr is not None else nraw.strip(),
                     "overdrive": _fmt_num(br) if br is not None else oraw.strip(),
                     "delta": d_str,
                     "delta_pct": pct_str,
@@ -524,7 +526,7 @@ def compare_nominal_to_overdrive(nominal_path: Path, overdrive_path: Path) -> Co
                     "format": _merged_side(mrow, "format", True),
                     "res": res_s,
                     "metric": "stedgeai_version",
-                    "nominal": nv,
+                    "underdrive": nv,
                     "overdrive": ov,
                     "delta": "" if nv == ov else "≠",
                     "delta_pct": "—",
@@ -604,15 +606,15 @@ def print_comparison_report(
         )
     console.print("Summary: " + "; ".join(parts) + ".")
 
-    if result.duplicate_nominal_keys:
+    if result.duplicate_underdrive_keys:
         console.print(
-            f"Note: {len(result.duplicate_nominal_keys)} duplicate key(s) in nominal CSV "
-            f"(first row kept): {', '.join(sorted(set(result.duplicate_nominal_keys)))}"
+            f"Note: {len(result.duplicate_underdrive_keys)} duplicate key(s) in underdrive CSV "
+            f"(first row kept): {', '.join(sorted(set(result.duplicate_underdrive_keys)))}"
         )
     if result.duplicate_benchmark_keys:
         label = (
             "overdrive CSV"
-            if result.mode == "nominal-overdrive"
+            if result.mode == "underdrive-overdrive"
             else "measured benchmark CSV"
         )
         console.print(
@@ -621,9 +623,9 @@ def print_comparison_report(
         )
     if result.missing_in_benchmark:
         keys = ", ".join(sorted(set(result.missing_in_benchmark)))
-        if result.mode == "nominal-overdrive":
+        if result.mode == "underdrive-overdrive":
             msg = (
-                f"Note: {len(result.missing_in_benchmark)} nominal config(s) have no overdrive row "
+                f"Note: {len(result.missing_in_benchmark)} underdrive config(s) have no overdrive row "
                 f"(compare missed; not in table): {keys}"
             )
         else:
@@ -634,9 +636,9 @@ def print_comparison_report(
         console.print(msg)
     if result.missing_in_parsed:
         keys = ", ".join(sorted(set(result.missing_in_parsed)))
-        if result.mode == "nominal-overdrive":
+        if result.mode == "underdrive-overdrive":
             msg = (
-                f"Note: {len(result.missing_in_parsed)} overdrive row(s) have no matching nominal row "
+                f"Note: {len(result.missing_in_parsed)} overdrive row(s) have no matching underdrive row "
                 f"(compare missed; not in table): {keys}"
             )
         else:
@@ -669,17 +671,17 @@ def compare_entry(
     mode: str = typer.Option(
         "readme-overdrive",
         "--mode",
-        help="readme-overdrive | readme-nominal | nominal-overdrive",
+        help="readme-overdrive | readme-underdrive | underdrive-overdrive",
     ),
     parsed: Path = typer.Option(
         DEFAULT_PARSED_CSV,
         "--parsed",
         help=f"README-parsed CSV for readme-* modes (default: {DEFAULT_PARSED_CSV})",
     ),
-    nominal: Path = typer.Option(
-        DEFAULT_NOMINAL_CSV,
-        "--nominal",
-        help=f"Nominal benchmark_results.csv (default: {DEFAULT_NOMINAL_CSV})",
+    underdrive: Path = typer.Option(
+        DEFAULT_UNDERDRIVE_CSV,
+        "--underdrive",
+        help=f"Underdrive benchmark_results.csv (default: {DEFAULT_UNDERDRIVE_CSV})",
     ),
     overdrive: Path = typer.Option(
         DEFAULT_OVERDRIVE_CSV,
@@ -691,7 +693,7 @@ def compare_entry(
         "--benchmark",
         help=(
             "Alias for measured CSV in readme-* only (overrides --overdrive for readme-overdrive "
-            "and --nominal for readme-nominal)."
+            "and --underdrive for readme-underdrive)."
         ),
     ),
     delta_pct: float | None = typer.Option(
@@ -703,7 +705,7 @@ def compare_entry(
         ),
     ),
 ) -> None:
-    """Compare README-parsed metrics to benchmark CSVs or nominal vs overdrive."""
+    """Compare README-parsed metrics to benchmark CSVs or underdrive vs overdrive."""
     if getattr(ctx, "resilient_parsing", False):
         return
     if mode not in COMPARE_MODES:
@@ -730,33 +732,33 @@ def compare_entry(
             mode="readme-overdrive",
             headline="README vs overdrive (delta = measured − readme)",
         )
-    elif mode == "readme-nominal":
-        bench = benchmark if benchmark is not None else nominal
+    elif mode == "readme-underdrive":
+        bench = benchmark if benchmark is not None else underdrive
         if not parsed.is_file():
             _err_console.print(f"[red]error: parsed CSV not found: {parsed}[/red]")
             raise typer.Exit(2)
         if not bench.is_file():
-            _err_console.print(f"[red]error: nominal/measured CSV not found: {bench}[/red]")
+            _err_console.print(f"[red]error: underdrive/measured CSV not found: {bench}[/red]")
             raise typer.Exit(2)
         result = compare_readme_to_bench(
             parsed,
             bench,
-            mode="readme-nominal",
-            headline="README vs nominal (delta = measured − readme)",
+            mode="readme-underdrive",
+            headline="README vs underdrive (delta = measured − readme)",
         )
     else:
         if benchmark is not None:
             _err_console.print(
-                "[red]error: --benchmark is only valid for readme-overdrive or readme-nominal[/red]"
+                "[red]error: --benchmark is only valid for readme-overdrive or readme-underdrive[/red]"
             )
             raise typer.Exit(2)
-        if not nominal.is_file():
-            _err_console.print(f"[red]error: nominal CSV not found: {nominal}[/red]")
+        if not underdrive.is_file():
+            _err_console.print(f"[red]error: underdrive CSV not found: {underdrive}[/red]")
             raise typer.Exit(2)
         if not overdrive.is_file():
             _err_console.print(f"[red]error: overdrive CSV not found: {overdrive}[/red]")
             raise typer.Exit(2)
-        result = compare_nominal_to_overdrive(nominal, overdrive)
+        result = compare_underdrive_to_overdrive(underdrive, overdrive)
 
     assert result is not None
     if delta_pct is not None:

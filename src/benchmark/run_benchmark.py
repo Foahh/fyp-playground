@@ -23,7 +23,7 @@ from .utils.logutil import (
     log_model_fail,
 )
 from .core.models import load_models
-from .io.parsing import parse_metrics, _parse_network_c_info
+from .io.parsing import parse_metrics
 from .io.results import append_result, load_completed
 from .utils.logutil import get_logger
 from .execution.power_serial import (
@@ -45,11 +45,45 @@ APP_CONFIG_PATH = (
     / "app_config.h"
 )
 
+_VALID_MODES = frozenset({"underdrive", "nominal", "overdrive", "override"})
+
+
+def _ensure_no_ovd_clk400_commented(text: str) -> str:
+    """Comment out #define NO_OVD_CLK400 (real nominal: 600 MHz no-overdrive path)."""
+    if re.search(r"^\s*//\s*#define\s+NO_OVD_CLK400\b", text, flags=re.MULTILINE):
+        return text
+    pat = re.compile(r"^(\s*)(#define\s+NO_OVD_CLK400\b.*)$", re.MULTILINE)
+    new, n = pat.subn(r"\1// \2", text, count=1)
+    if n == 0:
+        raise RuntimeError(
+            f"Failed to comment NO_OVD_CLK400 in {APP_CONFIG_PATH}: active define not found"
+        )
+    return new
+
+
+def _ensure_no_ovd_clk400_active(text: str) -> str:
+    """Ensure #define NO_OVD_CLK400 is active (underdrive: 400 MHz when USE_OVERDRIVE is 0)."""
+    for line in text.splitlines():
+        s = line.lstrip()
+        if re.match(r"#define\s+NO_OVD_CLK400\b", s):
+            return text
+    pat = re.compile(r"^(\s*)//\s*(#define\s+NO_OVD_CLK400\b.*)$", re.MULTILINE)
+    new, n = pat.subn(r"\1\2", text, count=1)
+    if n:
+        return new
+    raise RuntimeError(
+        f"Failed to restore NO_OVD_CLK400 in {APP_CONFIG_PATH}: commented define not found"
+    )
+
 
 def _apply_benchmark_mode(mode: str) -> None:
-    """Patch app_config.h USE_OVERDRIVE according to benchmark mode."""
-    normalized = "nominal" if mode == "norminal" else mode
-    normalized = "overdrive" if normalized == "override" else normalized
+    """Patch app_config.h for benchmark mode (USE_OVERDRIVE and NO_OVD_CLK400)."""
+    m = mode.strip().lower()
+    if m not in _VALID_MODES:
+        raise ValueError(
+            f"Invalid benchmark mode {mode!r}; expected one of {sorted(_VALID_MODES)}"
+        )
+    normalized = "overdrive" if m == "override" else m
     use_overdrive = "1" if normalized == "overdrive" else "0"
     if not APP_CONFIG_PATH.exists():
         raise FileNotFoundError(f"app_config.h not found: {APP_CONFIG_PATH}")
@@ -61,6 +95,11 @@ def _apply_benchmark_mode(mode: str) -> None:
         raise RuntimeError(
             f"Failed to patch USE_OVERDRIVE in {APP_CONFIG_PATH}: define not found"
         )
+    if normalized == "nominal":
+        updated = _ensure_no_ovd_clk400_commented(updated)
+    elif normalized == "underdrive":
+        updated = _ensure_no_ovd_clk400_active(updated)
+
     if updated != text:
         APP_CONFIG_PATH.write_text(updated, encoding="utf-8")
 
@@ -99,7 +138,7 @@ def run_benchmark(
     mode: str = typer.Option(
         "all",
         "--mode",
-        help="nominal | norminal | overdrive | override | all (patch app_config.h)",
+        help="underdrive | nominal | overdrive | override | all (patch app_config.h)",
     ),
 ) -> None:
     if getattr(ctx, "resilient_parsing", False):
@@ -122,8 +161,8 @@ def _run_all_modes(
     power_baud: int,
     validation_count: int,
 ) -> None:
-    """Run benchmark in nominal mode, pause, then overdrive mode."""
-    _run_single_mode("nominal", filter_substr, power_serial, power_baud, validation_count)
+    """Run benchmark in underdrive mode, pause, then overdrive mode."""
+    _run_single_mode("underdrive", filter_substr, power_serial, power_baud, validation_count)
     get_logger("benchmark").info("Pausing for 5.0 seconds between modes...")
     time.sleep(5.0)
     _run_single_mode("overdrive", filter_substr, power_serial, power_baud, validation_count)
@@ -151,7 +190,8 @@ def _run_single_mode(
     completed = load_completed()
     total = len(entries)
 
-    mode_out = "overdrive" if mode == "override" else ("nominal" if mode == "norminal" else mode)
+    m = mode.strip().lower()
+    mode_out = "overdrive" if m == "override" else mode
     log_benchmark_start(
         total=total,
         completed=len(completed),
@@ -216,10 +256,6 @@ def _run_benchmark_loop(
                 continue
 
             metrics = parse_metrics(res.combined_stdout, res.combined_stderr)
-
-            cinfo_path = _get_st_ai_output_dir() / "network_c_info.json"
-            if cinfo_path.exists():
-                _parse_network_c_info(cinfo_path, metrics)
 
             missing = [
                 k for k, v in {

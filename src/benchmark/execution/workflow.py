@@ -455,6 +455,8 @@ def run_benchmark(entry: ModelEntry, validation_count: int) -> EvalResult:
             internal_ram_kib=gen_metrics.get("internal_ram_kib", ""),
             external_ram_kib=gen_metrics.get("external_ram_kib", ""),
             weights_flash_kib=gen_metrics.get("weights_flash_kib", ""),
+            input_buffer_kib=gen_metrics.get("input_buffer_kib", ""),
+            output_buffer_kib=gen_metrics.get("output_buffer_kib", ""),
         )
 
         # Step 2: Build & Flash

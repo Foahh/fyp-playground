@@ -40,8 +40,9 @@ python project.py quantize --size 192           # Export to INT8 TFLite
 ### Benchmarking (fyp-bhmk)
 ```bash
 conda activate fyp-bhmk
-python project.py benchmark                     # Run both nominal and overdrive
-python project.py benchmark --mode nominal      # Nominal mode only
+python project.py benchmark                     # Run both underdrive and overdrive
+python project.py benchmark --mode underdrive   # Underdrive (400 MHz: NO_OVD_CLK400 on, USE_OVERDRIVE 0)
+python project.py benchmark --mode nominal      # Nominal (600 MHz: NO_OVD_CLK400 commented, USE_OVERDRIVE 0)
 python project.py benchmark --filter st_yoloxn_d033_w025_192  # Single model
 python project.py compare-runs                  # Compare against README metrics
 ```
@@ -92,8 +93,8 @@ python project.py finetune -- --config configs/finetune.yaml --mode training
 
 - Training: `results/model/tinyissimoyolo_v8_<size>/weights/best.pt`
 - Quantized models: `results/model/tinyissimoyolo_v8_<size>/weights/best_saved_model/best_int8.tflite`
-- Benchmark results: `results/benchmark_nominal/benchmark_results.csv`, `results/benchmark_overdrive/benchmark_results.csv`
-- Power logs: `results/benchmark_nominal/power_measure.csv`
+- Benchmark results: `results/benchmark_underdrive/`, `results/benchmark_nominal/`, or `results/benchmark_overdrive/` (each contains `benchmark_results.csv`)
+- Power logs: `results/benchmark_<mode>/power_measure.csv` (same subdir as the active mode)
 
 ## Environment Variables
 
@@ -115,6 +116,6 @@ Optional power measurement:
 
 - Always activate the correct Conda environment before running commands
 - Training outputs checkpoints that quantization consumes
-- Benchmark mode (nominal/overdrive) patches `app_config.h` USE_OVERDRIVE flag
+- Benchmark mode patches `app_config.h`: `USE_OVERDRIVE`, and for underdrive vs nominal the `NO_OVD_CLK400` define (see `main.c` clock selection)
 - Model registry in `configs/model_registry.yaml` defines which models to benchmark
 - Hydra configs default output to `./configs/outputs/`

@@ -4,7 +4,7 @@ import json
 import re
 from pathlib import Path
 
-from ..paths import WORKDIR
+from ..paths import N6_WORKDIR
 
 
 def parse_metrics(stdout: str, stderr: str) -> dict:
@@ -23,7 +23,7 @@ def parse_metrics(stdout: str, stderr: str) -> dict:
     combined = stdout + "\n" + stderr
 
     # ── Read network_c_info.json for precise memory values ──
-    cinfo_path = WORKDIR / "st_ai_output" / "network_c_info.json"
+    cinfo_path = N6_WORKDIR / "st_ai_output" / "network_c_info.json"
     if cinfo_path.exists():
         try:
             with open(cinfo_path, "r") as f:
@@ -49,15 +49,15 @@ def parse_metrics(stdout: str, stderr: str) -> dict:
                 elif name in EXTERNAL_POOLS and "WRITE" in pool.get("rights", ""):
                     external_total += used
 
-            if internal_total > 0:
+            if internal_total >= 0:
                 metrics["internal_ram_kib"] = f"{internal_total / 1024:.2f}"
-            if external_total > 0:
+            if external_total >= 0:
                 metrics["external_ram_kib"] = f"{external_total / 1024:.2f}"
 
             # Weights from memory_footprint
             mem = cinfo.get("memory_footprint", {})
-            if mem.get("weights"):
-                metrics["weights_flash_kib"] = f"{mem['weights'] / 1024:.2f}"
+            if mem.get("weights", 0) >= 0:
+                metrics["weights_flash_kib"] = f"{mem.get('weights', 0) / 1024:.2f}"
 
             # I/O buffer sizes from graphs
             graphs = cinfo.get("graphs", [])
@@ -68,9 +68,9 @@ def parse_metrics(stdout: str, stderr: str) -> dict:
                 inp_total = sum(buffers.get(i, 0) for i in g0.get("inputs", []))
                 out_total = sum(buffers.get(i, 0) for i in g0.get("outputs", []))
 
-                if inp_total > 0:
+                if inp_total >= 0:
                     metrics["input_buffer_kib"] = f"{inp_total / 1024:.2f}"
-                if out_total > 0:
+                if out_total >= 0:
                     metrics["output_buffer_kib"] = f"{out_total / 1024:.2f}"
         except Exception:
             pass

@@ -217,7 +217,7 @@ Benchmark on **STM32N6570-DK** in `fyp-bhmk`.
 Results are saved to:
 
 ```text
-results/benchmark_nominal/benchmark_results.csv
+results/benchmark_underdrive/benchmark_results.csv
 ```
 
 ### Requirements
@@ -253,7 +253,8 @@ conda activate fyp-bhmk
 Benchmark examples:
 
 - Single model: `python project.py benchmark --filter st_yoloxn_d033_w025_192`
-- Nominal mode only: `python project.py benchmark --mode nominal`
+- Underdrive mode only: `python project.py benchmark --mode underdrive`
+- Nominal mode only (600 MHz no-overdrive path): `python project.py benchmark --mode nominal`
 - Overdrive mode only: `python project.py benchmark --mode overdrive`
 - Both modes (default): `python project.py benchmark`
 
@@ -266,13 +267,13 @@ For INA228-based logging, see:
 Benchmark averages are written to `pm_avg_*` columns in:
 
 ```text
-results/benchmark_nominal/benchmark_results.csv
+results/benchmark_underdrive/benchmark_results.csv
 ```
 
 Continuous logs are appended to:
 
 ```text
-results/benchmark_nominal/power_measure.csv
+results/benchmark_underdrive/power_measure.csv
 ```
 
 ### Compare README metrics
@@ -290,20 +291,20 @@ Default files:
 | Artifact | Path |
 |---|---|
 | Parsed README metrics | `results/benchmark_parsed.csv` |
-| Nominal results | `results/benchmark_nominal/benchmark_results.csv` |
+| Underdrive results | `results/benchmark_underdrive/benchmark_results.csv` |
 | Overdrive results | `results/benchmark_overdrive/benchmark_results.csv` |
 
 Examples:
 
 - Refresh parsed CSV and compare to overdrive: `python project.py compare-runs`
 - Parse only: `python project.py compare-runs parse`
-- Compare README vs nominal: `python project.py compare-runs compare --mode readme-nominal`
-- Compare nominal vs overdrive: `python project.py compare-runs compare --mode nominal-overdrive`
+- Compare README vs underdrive: `python project.py compare-runs compare --mode readme-underdrive`
+- Compare underdrive vs overdrive: `python project.py compare-runs compare --mode underdrive-overdrive`
 
 Useful flags:
 
 - `--parsed`
-- `--nominal`
+- `--underdrive`
 - `--overdrive`
 - `--benchmark`
 - `--delta-pct PCT`

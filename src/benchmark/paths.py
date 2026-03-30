@@ -8,7 +8,7 @@ from ..common.paths import get_datasets_dir, get_repo_root, get_stedgeai_path
 
 def _detect_benchmark_mode_from_argv() -> str:
     """Detect benchmark mode from CLI args."""
-    mode = "nominal"
+    mode = "underdrive"
     argv = sys.argv[1:]
     for i, token in enumerate(argv):
         if token == "--mode" and i + 1 < len(argv):
@@ -20,9 +20,11 @@ def _detect_benchmark_mode_from_argv() -> str:
 
     if mode in ("override", "overdrive"):
         return "overdrive"
-    if mode in ("norminal", "nominal"):
+    if mode == "nominal":
         return "nominal"
-    return "nominal"
+    if mode == "underdrive":
+        return "underdrive"
+    return "underdrive"
 
 
 BASE_DIR = get_repo_root()
@@ -32,9 +34,15 @@ SERVICES_DIR = BASE_DIR / "external" / "stm32ai-modelzoo-services" / "object_det
 RESULTS_DIR = BASE_DIR / "results"
 
 BENCHMARK_MODE = _detect_benchmark_mode_from_argv()
-BENCHMARK_DIR = RESULTS_DIR / (
-    "benchmark_overdrive" if BENCHMARK_MODE == "overdrive" else "benchmark_nominal"
-)
+def _benchmark_results_subdir(mode: str) -> str:
+    if mode == "overdrive":
+        return "benchmark_overdrive"
+    if mode == "nominal":
+        return "benchmark_nominal"
+    return "benchmark_underdrive"
+
+
+BENCHMARK_DIR = RESULTS_DIR / _benchmark_results_subdir(BENCHMARK_MODE)
 BENCHMARK_PARSED_DIR = RESULTS_DIR
 
 CSV_PATH = BENCHMARK_DIR / "benchmark_results.csv"
