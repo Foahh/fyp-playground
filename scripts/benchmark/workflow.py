@@ -7,6 +7,7 @@ import subprocess
 import sys
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -216,16 +217,25 @@ def _step_validate(entry: ModelEntry, n_runs: int = 10) -> tuple[str, str, int]:
         return "", f"Failed to import ai_runner: {e}", 1
 
     output_lines = []
+    _append_stdout_log(
+        f"\n--- VALIDATE start | {entry.variant} | {entry.fmt} | n_runs={n_runs} ---"
+    )
     try:
         output_lines.append(f"Running {n_runs} inferences using ai_runner...")
         runner = AiRunner(debug=False)
+        _append_stdout_log("VALIDATE_STEP connect serial:921600")
         runner.connect("serial:921600")
 
         if not runner.is_connected:
-            return "", f"Failed to connect to device: {runner.get_error()}", 1
+            err = runner.get_error()
+            _append_stdout_log(f"VALIDATE_STEP connect failed: {err}")
+            return "", f"Failed to connect to device: {err}", 1
+
+        _append_stdout_log("VALIDATE_STEP connected")
 
         # Generate random input (batch_size=1)
         inputs = runner.generate_rnd_inputs(batch_size=1)
+        _append_stdout_log("VALIDATE_STEP begin inference loop")
 
         # Run inference n_runs times
         durations = []
@@ -233,12 +243,21 @@ def _step_validate(entry: ModelEntry, n_runs: int = 10) -> tuple[str, str, int]:
             _, profile = runner.invoke(inputs, mode=AiRunner.Mode.IO_ONLY, disable_pb=True)
 
             if profile['c_durations']:
-                durations.append(profile['c_durations'][0])
+                d_ms = profile['c_durations'][0]
+                durations.append(d_ms)
+                _append_stdout_log(
+                    f"VALIDATE_INFERENCE run={i + 1}/{n_runs} duration_ms={d_ms:.6f}"
+                )
+            else:
+                _append_stdout_log(
+                    f"VALIDATE_INFERENCE run={i + 1}/{n_runs} duration_ms=(none)"
+                )
 
             # Sleep 50ms between runs for power measurement denoising
             time.sleep(0.05)
 
         runner.disconnect()
+        _append_stdout_log("VALIDATE_STEP disconnected")
 
         # Format output
         if durations:
@@ -247,10 +266,14 @@ def _step_validate(entry: ModelEntry, n_runs: int = 10) -> tuple[str, str, int]:
             max_ms = max(durations)
             output_lines.append(f"Completed {len(durations)} inferences")
             output_lines.append(f"Inference time: avg={avg_ms:.3f}ms, min={min_ms:.3f}ms, max={max_ms:.3f}ms")
+            _append_stdout_log(
+                f"VALIDATE_SUMMARY n={len(durations)} avg_ms={avg_ms:.6f} min_ms={min_ms:.6f} max_ms={max_ms:.6f}"
+            )
 
         return "\n".join(output_lines), "", 0
 
     except Exception as e:
+        _append_stdout_log(f"VALIDATE_STEP exception: {e}")
         return "\n".join(output_lines), f"Error during multi-inference: {e}", 1
 
 
@@ -348,51 +371,71 @@ def run_evaluation(entry: ModelEntry, validation_count: int) -> EvalResult:
 
         time.sleep(1)
 
-        # Step 3: Validate on device with multiple inferences for power measurement
-        print(f"  → Validating on device ({validation_count}x inferences)...")
+        # Steps 3–4: Validate on device (power) and host-side evaluation — independent I/O, run concurrently.
+        print(
+            f"  → Validating on device ({validation_count}x inferences) and host evaluation (parallel)..."
+        )
         validate_t0 = time.monotonic()
         begin_validate_capture()
+        executor = ThreadPoolExecutor(max_workers=2)
+        fut_evaluate = None
+        validate_lines: list = []
+        validate_window_closed = False
         try:
-            res.validate_out, res.validate_err, res.validate_rc = _step_validate(entry, validation_count)
+            fut_validate = executor.submit(_step_validate, entry, validation_count)
+            fut_evaluate = executor.submit(_step_evaluate, entry)
+            try:
+                res.validate_out, res.validate_err, res.validate_rc = fut_validate.result()
+            finally:
+                validate_dt = time.monotonic() - validate_t0
+                validate_lines = end_validate_capture()
+                validate_window_closed = True
+            validate_header = (
+                f"\n=== VALIDATE | {entry.variant} | {entry.fmt} ===\n"
+                f"elapsed time (VALIDATE, wall): {validate_dt:.3f}s\n"
+                f"validate rc: {res.validate_rc}\n"
+                f"power samples captured (validate window): {len(validate_lines)}\n"
+            )
+            _append_stdout_log(validate_header)
+            if res.validate_out:
+                _append_stdout_log(res.validate_out)
+            if res.validate_err:
+                _append_stdout_log(res.validate_err)
+            if validate_lines:
+                metrics = compute_power_metrics(validate_lines, validation_count)
+                res.pm_avg_inf_mW = metrics["pm_avg_inf_mW"]
+                res.pm_avg_idle_mW = metrics["pm_avg_idle_mW"]
+                res.pm_avg_delta_mW = metrics["pm_avg_delta_mW"]
+                res.pm_avg_inf_ms = metrics["pm_avg_inf_ms"]
+                res.pm_avg_idle_ms = metrics["pm_avg_idle_ms"]
+                res.pm_avg_inf_mJ = metrics["pm_avg_inf_mJ"]
+                res.pm_avg_idle_mJ = metrics["pm_avg_idle_mJ"]
+            elif is_power_session_active():
+                print(
+                    "  ⚠ WARNING: Power measurement active but no samples captured during validation"
+                )
+            if res.validate_rc != 0:
+                print(
+                    f"  ⚠ Validation step failed (rc={res.validate_rc}); check benchmark_stdout.log VALIDATE block"
+                )
+
+            if fut_evaluate is not None:
+                try:
+                    res.evaluate_out, res.evaluate_err, res.evaluate_rc = (
+                        fut_evaluate.result()
+                    )
+                except subprocess.TimeoutExpired:
+                    res.evaluate_err = "TIMEOUT: host evaluation exceeded 1 hour"
+                    res.evaluate_rc = -1
         finally:
-            validate_lines = end_validate_capture()
-        validate_dt = time.monotonic() - validate_t0
-        validate_header = (
-            f"\n=== VALIDATE | {entry.variant} | {entry.fmt} ===\n"
-            f"elapsed time (VALIDATE): {validate_dt:.3f}s\n"
-            f"validate rc: {res.validate_rc}\n"
-        )
-        _append_stdout_log(validate_header)
-        if res.validate_out:
-            _append_stdout_log(res.validate_out)
-        if res.validate_err:
-            _append_stdout_log(res.validate_err)
-        if validate_lines:
-            metrics = compute_power_metrics(validate_lines, validation_count)
-            res.pm_avg_inf_mW = metrics["pm_avg_inf_mW"]
-            res.pm_avg_idle_mW = metrics["pm_avg_idle_mW"]
-            res.pm_avg_delta_mW = metrics["pm_avg_delta_mW"]
-            res.pm_avg_inf_ms = metrics["pm_avg_inf_ms"]
-            res.pm_avg_idle_ms = metrics["pm_avg_idle_ms"]
-            res.pm_avg_inf_mJ = metrics["pm_avg_inf_mJ"]
-            res.pm_avg_idle_mJ = metrics["pm_avg_idle_mJ"]
-        elif is_power_session_active():
-            print("  ⚠ WARNING: Power measurement active but no samples captured during validation")
-        if res.validate_rc != 0:
-            print(f"  ⚠ Validation step failed (rc={res.validate_rc}); check benchmark_stdout.log VALIDATE block")
+            if not validate_window_closed:
+                end_validate_capture()
+            executor.shutdown(wait=True)
 
     except subprocess.TimeoutExpired as e:
         step = "on-target"
         res.generate_err += f"\nTIMEOUT in {step}: {e}"
         res.generate_rc = -1
         return res
-
-    try:
-        # Step 4: Host-side evaluation for AP metrics
-        print("  → Evaluating accuracy metrics...")
-        res.evaluate_out, res.evaluate_err, res.evaluate_rc = _step_evaluate(entry)
-    except subprocess.TimeoutExpired:
-        res.evaluate_err = "TIMEOUT: host evaluation exceeded 1 hour"
-        res.evaluate_rc = -1
 
     return res
