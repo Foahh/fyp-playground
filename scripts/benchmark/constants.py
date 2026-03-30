@@ -178,6 +178,7 @@ SSD_FAMILIES = {
 
 CSV_COLUMNS = [
     "host_time_iso",
+    "stedgeai_version",
     "model_family",
     "model_variant",
     "hyperparameters",
@@ -703,7 +704,7 @@ MODEL_REGISTRY: list[dict] = [
     },
     {
         "config": _ZOO / "st_yoloxn/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yoloxn_d100_w025_480/st_yoloxn_d100_w025_480_config.yaml",
-        "model": _ZOO / "st_yoloxn/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yoloxn_d100_w025_480/st_yoloxn_d100_w025_480_qdq_w4_46.51%_w8_53.49%_a8_100%_map_60.42.onnx",
+        "model": _ZOO / "st_yoloxn/ST_pretrainedmodel_public_dataset/coco_2017_person/st_yoloxn_d100_w025_480/st_yoloxn_d100_w025_480_qdq_w4_55.23%_w8_44.77%_a8_100%_map_59.9.onnx",
         "family": "st_yoloxn",
         "readme": _MD_st_yoloxn,
         "variant": "st_yoloxn_d100_w025_480",
@@ -794,13 +795,15 @@ MODEL_REGISTRY: list[dict] = [
         / "tinyissimoyolo_v8_192"
         / "weights"
         / "best_saved_model"
-        / "best_int8.tflite",
+        / "best_full_integer_quant.tflite",
         "family": "tinyissimoyolo_v8",
         "variant": "tinyissimoyolo_v8_192",
         "hyperparameters": "",
         "dataset": "COCO-Person",
         "fmt": "Int8",
         "resolution": 192,
+        "input_data_type": "int8",
+        "output_data_type": "int8",
     },
     # ── yolo26 ──
     {

@@ -177,7 +177,7 @@ def _extract_family_metrics(readme_path: Path) -> dict[str, dict]:
     """
     Build map: norm_model_basename -> merged metrics dict with keys:
     link_key, internal_ram_kib, external_ram_kib, weights_flash_kib,
-    inference_time_ms, inf_per_sec, ap_50 (optional),
+    inference_time_ms, inf_per_sec, stedgeai_version, ap_50 (optional),
     dataset (normalized), format, hyperparameter (optional), resolution (from table).
     """
     if not readme_path.is_file():
@@ -209,6 +209,7 @@ def _extract_family_metrics(readme_path: Path) -> dict[str, dict]:
             ds = hi.get("dataset")
             fmt = hi.get("format")
             res = hi.get("resolution")
+            stv = hi.get("stedgeai core version")
             if ir is None or wf is None:
                 continue
             for row_idx, row_cells in enumerate(body):
@@ -244,6 +245,8 @@ def _extract_family_metrics(readme_path: Path) -> dict[str, dict]:
                         rec["resolution_table"] = r
                 if hyp_idx is not None and hyp_idx < len(row_cells):
                     rec["hyperparameter"] = row_cells[hyp_idx].strip()
+                if stv is not None and stv < len(row_cells):
+                    rec["stedgeai_version"] = row_cells[stv].strip()
                 mem_by_key[key] = rec
 
         elif _is_npu_inference_table(headers):
@@ -253,6 +256,7 @@ def _extract_family_metrics(readme_path: Path) -> dict[str, dict]:
             ds = hi.get("dataset")
             fmt = hi.get("format")
             res = hi.get("resolution")
+            stv = hi.get("stedgeai core version")
             if bi is None or it is None:
                 continue
             for row_idx, row_cells in enumerate(body):
@@ -285,6 +289,8 @@ def _extract_family_metrics(readme_path: Path) -> dict[str, dict]:
                         rec["resolution_table"] = r
                 if hyp_idx is not None and hyp_idx < len(row_cells):
                     rec["hyperparameter"] = row_cells[hyp_idx].strip()
+                if stv is not None and stv < len(row_cells):
+                    rec["stedgeai_version"] = row_cells[stv].strip()
                 inf_by_key[key] = rec
 
         else:
@@ -390,6 +396,7 @@ def _pick_metrics(
         (k, v) for k, v in family_metrics.items() if k == lookup_key
     ]
     out = {
+        "stedgeai_version": "",
         "internal_ram_kib": "",
         "external_ram_kib": "",
         "weights_flash_kib": "",
@@ -456,6 +463,7 @@ def build_metric_rows() -> list[dict[str, str]]:
         rows.append(
             {
                 "host_time_iso": "",
+                "stedgeai_version": mets["stedgeai_version"],
                 "model_family": reg["family"],
                 "model_variant": reg["variant"],
                 "hyperparameters": reg.get("hyperparameters", "") or "",
@@ -473,14 +481,42 @@ def build_metric_rows() -> list[dict[str, str]]:
     return rows
 
 
+# README-derived values only; registry columns may still be set when these are blank.
+_PARSED_METRIC_KEYS = (
+    "internal_ram_kib",
+    "external_ram_kib",
+    "weights_flash_kib",
+    "inference_time_ms",
+    "inf_per_sec",
+    "ap_50",
+)
+
+
+def _parsed_metrics_empty(row: dict[str, str]) -> bool:
+    return not any((row.get(k) or "").strip() for k in _PARSED_METRIC_KEYS)
+
+
 def write_metric_parsed_csv(path: Path | None = None) -> tuple[Path, int]:
     ensure_dirs()
     out = path or METRIC_PARSED_CSV_PATH
-    rows = build_metric_rows()
+    built = build_metric_rows()
+    rows: list[dict[str, str]] = []
+    for r in built:
+        if _parsed_metrics_empty(r):
+            label = (
+                f"{r.get('model_family', '')}/{r.get('model_variant', '')}"
+                f" ({r.get('dataset', '')}, {r.get('format', '')}, {r.get('resolution', '')})"
+            )
+            print(f"Skipped saving row (no parsed README metrics): {label}")
+            continue
+        rows.append(r)
     with open(out, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=CSV_COLUMNS_NO_POWER)
         w.writeheader()
         w.writerows(rows)
+    skipped = len(built) - len(rows)
+    if skipped:
+        print(f"Skipped {skipped} model(s) with empty parsed metrics (not written).")
     return out, len(rows)
 
 

@@ -5,7 +5,7 @@ operation_mode: evaluation
 
 model:
   model_type: yolov8n
-  model_path: results/model/tinyissimoyolo_v8_192/weights/best_saved_model/best_int8.tflite
+  model_path: results/model/tinyissimoyolo_v8_192/weights/best_saved_model/best_full_integer_quant.tflite
 
 dataset:
   dataset_name: coco

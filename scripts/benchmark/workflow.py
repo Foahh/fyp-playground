@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -20,6 +21,8 @@ from .power_serial import (
     is_power_session_active,
 )
 
+_STEDGEAI_VERSION_CACHE: Optional[str] = None
+
 
 def _append_stdout_log(text: str) -> None:
     """Append plain text to benchmark stdout log."""
@@ -32,6 +35,30 @@ def _append_stdout_log(text: str) -> None:
 def _get_n6_scripts_dir() -> Path:
     """Return the N6_scripts directory from STEDGEAI_CORE_DIR."""
     return Path(os.environ["STEDGEAI_CORE_DIR"]) / "scripts" / "N6_scripts"
+
+
+def get_stedgeai_version() -> str:
+    """Return normalized stedgeai version string, or ``unknown`` on failure."""
+    global _STEDGEAI_VERSION_CACHE
+    if _STEDGEAI_VERSION_CACHE is not None:
+        return _STEDGEAI_VERSION_CACHE
+
+    try:
+        out, _, rc = _run_streaming(
+            [STEDGEAI_PATH, "--version"],
+            cwd=str(N6_WORKDIR),
+            timeout=20,
+        )
+        if rc == 0:
+            first = out.strip().splitlines()[0] if out.strip() else ""
+            m = re.search(r"\bv?(\d+\.\d+\.\d+)\b", first)
+            _STEDGEAI_VERSION_CACHE = m.group(1) if m else "unknown"
+            return _STEDGEAI_VERSION_CACHE
+    except Exception:
+        pass
+
+    _STEDGEAI_VERSION_CACHE = "unknown"
+    return _STEDGEAI_VERSION_CACHE
 
 
 def _get_st_ai_output_dir() -> Path:

@@ -83,7 +83,7 @@ python project.py train --size 192
 
 ```sh
 conda activate yolo
-python project.py quant --img_size 192
+python project.py quant --size 192
 ```
 
 ---
@@ -194,7 +194,7 @@ results/model/tinyissimoyolo_v8_<size>/weights/best.pt
 
 ```sh
 conda activate yolo
-python project.py quant --img_size 192
+python project.py quant --size 192
 ```
 
 Ultralytics writes the INT8 TFLite next to the checkpoint (no separate `quantized/` copy). With the default `best.pt` layout that is:
@@ -213,8 +213,8 @@ Optional flags:
 
 ```sh
 conda activate yolo
-python project.py quant --img_size 192 --no-eval
-python project.py quant --img_size 192 --checkpoint /path/to/best.pt
+python project.py quant --size 192 --no-eval
+python project.py quant --size 192 --checkpoint /path/to/best.pt
 ```
 
 To evaluate with the STM32 model zoo host pipeline instead, use `configs/tinyissimoyolo_v8_192_config.yaml` (update `model.model_path` if your checkpoint stem or export location differs) and run `stm32ai_main.py` from the `stzoo` environment as documented in `external/stm32ai-modelzoo-services`.
@@ -306,19 +306,19 @@ Test a single model first:
 
 ```sh
 conda activate stzoo
-python scripts/run_benchmark.py --filter st_yoloxn_d033_w025_192
+PYTHONPATH=scripts python -m benchmark --filter st_yoloxn_d033_w025_192
 ```
 
 Run the full benchmark suite for all variants:
 
 ```sh
 conda activate stzoo
-python scripts/run_benchmark.py
+PYTHONPATH=scripts python -m benchmark
 ```
 
 Run nominal first, pause 5 seconds, then overdrive before going to bed:
 
 ```sh
 conda activate stzoo
-python scripts/run_benchmark_nominal_overdrive.py
+python project.py benchmark
 ```

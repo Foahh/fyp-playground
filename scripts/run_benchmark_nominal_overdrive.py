@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 import time
@@ -11,13 +12,16 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent.parent
-BENCHMARK_SCRIPT = ROOT / "scripts" / "run_benchmark.py"
+SCRIPTS_DIR = str(ROOT / "scripts")
 
 
 def _run_mode(mode: str, passthrough: list[str]) -> None:
-    cmd = [sys.executable, str(BENCHMARK_SCRIPT), "--mode", mode, *passthrough]
+    env = os.environ.copy()
+    prev = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = SCRIPTS_DIR if not prev else f"{SCRIPTS_DIR}{os.pathsep}{prev}"
+    cmd = [sys.executable, "-m", "benchmark", "--mode", mode, *passthrough]
     print("+", " ".join(cmd), flush=True)
-    subprocess.run(cmd, cwd=ROOT, check=True)
+    subprocess.run(cmd, cwd=ROOT, env=env, check=True)
 
 
 def parse_args() -> argparse.Namespace:

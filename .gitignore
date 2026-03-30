@@ -7,6 +7,11 @@ results/*
 !results/benchmark_overdrive/
 !results/benchmark_parsed.csv
 
+!results/model/
+results/model/*
+!results/model/tinyissimoyolo_v8_192/
+results/model/tinyissimoyolo_v8_192/weights/best_saved_model/variables
+
 *.npy
 ai_runner.log
 yolo26n.pt

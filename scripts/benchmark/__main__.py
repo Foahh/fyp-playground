@@ -17,7 +17,7 @@ from .power_serial import (
     start_power_session,
     stop_power_session,
 )
-from .workflow import _get_st_ai_output_dir, run_evaluation
+from .workflow import _get_st_ai_output_dir, get_stedgeai_version, run_evaluation
 
 APP_CONFIG_PATH = (
     Path(os.environ["STEDGEAI_CORE_DIR"])
@@ -89,6 +89,7 @@ def main():
     _apply_benchmark_mode(args.mode)
 
     power_running = start_power_session(args.power_serial, args.power_baud)
+    stedgeai_version = get_stedgeai_version()
 
     entries = load_models()
 
@@ -115,6 +116,7 @@ def main():
         f"  --power-baud: {args.power_baud}\n"
         f"  --validation-count: {args.validation_count}\n"
         f"  --mode: {'overdrive' if args.mode == 'override' else ('nominal' if args.mode == 'norminal' else args.mode)}\n"
+        f"  stedgeai_version: {stedgeai_version}\n"
         f"  app_config: {APP_CONFIG_PATH}\n"
         f"  power_measurement_active: {power_running}"
         f"{power_port_line}"
@@ -130,12 +132,26 @@ def main():
     log_stdout(header)
 
     try:
-        _run_benchmark_loop(entries, total, completed, power_running, args.validation_count)
+        _run_benchmark_loop(
+            entries,
+            total,
+            completed,
+            power_running,
+            args.validation_count,
+            stedgeai_version,
+        )
     finally:
         stop_power_session()
 
 
-def _run_benchmark_loop(entries, total, completed, power_running: bool, validation_count: int):
+def _run_benchmark_loop(
+    entries,
+    total,
+    completed,
+    power_running: bool,
+    validation_count: int,
+    stedgeai_version: str,
+):
     for i, entry in enumerate(entries, 1):
         key = (entry.variant, entry.fmt)
         tag = f"[{i}/{total}]"
@@ -200,6 +216,7 @@ def _run_benchmark_loop(entries, total, completed, power_running: bool, validati
                 "host_time_iso": datetime.datetime.now(
                     datetime.timezone.utc
                 ).isoformat(),
+                "stedgeai_version": stedgeai_version,
                 "model_family": entry.family,
                 "model_variant": entry.variant,
                 "hyperparameters": entry.hyperparameters,

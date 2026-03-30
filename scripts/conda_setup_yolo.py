@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parent.parent
+PATCH_SCRIPT = Path(__file__).resolve().parent / "patch_ultralytics_per_channel_quant.py"
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
@@ -56,6 +57,9 @@ def main() -> None:
         PYTORCH_WHL_INDEX,
     )
     pip_install(YOLO_ENV_NAME, "-r", str(yolo_req))
+
+    print(f"Patching Ultralytics onnx2tf quant → per-channel in '{YOLO_ENV_NAME}' ...")
+    conda_run(YOLO_ENV_NAME, "python", str(PATCH_SCRIPT.resolve()))
 
     print("Done.")
     print(f"- YOLO env: conda activate {YOLO_ENV_NAME}")
