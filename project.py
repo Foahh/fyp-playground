@@ -11,16 +11,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 
 LOCAL_COMMANDS = {
-    "dataset-coco": "scripts/load_coco.py",
-    "dataset-finetune": "scripts/load_finetune_data.py",
-    "benchmark": "scripts/run_benchmark_nominal_overdrive.py",
-    "compare": "scripts/run_compare.py",
-    "conda-yolo": "scripts/conda_setup_yolo.py",
-    "conda-benchmark": "scripts/conda_setup_benchmark.py",
-    "train": "scripts/run_train_tinyissimo_coco_person.py",
-    "quant": "scripts/run_quantize.py",
-    "finetune-dataset": "scripts/run_finetune_dataset.py",
-    "finetune": "scripts/run_finetune.py",
+    "dataset-coco": "src/dataset/load_coco.py",
+    "dataset-finetune": "src/dataset/load_finetune_data.py",
+    "benchmark": "src/benchmark/run_benchmark_nominal_overdrive.py",
+    "compare": "src/benchmark/run_compare.py",
+    "conda-ml": "src/conda/conda_setup_ml.py",
+    "conda-bhmk": "src/conda/conda_setup_bhmk.py",
+    "train": "src/ml/run_train_tinyissimo_coco_person.py",
+    "quant": "src/ml/run_quantize.py",
+    "finetune-dataset": "src/ml/run_finetune_dataset.py",
+    "finetune": "src/ml/run_finetune.py",
 }
 
 

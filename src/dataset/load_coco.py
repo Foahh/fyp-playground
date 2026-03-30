@@ -1,9 +1,9 @@
 """Download and prepare COCO datasets (YOLO layout, person subset, TFS exports).
 
-Run in the same ``yolo`` conda env as training / quantization::
+Run in the same ``fyp-ml`` conda env as training / quantization::
 
-    python project.py conda-yolo
-    conda activate yolo    # or $ST_YOLO_ENV
+    python project.py conda-ml
+    conda activate fyp-ml    # or $ST_YOLO_ENV
 """
 
 import json
@@ -15,7 +15,7 @@ from pathlib import Path
 import tensorflow as tf
 from pycocotools.coco import COCO
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 DATASETS_DIR = Path(
     os.environ.get("DATASETS_DIR", str(REPO_ROOT / "datasets"))
 ).expanduser()

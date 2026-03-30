@@ -1,11 +1,11 @@
 """
 Train TinyissimoYOLO v8 on COCO Person (single class).
 
-Run from the parent repository root (outputs under results/model/):
-    python scripts/run_train_tinyissimo_coco_person.py --size 192
-    python scripts/run_train_tinyissimo_coco_person.py --size 192 --profile paper
-    python scripts/run_train_tinyissimo_coco_person.py --size 192 --profile powerful
-    python scripts/run_train_tinyissimo_coco_person.py --size 192 --no-resume
+Run from the repository root (outputs under results/model/):
+    python src/ml/run_train_tinyissimo_coco_person.py --size 192
+    python src/ml/run_train_tinyissimo_coco_person.py --size 192 --profile paper
+    python src/ml/run_train_tinyissimo_coco_person.py --size 192 --profile powerful
+    python src/ml/run_train_tinyissimo_coco_person.py --size 192 --no-resume
 
 Quantization to INT8 TFLite is handled separately by run_quantize.py.
 """
@@ -16,11 +16,12 @@ from pathlib import Path
 
 import yaml
 
-ROOT = Path(__file__).resolve().parent.parent
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+SRC = Path(__file__).resolve().parent.parent
+ROOT = SRC.parent
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
 
-from scripts.coco_yolo_data import materialize_coco_data_yaml
+from dataset.coco_yolo_data import materialize_coco_data_yaml
 from ultralytics import YOLO
 
 TINY = ROOT / "external" / "TinyissimoYOLO"

@@ -5,13 +5,13 @@ Parses TFLite FlatBuffers to extract tensor types; ONNX QDQ models are
 reported as uint8/int8 (the standard stedgeai mapping).
 
 Usage:
-    python -m scripts.benchmark.check_model_dtypes
+    PYTHONPATH=src python -m benchmark.check_model_dtypes
 """
 
 import struct
 from pathlib import Path
 
-from scripts.benchmark.constants import MODEL_REGISTRY
+from benchmark.constants import MODEL_REGISTRY
 
 _TFLITE_TYPE = {
     0: "float32",

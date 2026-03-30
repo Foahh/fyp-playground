@@ -31,22 +31,26 @@ the same value on both sides are omitted.
 
 from __future__ import annotations
 
-import argparse
-import csv
 import sys
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import pandas as pd
+import typer
+from rich.console import Console
+from rich.rule import Rule
+from rich.table import Table
+
 from .constants import BASE_DIR, CSV_COLUMNS, CSV_COLUMNS_NO_POWER
+from .logutil import configure_logging, typer_install_exception_hook
 
 
 RESULTS_DIR = BASE_DIR / "results"
 DEFAULT_PARSED_CSV = RESULTS_DIR / "benchmark_parsed.csv"
 DEFAULT_NOMINAL_CSV = RESULTS_DIR / "benchmark_nominal" / "benchmark_results.csv"
 DEFAULT_OVERDRIVE_CSV = RESULTS_DIR / "benchmark_overdrive" / "benchmark_results.csv"
-# Back-compat alias for readme-overdrive default second file
 DEFAULT_BENCHMARK_CSV = DEFAULT_OVERDRIVE_CSV
 
 COMPARE_MODES = ("readme-overdrive", "readme-nominal", "nominal-overdrive")
@@ -60,14 +64,21 @@ IDENTITY_COLS = (
     "resolution",
 )
 
+KEY_MERGE = (
+    "model_family",
+    "model_variant",
+    "hyperparameters",
+    "dataset",
+    "format",
+    "_res",
+)
+
 METRIC_COLS = tuple(
     c
     for c in CSV_COLUMNS_NO_POWER
     if c not in IDENTITY_COLS and c not in ("host_time_iso", "stedgeai_version")
 )
 
-# Device CSV metrics for nominal-overdrive: all CSV columns except identity/version/time and
-# idle/delta power fields (not accurate for cross-run compare).
 _BENCH_PAIR_OMIT_POWER = frozenset(
     (
         "pm_avg_idle_mW",
@@ -84,7 +95,6 @@ METRIC_COLS_BENCH_PAIR = tuple(
     and c not in _BENCH_PAIR_OMIT_POWER
 )
 
-# Per-variant subtable (model name is printed as a section heading above).
 PER_VARIANT_COLUMNS_README = (
     "dataset",
     "format",
@@ -167,7 +177,6 @@ def _parse_float(cell: str) -> float | None:
 
 
 def _external_ram_kib_float(raw: str) -> float:
-    """Treat blanks and null-like tokens as 0; non-numeric garbage → 0 (same as missing)."""
     if _blank(raw):
         return 0.0
     s = (raw or "").strip().lower()
@@ -180,7 +189,6 @@ def _external_ram_kib_float(raw: str) -> float:
 
 
 def metric_floats(col: str, parsed_raw: str, bench_raw: str) -> tuple[float | None, float | None]:
-    """Numeric readme vs measured; external RAM treats blank as 0."""
     if col == "external_ram_kib":
         return _external_ram_kib_float(parsed_raw), _external_ram_kib_float(bench_raw)
     pr = _parse_float(parsed_raw)
@@ -229,7 +237,6 @@ def _delta_sort_key(delta_s: str) -> float:
 
 
 def _parse_delta_pct_value(pct_str: str) -> float | None:
-    """Parse a ``delta_pct`` cell like ``+1.23%``; return None for ``—`` or non-numeric."""
     s = (pct_str or "").strip()
     if not s or s == "—":
         return None
@@ -237,7 +244,7 @@ def _parse_delta_pct_value(pct_str: str) -> float | None:
         s = s[:-1].strip()
     try:
         v = float(s)
-        if v != v:  # NaN
+        if v != v:
             return None
         return v
     except ValueError:
@@ -248,7 +255,6 @@ def filter_rows_by_abs_delta_pct(
     rows: list[dict[str, str]],
     min_abs_pct: float,
 ) -> list[dict[str, str]]:
-    """Apply ``--delta-pct`` filter: drop small numeric |Δ%%|; drop matching ``stedgeai_version`` rows."""
     if min_abs_pct < 0:
         raise ValueError("min_abs_pct must be non-negative")
     out: list[dict[str, str]] = []
@@ -261,13 +267,67 @@ def filter_rows_by_abs_delta_pct(
     return out
 
 
+def load_csv_df(path: Path) -> pd.DataFrame:
+    df = pd.read_csv(path, dtype=str, keep_default_na=False, na_filter=False)
+    if df.shape[1] == 0 or df.columns[0] == "":
+        raise SystemExit(f"No header in {path}")
+    return df
+
+
 def load_csv(path: Path) -> tuple[list[str], list[dict[str, str]]]:
-    with path.open(newline="", encoding="utf-8") as f:
-        r = csv.DictReader(f)
-        if not r.fieldnames:
-            raise SystemExit(f"No header in {path}")
-        rows = list(r)
-        return list(r.fieldnames), rows
+    """Backward-compatible CSV loader (dict rows)."""
+    df = load_csv_df(path)
+    return list(df.columns), df.to_dict("records")
+
+
+def _normalize_identity_df(df: pd.DataFrame) -> pd.DataFrame:
+    out = df.copy()
+    for c in ["model_family", "model_variant", "hyperparameters", "dataset", "format"]:
+        if c not in out.columns:
+            out[c] = ""
+        out[c] = out[c].fillna("").astype(str).str.strip()
+    if "resolution" not in out.columns:
+        out["resolution"] = ""
+    out["_res"] = out["resolution"].map(lambda v: str(_resolution_int(v)))
+    return out
+
+
+def _row_dict_for_metrics(r: pd.Series, original_columns: list[str]) -> dict[str, str]:
+    d: dict[str, str] = {}
+    idx = r.index
+    for c in original_columns:
+        if c in idx:
+            v = r[c]
+            d[c] = "" if pd.isna(v) else str(v)
+        else:
+            d[c] = ""
+    return d
+
+
+def _append_duplicate_labels(
+    size_by_key: pd.Series,
+    out: ComparisonResult,
+    *,
+    nominal: bool,
+) -> None:
+    for key_tuple, cnt in size_by_key.items():
+        if cnt <= 1:
+            continue
+        kt = tuple(str(x) for x in (key_tuple if isinstance(key_tuple, tuple) else (key_tuple,)))
+        lbl = key_label(kt)
+        dup_list = out.duplicate_nominal_keys if nominal else out.duplicate_benchmark_keys
+        dup_list.extend([lbl] * (cnt - 1))
+
+
+def _merged_side(row: pd.Series, col: str, left: bool) -> str:
+    tag = "_l" if left else "_r"
+    for key in (f"{col}{tag}", col):
+        if key in row.index:
+            v = row[key]
+            if pd.isna(v):
+                return ""
+            return str(v).strip()
+    return ""
 
 
 def compare_readme_to_bench(
@@ -277,8 +337,9 @@ def compare_readme_to_bench(
     mode: str,
     headline: str,
 ) -> ComparisonResult:
-    _, parsed_rows = load_csv(parsed_path)
-    _, bench_rows = load_csv(bench_path)
+    parsed_df = load_csv_df(parsed_path)
+    bench_df = load_csv_df(bench_path)
+    parsed_cols = list(parsed_df.columns)
 
     out = ComparisonResult(
         mode=mode,
@@ -286,56 +347,85 @@ def compare_readme_to_bench(
         table_columns=PER_VARIANT_COLUMNS_README,
     )
 
-    bench_by_key: dict[tuple[str, ...], dict[str, str]] = {}
-    for row in bench_rows:
-        k = row_key(row)
-        if k in bench_by_key:
-            out.duplicate_benchmark_keys.append(key_label(k))
-        else:
-            bench_by_key[k] = row
+    parsed_n = _normalize_identity_df(parsed_df)
+    bench_n = _normalize_identity_df(bench_df)
 
-    parsed_keys_with_data: set[tuple[str, ...]] = set()
+    g_sizes = bench_n.groupby(list(KEY_MERGE), sort=False).size()
+    _append_duplicate_labels(g_sizes, out, nominal=False)
 
-    for prow in parsed_rows:
-        if not parsed_row_has_any_metric(prow):
+    bench_first = bench_n.drop_duplicates(subset=list(KEY_MERGE), keep="first")
+
+    parsed_rows_kept: list[pd.Series] = []
+    for _, r in parsed_n.iterrows():
+        rd = _row_dict_for_metrics(r, parsed_cols)
+        if not parsed_row_has_any_metric(rd):
             out.skipped_parsed_no_readme += 1
             continue
-        k = row_key(prow)
-        parsed_keys_with_data.add(k)
-        brow = bench_by_key.get(k)
-        if brow is None:
-            out.missing_in_benchmark.append(key_label(k))
-            continue
-        out.matched_rows += 1
-        res_s = str(_resolution_int(prow.get("resolution")))
+        parsed_rows_kept.append(r)
+
+    if not parsed_rows_kept:
+        parsed_with = pd.DataFrame(columns=parsed_n.columns)
+    else:
+        parsed_with = pd.DataFrame(parsed_rows_kept)
+
+    parsed_key_set: set[tuple[str, ...]] = set()
+    if not parsed_with.empty:
+        for _, r in parsed_with.iterrows():
+            parsed_key_set.add(tuple(str(r[c]) for c in KEY_MERGE))
+
+    left_m = pd.merge(
+        parsed_with,
+        bench_first,
+        on=list(KEY_MERGE),
+        how="left",
+        indicator=True,
+        suffixes=("_l", "_r"),
+    )
+
+    out.matched_rows = int((left_m["_merge"] == "both").sum())
+
+    for _, r in left_m[left_m["_merge"] == "left_only"].iterrows():
+        k = tuple(str(r[c]) for c in KEY_MERGE)
+        out.missing_in_benchmark.append(key_label(k))
+
+    for _, r in bench_first.iterrows():
+        k = tuple(str(r[c]) for c in KEY_MERGE)
+        if k not in parsed_key_set:
+            out.missing_in_parsed.append(key_label(k))
+
+    delta_src = left_m[left_m["_merge"] == "both"].drop(columns=["_merge"], errors="ignore")
+    for _, mrow in delta_src.iterrows():
+        res_s = str(mrow["_res"])
         for col in METRIC_COLS:
-            if _blank(prow.get(col)):
+            praw = _merged_side(mrow, col, True)
+            if _blank(praw):
                 continue
-            pr, br = metric_floats(col, prow.get(col, ""), brow.get(col, ""))
+            braw = _merged_side(mrow, col, False)
+            pr, br = metric_floats(col, praw, braw)
             if pr is None or br is None:
                 out.missed_numeric_compare += 1
             d_str, pct_str = _delta_cells(pr, br)
             out.delta_rows.append(
                 {
-                    "model_variant": _norm_key_part(prow.get("model_variant")),
-                    "dataset": _norm_key_part(prow.get("dataset")),
-                    "format": _norm_key_part(prow.get("format")),
+                    "model_variant": _merged_side(mrow, "model_variant", True),
+                    "dataset": _merged_side(mrow, "dataset", True),
+                    "format": _merged_side(mrow, "format", True),
                     "res": res_s,
                     "metric": col,
-                    "readme": _fmt_num(pr) if pr is not None else prow.get(col, "").strip(),
+                    "readme": _fmt_num(pr) if pr is not None else praw.strip(),
                     "measured": _fmt_num(br) if br is not None else "",
                     "delta": d_str,
                     "delta_pct": pct_str,
                 }
             )
-        pv = _norm_key_part(prow.get("stedgeai_version"))
-        bv = _norm_key_part(brow.get("stedgeai_version"))
+        pv = _merged_side(mrow, "stedgeai_version", True)
+        bv = _merged_side(mrow, "stedgeai_version", False)
         if pv or bv:
             out.delta_rows.append(
                 {
-                    "model_variant": _norm_key_part(prow.get("model_variant")),
-                    "dataset": _norm_key_part(prow.get("dataset")),
-                    "format": _norm_key_part(prow.get("format")),
+                    "model_variant": _merged_side(mrow, "model_variant", True),
+                    "dataset": _merged_side(mrow, "dataset", True),
+                    "format": _merged_side(mrow, "format", True),
                     "res": res_s,
                     "metric": "stedgeai_version",
                     "readme": pv,
@@ -345,16 +435,12 @@ def compare_readme_to_bench(
                 }
             )
 
-    for k in bench_by_key:
-        if k not in parsed_keys_with_data:
-            out.missing_in_parsed.append(key_label(k))
-
     return out
 
 
 def compare_nominal_to_overdrive(nominal_path: Path, overdrive_path: Path) -> ComparisonResult:
-    _, nominal_rows = load_csv(nominal_path)
-    _, over_rows = load_csv(overdrive_path)
+    nominal_df = load_csv_df(nominal_path)
+    over_df = load_csv_df(overdrive_path)
 
     out = ComparisonResult(
         mode="nominal-overdrive",
@@ -362,59 +448,80 @@ def compare_nominal_to_overdrive(nominal_path: Path, overdrive_path: Path) -> Co
         table_columns=PER_VARIANT_COLUMNS_BENCH_PAIR,
     )
 
-    nominal_by_key: dict[tuple[str, ...], dict[str, str]] = {}
-    for row in nominal_rows:
-        k = row_key(row)
-        if k in nominal_by_key:
-            out.duplicate_nominal_keys.append(key_label(k))
-        else:
-            nominal_by_key[k] = row
+    nominal_n = _normalize_identity_df(nominal_df)
+    over_n = _normalize_identity_df(over_df)
 
-    over_by_key: dict[tuple[str, ...], dict[str, str]] = {}
-    for row in over_rows:
-        k = row_key(row)
-        if k in over_by_key:
-            out.duplicate_benchmark_keys.append(key_label(k))
-        else:
-            over_by_key[k] = row
+    _append_duplicate_labels(
+        nominal_n.groupby(list(KEY_MERGE), sort=False).size(),
+        out,
+        nominal=True,
+    )
+    _append_duplicate_labels(
+        over_n.groupby(list(KEY_MERGE), sort=False).size(),
+        out,
+        nominal=False,
+    )
 
-    nominal_keys = set(nominal_by_key.keys())
+    nominal_first = nominal_n.drop_duplicates(subset=list(KEY_MERGE), keep="first")
+    over_first = over_n.drop_duplicates(subset=list(KEY_MERGE), keep="first")
 
-    for k, nrow in nominal_by_key.items():
-        orow = over_by_key.get(k)
-        if orow is None:
-            out.missing_in_benchmark.append(key_label(k))
-            continue
-        out.matched_rows += 1
-        res_s = str(_resolution_int(nrow.get("resolution")))
+    nominal_key_set = {
+        tuple(str(r[c]) for c in KEY_MERGE) for _, r in nominal_first.iterrows()
+    }
+
+    left_m = pd.merge(
+        nominal_first,
+        over_first,
+        on=list(KEY_MERGE),
+        how="left",
+        indicator=True,
+        suffixes=("_l", "_r"),
+    )
+
+    out.matched_rows = int((left_m["_merge"] == "both").sum())
+
+    for _, r in left_m[left_m["_merge"] == "left_only"].iterrows():
+        k = tuple(str(r[c]) for c in KEY_MERGE)
+        out.missing_in_benchmark.append(key_label(k))
+
+    for _, r in over_first.iterrows():
+        k = tuple(str(r[c]) for c in KEY_MERGE)
+        if k not in nominal_key_set:
+            out.missing_in_parsed.append(key_label(k))
+
+    delta_src = left_m[left_m["_merge"] == "both"].drop(columns=["_merge"], errors="ignore")
+    for _, mrow in delta_src.iterrows():
+        res_s = str(mrow["_res"])
         for col in METRIC_COLS_BENCH_PAIR:
-            if _blank(nrow.get(col)) and _blank(orow.get(col)):
+            nraw = _merged_side(mrow, col, True)
+            oraw = _merged_side(mrow, col, False)
+            if _blank(nraw) and _blank(oraw):
                 continue
-            pr, br = metric_floats(col, nrow.get(col, ""), orow.get(col, ""))
+            pr, br = metric_floats(col, nraw, oraw)
             if pr is None or br is None:
                 out.missed_numeric_compare += 1
             d_str, pct_str = _delta_cells(pr, br)
             out.delta_rows.append(
                 {
-                    "model_variant": _norm_key_part(nrow.get("model_variant")),
-                    "dataset": _norm_key_part(nrow.get("dataset")),
-                    "format": _norm_key_part(nrow.get("format")),
+                    "model_variant": _merged_side(mrow, "model_variant", True),
+                    "dataset": _merged_side(mrow, "dataset", True),
+                    "format": _merged_side(mrow, "format", True),
                     "res": res_s,
                     "metric": col,
-                    "nominal": _fmt_num(pr) if pr is not None else nrow.get(col, "").strip(),
-                    "overdrive": _fmt_num(br) if br is not None else orow.get(col, "").strip(),
+                    "nominal": _fmt_num(pr) if pr is not None else nraw.strip(),
+                    "overdrive": _fmt_num(br) if br is not None else oraw.strip(),
                     "delta": d_str,
                     "delta_pct": pct_str,
                 }
             )
-        nv = _norm_key_part(nrow.get("stedgeai_version"))
-        ov = _norm_key_part(orow.get("stedgeai_version"))
+        nv = _merged_side(mrow, "stedgeai_version", True)
+        ov = _merged_side(mrow, "stedgeai_version", False)
         if nv or ov:
             out.delta_rows.append(
                 {
-                    "model_variant": _norm_key_part(nrow.get("model_variant")),
-                    "dataset": _norm_key_part(nrow.get("dataset")),
-                    "format": _norm_key_part(nrow.get("format")),
+                    "model_variant": _merged_side(mrow, "model_variant", True),
+                    "dataset": _merged_side(mrow, "dataset", True),
+                    "format": _merged_side(mrow, "format", True),
                     "res": res_s,
                     "metric": "stedgeai_version",
                     "nominal": nv,
@@ -424,15 +531,10 @@ def compare_nominal_to_overdrive(nominal_path: Path, overdrive_path: Path) -> Co
                 }
             )
 
-    for k in over_by_key:
-        if k not in nominal_keys:
-            out.missing_in_parsed.append(key_label(k))
-
     return out
 
 
 def compare(parsed_path: Path, benchmark_path: Path) -> ComparisonResult:
-    """Backward-compatible: readme vs a single measured CSV."""
     return compare_readme_to_bench(
         parsed_path,
         benchmark_path,
@@ -451,57 +553,23 @@ def _row_sort_key(r: dict[str, str]) -> tuple:
     )
 
 
-def _section_rule_width(variant: str) -> int:
-    return max(56, min(88, len(variant) + 10))
-
-
-def _print_section_header(variant: str) -> None:
-    w = _section_rule_width(variant)
-    rule = "═" * w
-    print(rule)
-    print(variant)
-    print(rule)
-
-
-def _print_table(
-    rows: list[dict[str, str]],
-    columns: tuple[str, ...],
-    *,
-    indent: str = "",
-) -> None:
-    if not rows:
-        print(f"{indent}(no rows)")
-        return
-    widths = {c: len(c) for c in columns}
-    for r in rows:
-        for c in columns:
-            widths[c] = max(widths[c], len(r.get(c, "")))
-    sep = "  "
-    pad = indent
-    header = pad + sep.join(c.ljust(widths[c]) for c in columns)
-    rule = pad + sep.join("─" * widths[c] for c in columns)
-    print(header)
-    print(rule)
-    for r in rows:
-        print(pad + sep.join(r.get(c, "").ljust(widths[c]) for c in columns))
-
-
 def print_comparison_report(
     result: ComparisonResult,
     *,
     delta_rows_before_filter: int | None = None,
     delta_pct: float | None = None,
 ) -> None:
-    print(result.headline)
+    console = Console()
+    console.print(result.headline)
     if delta_pct is not None and delta_rows_before_filter is not None:
-        print(
+        console.print(
             f"(filtered: |Δ%| ≥ {delta_pct:g}% — "
             f"{len(result.delta_rows)} of {delta_rows_before_filter} row(s))"
         )
-    print()
+    console.print()
 
     if not result.delta_rows:
-        print("No overlapping metric cells (nothing to tabulate).")
+        console.print("No overlapping metric cells (nothing to tabulate).")
     else:
         by_variant: dict[str, list[dict[str, str]]] = defaultdict(list)
         for r in result.delta_rows:
@@ -511,12 +579,20 @@ def print_comparison_report(
             rows = by_variant[variant]
             rows.sort(key=_row_sort_key)
             if i:
-                print()
-            _print_section_header(variant)
-            print()
-            _print_table(rows, result.table_columns, indent="  ")
+                console.print()
+            console.print(Rule(title=variant, style="bold"))
+            console.print()
+            table = Table(show_header=True, header_style="bold", show_lines=False)
+            for c in result.table_columns:
+                col_kw = {"overflow": "fold", "no_wrap": c == "metric"}
+                if c == "metric":
+                    col_kw["min_width"] = 22
+                table.add_column(c, **col_kw)
+            for r in rows:
+                table.add_row(*[r.get(c, "") for c in result.table_columns])
+            console.print(table)
 
-    print()
+    console.print()
     parts = [
         f"{result.matched_rows} config(s) matched",
         f"{len(result.delta_rows)} metric cell(s) listed",
@@ -526,10 +602,10 @@ def print_comparison_report(
             0,
             f"{result.skipped_parsed_no_readme} parsed row(s) skipped (no readme metrics)",
         )
-    print("Summary: " + "; ".join(parts) + ".")
+    console.print("Summary: " + "; ".join(parts) + ".")
 
     if result.duplicate_nominal_keys:
-        print(
+        console.print(
             f"Note: {len(result.duplicate_nominal_keys)} duplicate key(s) in nominal CSV "
             f"(first row kept): {', '.join(sorted(set(result.duplicate_nominal_keys)))}"
         )
@@ -539,7 +615,7 @@ def print_comparison_report(
             if result.mode == "nominal-overdrive"
             else "measured benchmark CSV"
         )
-        print(
+        console.print(
             f"Note: {len(result.duplicate_benchmark_keys)} duplicate key(s) in {label} "
             f"(first row kept): {', '.join(sorted(set(result.duplicate_benchmark_keys)))}"
         )
@@ -555,7 +631,7 @@ def print_comparison_report(
                 f"Note: {len(result.missing_in_benchmark)} readme config(s) with metrics have no measured row "
                 f"(compare missed; not in table): {keys}"
             )
-        print(msg)
+        console.print(msg)
     if result.missing_in_parsed:
         keys = ", ".join(sorted(set(result.missing_in_parsed)))
         if result.mode == "nominal-overdrive":
@@ -568,126 +644,145 @@ def print_comparison_report(
                 f"Note: {len(result.missing_in_parsed)} measured row(s) have no matching readme metrics row "
                 f"(compare missed; not in table): {keys}"
             )
-        print(msg)
+        console.print(msg)
     if result.missed_numeric_compare:
-        print(
+        console.print(
             f"Note: {result.missed_numeric_compare} metric cell(s) have no delta "
             f"(missing or non-numeric value on one side)."
         )
 
 
-def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument(
-        "--mode",
-        choices=COMPARE_MODES,
-        default="readme-overdrive",
-        help=(
-            "readme-overdrive: benchmark_parsed vs overdrive results; "
-            "readme-nominal: benchmark_parsed vs nominal results; "
-            "nominal-overdrive: nominal vs overdrive benchmark_results only."
-        ),
-    )
-    p.add_argument(
-        "--parsed",
-        type=Path,
-        default=DEFAULT_PARSED_CSV,
-        help=f"README-parsed CSV for readme-* modes (default: {DEFAULT_PARSED_CSV})",
-    )
-    p.add_argument(
-        "--nominal",
-        type=Path,
-        default=DEFAULT_NOMINAL_CSV,
-        help=f"Nominal benchmark_results.csv (default: {DEFAULT_NOMINAL_CSV})",
-    )
-    p.add_argument(
-        "--overdrive",
-        type=Path,
-        default=DEFAULT_OVERDRIVE_CSV,
-        help=f"Overdrive benchmark_results.csv (default: {DEFAULT_OVERDRIVE_CSV})",
-    )
-    p.add_argument(
-        "--benchmark",
-        type=Path,
-        default=None,
-        help=(
-            "Alias for the measured CSV in readme-* modes only (overrides --overdrive for "
-            "readme-overdrive, and --nominal for readme-nominal)."
-        ),
-    )
-    p.add_argument(
-        "--delta-pct",
-        type=float,
-        default=None,
-        metavar="PCT",
-        help=(
-            "Hide metric rows whose numeric |delta_pct| is below PCT (e.g. 5 → keep |Δ|≥5%%). "
-            "Rows without a numeric Δ%% stay listed; matching stedgeai_version rows are omitted."
-        ),
-    )
-    args = p.parse_args(argv)
+_err_console = Console(stderr=True)
 
-    if args.mode == "readme-overdrive":
-        bench = args.benchmark if args.benchmark is not None else args.overdrive
-        if not args.parsed.is_file():
-            print(f"error: parsed CSV not found: {args.parsed}", file=sys.stderr)
-            return 2
+
+compare_app = typer.Typer(
+    help=__doc__,
+    add_completion=False,
+    rich_markup_mode="rich",
+    invoke_without_command=True,
+)
+
+
+@compare_app.callback()
+def compare_entry(
+    ctx: typer.Context,
+    mode: str = typer.Option(
+        "readme-overdrive",
+        "--mode",
+        help="readme-overdrive | readme-nominal | nominal-overdrive",
+    ),
+    parsed: Path = typer.Option(
+        DEFAULT_PARSED_CSV,
+        "--parsed",
+        help=f"README-parsed CSV for readme-* modes (default: {DEFAULT_PARSED_CSV})",
+    ),
+    nominal: Path = typer.Option(
+        DEFAULT_NOMINAL_CSV,
+        "--nominal",
+        help=f"Nominal benchmark_results.csv (default: {DEFAULT_NOMINAL_CSV})",
+    ),
+    overdrive: Path = typer.Option(
+        DEFAULT_OVERDRIVE_CSV,
+        "--overdrive",
+        help=f"Overdrive benchmark_results.csv (default: {DEFAULT_OVERDRIVE_CSV})",
+    ),
+    benchmark: Path | None = typer.Option(
+        None,
+        "--benchmark",
+        help=(
+            "Alias for measured CSV in readme-* only (overrides --overdrive for readme-overdrive "
+            "and --nominal for readme-nominal)."
+        ),
+    ),
+    delta_pct: float | None = typer.Option(
+        None,
+        "--delta-pct",
+        help=(
+            "Hide metric rows whose numeric |delta_pct| is below PCT; rows without numeric Δ%% stay; "
+            "matching stedgeai_version rows omitted."
+        ),
+    ),
+) -> None:
+    """Compare README-parsed metrics to benchmark CSVs or nominal vs overdrive."""
+    if getattr(ctx, "resilient_parsing", False):
+        return
+    if mode not in COMPARE_MODES:
+        _err_console.print(f"[red]error: invalid mode {mode!r}[/red]")
+        raise typer.Exit(2)
+
+    configure_logging()
+    typer_install_exception_hook()
+
+    result: ComparisonResult | None = None
+    before_filter: int | None = None
+
+    if mode == "readme-overdrive":
+        bench = benchmark if benchmark is not None else overdrive
+        if not parsed.is_file():
+            _err_console.print(f"[red]error: parsed CSV not found: {parsed}[/red]")
+            raise typer.Exit(2)
         if not bench.is_file():
-            print(f"error: overdrive/measured CSV not found: {bench}", file=sys.stderr)
-            return 2
+            _err_console.print(f"[red]error: overdrive/measured CSV not found: {bench}[/red]")
+            raise typer.Exit(2)
         result = compare_readme_to_bench(
-            args.parsed,
+            parsed,
             bench,
             mode="readme-overdrive",
             headline="README vs overdrive (delta = measured − readme)",
         )
-    elif args.mode == "readme-nominal":
-        bench = args.benchmark if args.benchmark is not None else args.nominal
-        if not args.parsed.is_file():
-            print(f"error: parsed CSV not found: {args.parsed}", file=sys.stderr)
-            return 2
+    elif mode == "readme-nominal":
+        bench = benchmark if benchmark is not None else nominal
+        if not parsed.is_file():
+            _err_console.print(f"[red]error: parsed CSV not found: {parsed}[/red]")
+            raise typer.Exit(2)
         if not bench.is_file():
-            print(f"error: nominal/measured CSV not found: {bench}", file=sys.stderr)
-            return 2
+            _err_console.print(f"[red]error: nominal/measured CSV not found: {bench}[/red]")
+            raise typer.Exit(2)
         result = compare_readme_to_bench(
-            args.parsed,
+            parsed,
             bench,
             mode="readme-nominal",
             headline="README vs nominal (delta = measured − readme)",
         )
     else:
-        if args.benchmark is not None:
-            print(
-                "error: --benchmark is only valid for readme-overdrive or readme-nominal",
-                file=sys.stderr,
+        if benchmark is not None:
+            _err_console.print(
+                "[red]error: --benchmark is only valid for readme-overdrive or readme-nominal[/red]"
             )
-            return 2
-        if not args.nominal.is_file():
-            print(f"error: nominal CSV not found: {args.nominal}", file=sys.stderr)
-            return 2
-        if not args.overdrive.is_file():
-            print(f"error: overdrive CSV not found: {args.overdrive}", file=sys.stderr)
-            return 2
-        result = compare_nominal_to_overdrive(args.nominal, args.overdrive)
+            raise typer.Exit(2)
+        if not nominal.is_file():
+            _err_console.print(f"[red]error: nominal CSV not found: {nominal}[/red]")
+            raise typer.Exit(2)
+        if not overdrive.is_file():
+            _err_console.print(f"[red]error: overdrive CSV not found: {overdrive}[/red]")
+            raise typer.Exit(2)
+        result = compare_nominal_to_overdrive(nominal, overdrive)
 
-    before_filter: int | None = None
-    if args.delta_pct is not None:
-        if args.delta_pct < 0:
-            print("error: --delta-pct must be >= 0", file=sys.stderr)
-            return 2
+    assert result is not None
+    if delta_pct is not None:
+        if delta_pct < 0:
+            _err_console.print("[red]error: --delta-pct must be >= 0[/red]")
+            raise typer.Exit(2)
         before_filter = len(result.delta_rows)
-        result.delta_rows = filter_rows_by_abs_delta_pct(
-            result.delta_rows,
-            args.delta_pct,
-        )
+        result.delta_rows = filter_rows_by_abs_delta_pct(result.delta_rows, delta_pct)
 
     print_comparison_report(
         result,
         delta_rows_before_filter=before_filter,
-        delta_pct=args.delta_pct,
+        delta_pct=delta_pct,
     )
+
+
+def compare_main(argv: list[str] | None = None) -> int:
+    configure_logging()
+    typer_install_exception_hook()
+    args = [] if argv is None else argv
+    try:
+        compare_app(args=args)
+    except typer.Exit as e:
+        return int(e.exit_code) if e.exit_code is not None else 0
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(compare_main(sys.argv[1:]))

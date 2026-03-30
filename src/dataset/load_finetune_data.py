@@ -12,10 +12,10 @@ metu_alet          METU-ALET tool detection in the wild (hazard subset of 49 cla
 
 Environment
 -----------
-Use the ``yolo`` conda env (same as COCO prep / training)::
+Use the ``fyp-ml`` conda env (same as COCO prep / training)::
 
-    python project.py conda-yolo
-    conda activate yolo    # or $ST_YOLO_ENV
+    python project.py conda-ml
+    conda activate fyp-ml    # or $ST_YOLO_ENV
 
 Usage
 -----
@@ -40,7 +40,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 DATASETS_DIR = Path(
     os.environ.get("DATASETS_DIR", str(REPO_ROOT / "datasets"))
 ).expanduser()

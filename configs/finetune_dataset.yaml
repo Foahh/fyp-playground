@@ -32,4 +32,4 @@ settings:
 
 hydra:
   run:
-    dir: ./finetune/outputs/dataset/${now:%Y_%m_%d_%H_%M_%S}
+    dir: ./configs/outputs/dataset/${now:%Y_%m_%d_%H_%M_%S}

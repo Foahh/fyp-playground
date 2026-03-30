@@ -1,6 +1,5 @@
 """CLI entry point for the benchmark package."""
 
-import argparse
 import datetime
 import os
 import re
@@ -8,7 +7,10 @@ import shlex
 import sys
 from pathlib import Path
 
+import typer
+
 from .constants import CSV_PATH, POWER_MEASURE_CSV_PATH, ensure_dirs
+from .logutil import configure_logging, typer_install_exception_hook
 from .models import load_models
 from .parsing import parse_metrics, _parse_network_c_info
 from .results import append_result, load_completed, log_error, log_stdout
@@ -50,54 +52,60 @@ def _apply_benchmark_mode(mode: str) -> None:
         APP_CONFIG_PATH.write_text(updated, encoding="utf-8")
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Benchmark OD models on STM32N6570-DK")
-    parser.add_argument(
+bench_app = typer.Typer(
+    help="Benchmark OD models on STM32N6570-DK",
+    add_completion=False,
+    invoke_without_command=True,
+    rich_markup_mode="rich",
+)
+
+
+@bench_app.callback()
+def run_benchmark(
+    ctx: typer.Context,
+    filter_substr: str = typer.Option(
+        "",
         "--filter",
-        type=str,
-        default="",
         help="Only run variants whose name contains this string",
-    )
-    parser.add_argument(
+    ),
+    power_serial: str | None = typer.Option(
+        None,
         "--power-serial",
-        type=str,
-        default=None,
-        help="Serial port for INA228 power measurement (e.g., /dev/ttyUSB0); auto-detects if not specified",
-    )
-    parser.add_argument(
+        help="Serial port for INA228 (e.g. /dev/ttyUSB0); auto-detect if omitted",
+    ),
+    power_baud: int = typer.Option(
+        921600,
         "--power-baud",
-        type=int,
-        default=921600,
-        help="Baud rate for power measurement serial (default: 921600)",
-    )
-    parser.add_argument(
+        help="Baud rate for power measurement serial",
+    ),
+    validation_count: int = typer.Option(
+        50,
         "--validation-count",
-        type=int,
-        default=50,
-        help="Number of inference runs for validation (default: 50)",
-    )
-    parser.add_argument(
+        help="Number of inference runs for validation",
+    ),
+    mode: str = typer.Option(
+        "nominal",
         "--mode",
-        type=str,
-        choices=["nominal", "norminal", "overdrive", "override"],
-        default="nominal",
-        help="Patch NPU_Validation app_config.h for benchmark mode",
-    )
-    args = parser.parse_args()
+        help="nominal | norminal | overdrive | override (patch app_config.h)",
+    ),
+) -> None:
+    if getattr(ctx, "resilient_parsing", False):
+        return
+
+    configure_logging()
+    typer_install_exception_hook()
 
     ensure_dirs()
-    _apply_benchmark_mode(args.mode)
+    _apply_benchmark_mode(mode)
 
-    power_running = start_power_session(args.power_serial, args.power_baud)
+    power_running = start_power_session(power_serial, power_baud)
     stedgeai_version = get_stedgeai_version()
 
     entries = load_models()
-
-    # Sort for deterministic order: family, variant, format
     entries.sort(key=lambda e: (e.family, e.variant, e.fmt))
 
-    if args.filter:
-        entries = [e for e in entries if args.filter in e.variant]
+    if filter_substr:
+        entries = [e for e in entries if filter_substr in e.variant]
 
     completed = load_completed()
     total = len(entries)
@@ -109,13 +117,14 @@ def main():
         if eff_port
         else ""
     )
+    mode_out = "overdrive" if mode == "override" else ("nominal" if mode == "norminal" else mode)
     args_block = (
         f"Command: {cmd_line}\n"
-        f"  --filter: {args.filter or '(none)'}\n"
-        f"  --power-serial: {args.power_serial or '(auto-detect)'}\n"
-        f"  --power-baud: {args.power_baud}\n"
-        f"  --validation-count: {args.validation_count}\n"
-        f"  --mode: {'overdrive' if args.mode == 'override' else ('nominal' if args.mode == 'norminal' else args.mode)}\n"
+        f"  --filter: {filter_substr or '(none)'}\n"
+        f"  --power-serial: {power_serial or '(auto-detect)'}\n"
+        f"  --power-baud: {power_baud}\n"
+        f"  --validation-count: {validation_count}\n"
+        f"  --mode: {mode_out}\n"
         f"  stedgeai_version: {stedgeai_version}\n"
         f"  app_config: {APP_CONFIG_PATH}\n"
         f"  power_measurement_active: {power_running}"
@@ -128,7 +137,6 @@ def main():
         f"{args_block}\n"
         f"{'='*60}"
     )
-    print(header)
     log_stdout(header)
 
     try:
@@ -137,7 +145,7 @@ def main():
             total,
             completed,
             power_running,
-            args.validation_count,
+            validation_count,
             stedgeai_version,
         )
     finally:
@@ -158,7 +166,6 @@ def _run_benchmark_loop(
 
         if key in completed:
             msg = f"{tag} SKIPPED: {entry.variant} ({entry.fmt}) — already in CSV"
-            print(msg)
             log_stdout(msg)
             continue
 
@@ -173,7 +180,6 @@ def _run_benchmark_loop(
             f"  Path    : {entry.model_path}\n"
             f"{'-'*60}"
         )
-        print(model_header)
         log_stdout(model_header)
 
         try:
@@ -184,19 +190,16 @@ def _run_benchmark_loop(
                 err_msg = f"{tag} FAILED at {failed}: {entry.variant} ({entry.fmt})\n"
                 err_msg += f"  stdout: {res.combined_stdout[-1000:]}\n"
                 err_msg += f"  stderr: {res.combined_stderr[-1000:]}\n"
-                print(f"{tag} FAILED: {entry.variant} ({entry.fmt}) — {failed}")
                 log_error(err_msg)
                 log_stdout(f"{tag} FAILED: {entry.variant} ({entry.fmt}) — {failed}")
                 continue
 
             metrics = parse_metrics(res.combined_stdout, res.combined_stderr)
 
-            # Also try network_c_info.json from the generate output
             cinfo_path = _get_st_ai_output_dir() / "network_c_info.json"
             if cinfo_path.exists():
                 _parse_network_c_info(cinfo_path, metrics)
 
-            # Warn about missing critical metrics
             missing = []
             if not metrics.get("inference_time_ms"):
                 missing.append("inference_time_ms")
@@ -209,7 +212,6 @@ def _run_benchmark_loop(
 
             if missing:
                 warn_msg = f"  ⚠ WARNING: Missing metrics: {', '.join(missing)}"
-                print(warn_msg)
                 log_stdout(warn_msg)
 
             row = {
@@ -280,20 +282,23 @@ def _run_benchmark_loop(
 
             power_str = f", {', '.join(power_parts)}" if power_parts else ""
             done_msg = f"{tag} DONE: ap_50={ap}, inference={inf}ms{power_str}"
-            print(done_msg)
             log_stdout(done_msg)
 
         except Exception as exc:
             err_msg = f"{tag} EXCEPTION: {entry.variant} ({entry.fmt}): {exc}\n"
-            print(f"{tag} ERROR: {entry.variant} ({entry.fmt}) — {exc}")
             log_error(err_msg)
             log_stdout(f"{tag} ERROR: {entry.variant} ({entry.fmt}) — {exc}")
 
     footer = f"\nBenchmark complete. Results in: {CSV_PATH}"
     if power_running:
         footer += f"\nINA228 log: {POWER_MEASURE_CSV_PATH}"
-    print(footer)
     log_stdout(footer)
+
+
+def main() -> None:
+    configure_logging()
+    typer_install_exception_hook()
+    bench_app()
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ Targets (whichever exists in the installed Ultralytics version):
   - ultralytics.utils.export.tensorflow (current)
   - ultralytics.engine.exporter (older)
 
-Run inside the yolo conda env (e.g. after ``conda_setup_yolo.py``), or let setup invoke this script.
+Run inside the ``fyp-ml`` conda env (e.g. after ``conda_setup_ml.py``), or let setup invoke this script.
 """
 
 from __future__ import annotations

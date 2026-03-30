@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Create conda env for YOLO training, INT8 TFLite quantization, and dataset prep.
+"""Create the ``fyp-ml`` conda env for training, INT8 TFLite quantization, and dataset prep.
 
-Includes Ultralytics and TensorFlow (via ``requirements-yolo.txt``) for
-``run_train_tinyissimo_coco_person.py``, ``run_quantize.py``,
-``load_coco.py``, and ``load_finetune_data.py``.
+Includes Ultralytics and TensorFlow (via repo-root ``requirements-ml.txt``) for
+``src/ml/run_train_tinyissimo_coco_person.py``, ``src/ml/run_quantize.py``,
+``src/dataset/load_coco.py``, and ``src/dataset/load_finetune_data.py``.
 """
 
 from __future__ import annotations
@@ -12,12 +12,13 @@ import os
 import sys
 from pathlib import Path
 
-_ROOT = Path(__file__).resolve().parent.parent
-PATCH_SCRIPT = Path(__file__).resolve().parent / "patch_ultralytics_per_channel_quant.py"
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
+_SRC = Path(__file__).resolve().parent.parent
+if str(_SRC) not in sys.path:
+    sys.path.insert(0, str(_SRC))
 
-from scripts.conda.conda_setup_common import (
+PATCH_SCRIPT = Path(__file__).resolve().parent / "patch_ultralytics_per_channel_quant.py"
+
+from conda.conda_setup_common import (
     conda_install,
     conda_run,
     ensure_conda_env,
@@ -26,7 +27,7 @@ from scripts.conda.conda_setup_common import (
     repo_root,
 )
 
-YOLO_ENV_NAME = os.environ.get("ST_YOLO_ENV", "yolo")
+YOLO_ENV_NAME = os.environ.get("ST_YOLO_ENV", "fyp-ml")
 PYTHON_VERSION = "3.12"
 PYTORCH_WHL_INDEX = "https://download.pytorch.org/whl/cu128"
 
@@ -34,7 +35,7 @@ PYTORCH_WHL_INDEX = "https://download.pytorch.org/whl/cu128"
 def main() -> None:
     main_guard()
     root = repo_root()
-    yolo_req = root / "scripts" / "requirements-yolo.txt"
+    yolo_req = root / "requirements-ml.txt"
 
     if not yolo_req.is_file():
         print(f"Missing {yolo_req}", file=sys.stderr)
@@ -62,12 +63,12 @@ def main() -> None:
     conda_run(YOLO_ENV_NAME, "python", str(PATCH_SCRIPT.resolve()))
 
     print("Done.")
-    print(f"- YOLO env: conda activate {YOLO_ENV_NAME}")
+    print(f"- ML env: conda activate {YOLO_ENV_NAME}")
     conda_run(
         YOLO_ENV_NAME,
         "python",
         "-c",
-        "import sys; print('YOLO Python', sys.version.split()[0])",
+        "import sys; print('ML Python', sys.version.split()[0])",
     )
 
 

@@ -8,7 +8,7 @@ from pathlib import Path
 
 import yaml
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 COCO_TEMPLATE_YAML = (
     REPO_ROOT
     / "external"
@@ -71,7 +71,7 @@ def materialize_coco_data_yaml(require_person: bool = False) -> str:
                 + ", ".join(
                     f"{p / 'train2017.txt'} and {p / 'val2017.txt'}" for p in tried
                 )
-                + ". Re-run scripts/load_coco.py to regenerate person splits."
+                + ". Re-run src/dataset/load_coco.py (or ``python project.py dataset-coco``) to regenerate person splits."
             )
         raise FileNotFoundError(
             "Missing COCO split files. Checked: "

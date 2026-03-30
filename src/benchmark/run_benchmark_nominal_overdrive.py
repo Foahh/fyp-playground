@@ -11,14 +11,14 @@ import time
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parent.parent
-SCRIPTS_DIR = str(ROOT / "scripts")
+ROOT = Path(__file__).resolve().parents[2]
+SRC_DIR = str(ROOT / "src")
 
 
 def _run_mode(mode: str, passthrough: list[str]) -> None:
     env = os.environ.copy()
     prev = env.get("PYTHONPATH", "")
-    env["PYTHONPATH"] = SCRIPTS_DIR if not prev else f"{SCRIPTS_DIR}{os.pathsep}{prev}"
+    env["PYTHONPATH"] = SRC_DIR if not prev else f"{SRC_DIR}{os.pathsep}{prev}"
     cmd = [sys.executable, "-m", "benchmark", "--mode", mode, *passthrough]
     print("+", " ".join(cmd), flush=True)
     subprocess.run(cmd, cwd=ROOT, env=env, check=True)

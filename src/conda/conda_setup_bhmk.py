@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Create conda env for STM32 benchmarking dependencies.
 
-Dataset download / prep uses the ``yolo`` env (``conda_setup_yolo.py``).
+Dataset download / prep uses the ``fyp-ml`` env (``conda_setup_ml.py``).
 """
 
 from __future__ import annotations
@@ -11,11 +11,11 @@ import platform
 import sys
 from pathlib import Path
 
-_ROOT = Path(__file__).resolve().parent.parent
-if str(_ROOT) not in sys.path:
-    sys.path.insert(0, str(_ROOT))
+_SRC = Path(__file__).resolve().parent.parent
+if str(_SRC) not in sys.path:
+    sys.path.insert(0, str(_SRC))
 
-from scripts.conda.conda_setup_common import (
+from conda.conda_setup_common import (
     conda_prefix,
     conda_run,
     ensure_conda_env,
@@ -24,7 +24,7 @@ from scripts.conda.conda_setup_common import (
     repo_root,
 )
 
-STZOO_ENV_NAME = os.environ.get("ST_STZOO_ENV", "stzoo")
+STZOO_ENV_NAME = os.environ.get("ST_STZOO_ENV", "fyp-bhmk")
 PYTHON_VERSION = "3.12.9"
 
 
@@ -32,7 +32,7 @@ def main() -> None:
     main_guard()
     root = repo_root()
     benchmark_req = root / "external" / "stm32ai-modelzoo-services" / "requirements.txt"
-    benchmark_extra_req = root / "scripts" / "requirements-benchmark.txt"
+    benchmark_extra_req = root / "requirements-bhmk.txt"
 
     if not benchmark_req.is_file():
         print(f"Missing {benchmark_req}", file=sys.stderr)
@@ -56,12 +56,12 @@ def main() -> None:
     pip_install(STZOO_ENV_NAME, "-r", str(benchmark_extra_req))
 
     print("Done.")
-    print(f"- STZoo env: conda activate {STZOO_ENV_NAME}")
+    print(f"- Benchmark env: conda activate {STZOO_ENV_NAME}")
     conda_run(
         STZOO_ENV_NAME,
         "python",
         "-c",
-        "import sys; print('STZoo Python', sys.version.split()[0])",
+        "import sys; print('Benchmark Python', sys.version.split()[0])",
     )
 
 

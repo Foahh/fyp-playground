@@ -8,38 +8,31 @@ import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
+
+from tenacity import Retrying, stop_after_attempt, wait_fixed
 
 from .constants import POWER_MEASURE_CSV_PATH
 
-try:
-    # Optional: integrate with benchmark logging when available.
-    from .results import log_error as _log_error_file
-    from .results import log_stdout as _log_stdout_file
-
-    _HAS_BENCH_LOGS = True
-except Exception:
-    _HAS_BENCH_LOGS = False
-    _log_error_file = None
-    _log_stdout_file = None
-
 
 def _emit_stdout(msg: str) -> None:
-    print(msg)
-    if _HAS_BENCH_LOGS and _log_stdout_file is not None:
-        try:
-            _log_stdout_file(msg)
-        except Exception:
-            pass
+    try:
+        from .logutil import configure_logging, get_logger
+
+        configure_logging()
+        get_logger("power").info(msg)
+    except Exception:
+        print(msg)
 
 
 def _emit_error(msg: str) -> None:
-    print(msg)
-    if _HAS_BENCH_LOGS and _log_error_file is not None:
-        try:
-            _log_error_file(msg)
-        except Exception:
-            pass
+    try:
+        from .logutil import configure_logging, get_logger
+
+        configure_logging()
+        get_logger("power").error(msg)
+    except Exception:
+        print(msg)
 
 
 def _format_sample_log_line(sample: dict) -> str:
@@ -249,16 +242,37 @@ class PowerMeasureSession:
                 "appears as /dev/ttyACM* (or pass the correct device explicitly with --power-serial)."
             )
             return False
+
+        def _open_serial() -> Any:
+            ser = serial.Serial(port, baud, timeout=0.25)
+            ser.reset_input_buffer()
+            return ser
+
         try:
-            self._ser = serial.Serial(port, baud, timeout=0.25)
-            self._ser.reset_input_buffer()
+            retry_open = Retrying(
+                stop=stop_after_attempt(3),
+                wait=wait_fixed(0.35),
+                reraise=True,
+            )
+            self._ser = retry_open(_open_serial)
             self.effective_port = str(self._ser.port)
         except Exception as e:
             _emit_error(f"WARNING: Failed to connect to power measurement serial port {port}: {e}")
             self._ser = None
             return False
 
-        if not self._perform_handshake():
+        def _handshake_or_raise() -> None:
+            if not self._perform_handshake():
+                raise OSError("power monitor handshake timeout or no PM_ACK")
+
+        try:
+            retry_hs = Retrying(
+                stop=stop_after_attempt(3),
+                wait=wait_fixed(0.35),
+                reraise=True,
+            )
+            retry_hs(_handshake_or_raise)
+        except Exception:
             _emit_error(
                 "WARNING: Power measurement disabled - no ACK from power monitor. "
                 "Ensure the device is running firmware with PM_PING/PM_ACK handshake support."

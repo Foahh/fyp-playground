@@ -1,6 +1,6 @@
 general:
   project_name: fyp_finetune
-  saved_models_dir: ./finetune/outputs/saved_models
+  saved_models_dir: ./configs/outputs/saved_models
   gpu_memory_limit: 16
   global_seed: 127
 
@@ -71,14 +71,14 @@ quantization:
   quantization_type: PTQ
   quantization_input_type: uint8
   quantization_output_type: float
-  export_dir: ./finetune/outputs/quantized_models
+  export_dir: ./configs/outputs/quantized_models
 
 benchmarking:
   board: STM32N6570-DK
 
 mlflow:
-  uri: ./finetune/outputs/mlruns
+  uri: ./configs/outputs/mlruns
 
 hydra:
   run:
-    dir: ./finetune/outputs/experiments/${now:%Y_%m_%d_%H_%M_%S}
+    dir: ./configs/outputs/experiments/${now:%Y_%m_%d_%H_%M_%S}

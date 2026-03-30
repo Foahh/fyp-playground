@@ -2,13 +2,13 @@
 Quantize a trained TinyissimoYOLO checkpoint to INT8 TFLite via Ultralytics
 PTQ export, then optionally evaluate the quantized model.
 
-Requires the 'yolo' conda env (ultralytics + tensorflow).
+Requires the ``fyp-ml`` conda env (ultralytics + tensorflow).
 
 Usage:
-    conda activate yolo
-    python scripts/run_quantize.py --size 192
-    python scripts/run_quantize.py --size 192 --no-eval
-    python scripts/run_quantize.py --size 192 --checkpoint /path/to/best.pt
+    conda activate fyp-ml
+    python src/ml/run_quantize.py --size 192
+    python src/ml/run_quantize.py --size 192 --no-eval
+    python src/ml/run_quantize.py --size 192 --checkpoint /path/to/best.pt
 
 Ultralytics writes several TFLite variants under ``best_saved_model/``. Export returns
 ``best_int8.tflite`` (float I/O); evaluation uses ``best_full_integer_quant.tflite`` when
@@ -22,9 +22,10 @@ import argparse
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
+SRC = Path(__file__).resolve().parent.parent
+ROOT = SRC.parent
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
 
 MODELS = ROOT / "results" / "model"
 
@@ -52,7 +53,7 @@ def _quantize(img_size: int, pt_path: Path) -> Path:
     """Export quantized INT8 TFLite via Ultralytics; return path Ultralytics wrote."""
     from ultralytics import YOLO
 
-    from scripts.coco_yolo_data import materialize_coco_data_yaml
+    from dataset.coco_yolo_data import materialize_coco_data_yaml
 
     data_yaml = materialize_coco_data_yaml()
 
@@ -87,7 +88,7 @@ def _eval_tflite_path(exported_float_io: Path) -> Path:
 def _evaluate(tflite_path: Path, img_size: int) -> None:
     """Run Ultralytics evaluation on the quantized TFLite model."""
     from ultralytics import YOLO
-    from scripts.coco_yolo_data import materialize_coco_data_yaml
+    from dataset.coco_yolo_data import materialize_coco_data_yaml
 
     data_yaml = materialize_coco_data_yaml()
     # Keep val runs beside the TFLite (no separate quantized/ tree).

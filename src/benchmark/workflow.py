@@ -12,6 +12,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
+from tenacity import Retrying, stop_after_attempt, wait_fixed
+
 from .config import build_eval_config
 from .constants import N6_WORKDIR, SERVICES_DIR, SSD_FAMILIES, STEDGEAI_PATH, STDOUT_LOG
 from .models import ModelEntry
@@ -44,12 +46,20 @@ def get_stedgeai_version() -> str:
     if _STEDGEAI_VERSION_CACHE is not None:
         return _STEDGEAI_VERSION_CACHE
 
-    try:
-        out, _, rc = _run_streaming(
+    def _probe_version() -> tuple[str, str, int]:
+        return _run_streaming(
             [STEDGEAI_PATH, "--version"],
             cwd=str(N6_WORKDIR),
             timeout=20,
         )
+
+    try:
+        retry_v = Retrying(
+            stop=stop_after_attempt(3),
+            wait=wait_fixed(0.45),
+            reraise=True,
+        )
+        out, _, rc = retry_v(_probe_version)
         if rc == 0:
             first = out.strip().splitlines()[0] if out.strip() else ""
             m = re.search(r"\bv?(\d+\.\d+\.\d+)\b", first)

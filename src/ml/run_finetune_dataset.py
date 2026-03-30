@@ -8,7 +8,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 OD_ROOT = ROOT / "external" / "stm32ai-modelzoo-services" / "object_detection"
 
 CONVERTER = OD_ROOT / "datasets" / "dataset_converter" / "converter.py"

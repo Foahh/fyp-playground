@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 def repo_root() -> Path:
-    """Repository root (parent of ``scripts/``)."""
+    """Repository root (two levels above ``src/conda/conda_setup_common.py``)."""
     return Path(__file__).resolve().parents[2]
 
 
