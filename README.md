@@ -51,7 +51,7 @@ Use `project.py` as the single entry point for common workflows.
 | Command | Conda env |
 |---------|-----------|
 | `dataset-coco`, `dataset-finetune`, `train`, `quant` | `yolo` |
-| `benchmark`, `finetune-dataset`, `finetune` | `stzoo` |
+| `benchmark`, `compare`, `finetune-dataset`, `finetune` | `stzoo` |
 | `conda-yolo`, `conda-benchmark` | none (run from base or any env with `conda` available) |
 
 ### Local commands
@@ -322,3 +322,76 @@ Run nominal first, pause 5 seconds, then overdrive before going to bed:
 conda activate stzoo
 python project.py benchmark
 ```
+
+---
+
+## Compare README metrics to benchmark CSVs
+
+**Conda environment:** `stzoo` — same as on-device benchmarking (`conda-benchmark` installs `markdown`, `beautifulsoup4`, and other deps used by the parser).
+
+`python project.py compare` runs [`scripts/run_compare.py`](scripts/run_compare.py), which either parses STM32 model zoo README tables into a CSV, prints a delta report against `benchmark_results.csv`, or both.
+
+### README source (`external/stm32ai-modelzoo/object_detection`)
+
+The **reference** side of a readme-vs-benchmark comparison is not a single file. Metrics are scraped from HTML tables inside each model family’s `README.md` under the STM32 model zoo object-detection tree:
+
+```text
+external/stm32ai-modelzoo/object_detection/
+```
+
+Examples of those README paths include `st_yoloxn/README.md`, `yolov8n/README.md`, and `ssdlite_mobilenetv2_pt/README.md`. Which `README.md` applies to each onboard variant (and how rows are matched) is defined in [`scripts/benchmark/constants.py`](scripts/benchmark/constants.py) via `MODEL_REGISTRY` and `MODELZOO_DIR`.
+
+**Official benchmark conditions (README tables):** ST publishes those NPU latency and footprint numbers for **overdrive mode**, under the **default STM32Cube.AI configuration** (including enabled input/output allocation), as stated in each family README under *Performances → Metrics*.
+
+That directory comes from the **`stm32ai-modelzoo`** Git submodule. If it is missing or empty, run `git submodule update --init --recursive` from the repository root (see [Getting Started](#getting-started)).
+
+### Subcommands
+
+| Subcommand | Purpose |
+|------------|---------|
+| *(none)* | Same as `all` — parse README metrics, then compare parsed CSV to overdrive results. |
+| `parse` | Write `results/benchmark_parsed.csv` from model zoo README tables only (`--out` to override path). |
+| `compare` | Delta tables only — requires CSVs already on disk (see flags below). |
+| `all` | Parse then compare README vs **overdrive** `benchmark_results.csv` (delta = measured − readme). |
+
+If the first argument looks like a `compare`-only flag (`--mode`, `--benchmark`, `--nominal`, `--min-abs-delta-pct`), the runner inserts the `compare` subcommand automatically (e.g. `python project.py compare --mode readme-nominal`).
+
+### Default files
+
+| Artifact | Default path |
+|----------|----------------|
+| Parsed README metrics | `results/benchmark_parsed.csv` |
+| Nominal device results | `results/benchmark_nominal/benchmark_results.csv` |
+| Overdrive device results | `results/benchmark_overdrive/benchmark_results.csv` |
+
+### Examples
+
+Refresh parsed CSV and print README vs overdrive (default workflow):
+
+```sh
+conda activate stzoo
+python project.py compare
+```
+
+Parse only:
+
+```sh
+conda activate stzoo
+python project.py compare parse
+```
+
+Compare existing CSVs — modes:
+
+- `readme-overdrive` — parsed README vs overdrive measured (default).
+- `readme-nominal` — parsed README vs nominal measured.
+- `nominal-overdrive` — nominal vs overdrive `benchmark_results.csv` only (Δ = overdrive − nominal).
+
+```sh
+conda activate stzoo
+python project.py compare compare --mode readme-nominal
+python project.py compare compare --mode nominal-overdrive
+```
+
+Optional: `--parsed`, `--nominal`, `--overdrive`, `--benchmark` (alias for the measured file in readme-* modes), and `--min-abs-delta-pct PCT` to hide metric rows with \|Δ%\| below `PCT`. Full flag list: `python project.py compare compare --help`.
+
+Output is plain-text tables grouped by `model_variant` (no pass/fail); see the module docstring in [`scripts/benchmark/compare.py`](scripts/benchmark/compare.py) for column semantics and edge cases.

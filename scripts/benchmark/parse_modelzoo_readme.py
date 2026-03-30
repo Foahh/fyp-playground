@@ -1,4 +1,8 @@
-"""Extract STM32N6 NPU metrics from stm32ai-modelzoo object_detection README files into CSV."""
+"""Extract STM32N6 NPU metrics from stm32ai-modelzoo object_detection README files into CSV.
+
+Source tables describe measurements in **overdrive mode** as part of the **default
+STM32Cube.AI configuration** (see README *Performances → Metrics* footnotes).
+"""
 
 from __future__ import annotations
 

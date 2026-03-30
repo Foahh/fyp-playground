@@ -1,5 +1,11 @@
 """Compare benchmark / README metrics with configurable modes.
 
+The official ST Model Zoo NPU figures parsed from object_detection README tables are
+measured in **overdrive mode** as part of the **default STM32Cube.AI configuration**
+(see each family README under *Performances → Metrics*, e.g. input/output allocated).
+That matches the high-performance supply/setup used for STM32N6570-DK reference
+benchmarking, not a separate “nominal vs overdrive” split on the README side.
+
 Modes (see ``--mode``):
 
 - **readme-overdrive** — ``benchmark_parsed.csv`` vs ``benchmark_overdrive/benchmark_results.csv``
@@ -15,6 +21,9 @@ For readme modes, ``stedgeai_version`` is also listed per matched row (README-pa
 ``benchmark_results``); values are compared as strings (delta column shows ``≠`` when they differ).
 
 Output is grouped by ``model_variant`` with plain-text tables (no pass/fail).
+
+Use ``--min-abs-delta-pct PCT`` to hide metric rows whose numeric ``|delta_pct|`` is below PCT;
+rows without a numeric ``delta_pct`` (e.g. ``stedgeai_version``, baseline zero) stay listed.
 """
 
 from __future__ import annotations
@@ -136,12 +145,23 @@ def _parse_float(cell: str) -> float | None:
     return float(s)
 
 
+def _external_ram_kib_float(raw: str) -> float:
+    """Treat blanks and null-like tokens as 0; non-numeric garbage → 0 (same as missing)."""
+    if _blank(raw):
+        return 0.0
+    s = (raw or "").strip().lower()
+    if s in ("null", "none", "n/a", "na", "-"):
+        return 0.0
+    try:
+        return float(s)
+    except ValueError:
+        return 0.0
+
+
 def metric_floats(col: str, parsed_raw: str, bench_raw: str) -> tuple[float | None, float | None]:
     """Numeric readme vs measured; external RAM treats blank as 0."""
     if col == "external_ram_kib":
-        pr = _parse_float(parsed_raw) if not _blank(parsed_raw) else 0.0
-        br = _parse_float(bench_raw) if not _blank(bench_raw) else 0.0
-        return pr, br
+        return _external_ram_kib_float(parsed_raw), _external_ram_kib_float(bench_raw)
     pr = _parse_float(parsed_raw)
     br = _parse_float(bench_raw)
     return pr, br
@@ -165,6 +185,8 @@ def _delta_cells(pr: float | None, br: float | None) -> tuple[str, str]:
     d = br - pr
     ds = _fmt_num(d)
     if pr == 0:
+        if br == 0:
+            return ds, "+0.00%"
         return ds, "—"
     pct = 100.0 * (br - pr) / pr
     return ds, f"{pct:+.2f}%"
@@ -183,6 +205,37 @@ def _delta_sort_key(delta_s: str) -> float:
         return float(s)
     except ValueError:
         return float("inf")
+
+
+def _parse_delta_pct_value(pct_str: str) -> float | None:
+    """Parse a ``delta_pct`` cell like ``+1.23%``; return None for ``—`` or non-numeric."""
+    s = (pct_str or "").strip()
+    if not s or s == "—":
+        return None
+    if s.endswith("%"):
+        s = s[:-1].strip()
+    try:
+        v = float(s)
+        if v != v:  # NaN
+            return None
+        return v
+    except ValueError:
+        return None
+
+
+def filter_rows_by_abs_delta_pct(
+    rows: list[dict[str, str]],
+    min_abs_pct: float,
+) -> list[dict[str, str]]:
+    """Keep rows with no numeric ``delta_pct``, or whose ``|delta_pct|`` is >= ``min_abs_pct``."""
+    if min_abs_pct < 0:
+        raise ValueError("min_abs_pct must be non-negative")
+    out: list[dict[str, str]] = []
+    for r in rows:
+        v = _parse_delta_pct_value(r.get("delta_pct", ""))
+        if v is None or abs(v) >= min_abs_pct:
+            out.append(r)
+    return out
 
 
 def load_csv(path: Path) -> tuple[list[str], list[dict[str, str]]]:
@@ -410,8 +463,18 @@ def _print_table(
         print(pad + sep.join(r.get(c, "").ljust(widths[c]) for c in columns))
 
 
-def print_comparison_report(result: ComparisonResult) -> None:
+def print_comparison_report(
+    result: ComparisonResult,
+    *,
+    delta_rows_before_filter: int | None = None,
+    min_abs_delta_pct: float | None = None,
+) -> None:
     print(result.headline)
+    if min_abs_delta_pct is not None and delta_rows_before_filter is not None:
+        print(
+            f"(filtered: |Δ%| ≥ {min_abs_delta_pct:g}% — "
+            f"{len(result.delta_rows)} of {delta_rows_before_filter} row(s))"
+        )
     print()
 
     if not result.delta_rows:
@@ -529,6 +592,16 @@ def main(argv: list[str] | None = None) -> int:
             "readme-overdrive, and --nominal for readme-nominal)."
         ),
     )
+    p.add_argument(
+        "--min-abs-delta-pct",
+        type=float,
+        default=None,
+        metavar="PCT",
+        help=(
+            "Hide metric rows whose numeric |delta_pct| is below PCT (e.g. 5 keeps |Δ|≥5%%). "
+            "Rows without a numeric Δ%% are always shown."
+        ),
+    )
     args = p.parse_args(argv)
 
     if args.mode == "readme-overdrive":
@@ -574,7 +647,22 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         result = compare_nominal_to_overdrive(args.nominal, args.overdrive)
 
-    print_comparison_report(result)
+    before_filter: int | None = None
+    if args.min_abs_delta_pct is not None:
+        if args.min_abs_delta_pct < 0:
+            print("error: --min-abs-delta-pct must be >= 0", file=sys.stderr)
+            return 2
+        before_filter = len(result.delta_rows)
+        result.delta_rows = filter_rows_by_abs_delta_pct(
+            result.delta_rows,
+            args.min_abs_delta_pct,
+        )
+
+    print_comparison_report(
+        result,
+        delta_rows_before_filter=before_filter,
+        min_abs_delta_pct=args.min_abs_delta_pct,
+    )
     return 0
 
 

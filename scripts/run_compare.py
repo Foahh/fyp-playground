@@ -1,5 +1,8 @@
 """Parse STM32 model zoo README metrics and/or compare them to benchmark_results.csv.
 
+Official README NPU metrics assume **overdrive mode** under **default STM32Cube.AI
+configuration** (per each object_detection family README *Performances → Metrics*).
+
 From repo root:
   python scripts/run_compare.py parse
   python scripts/run_compare.py compare
@@ -21,8 +24,15 @@ from benchmark.compare import (  # noqa: E402
     DEFAULT_OVERDRIVE_CSV,
     DEFAULT_PARSED_CSV,
     compare_readme_to_bench,
+    filter_rows_by_abs_delta_pct,
     main as compare_main,
     print_comparison_report,
+)
+
+# If argv has no subcommand and starts with `-`, we default to `all` or `compare`.
+# These flags are only valid on `compare` / compare_main — default to `compare` when seen.
+_COMPARE_ONLY_FLAGS = frozenset(
+    ("--mode", "--benchmark", "--nominal", "--min-abs-delta-pct")
 )
 
 
@@ -65,6 +75,13 @@ def _cmd_all(argv: list[str]) -> int:
         default=DEFAULT_OVERDRIVE_CSV,
         help=f"Overdrive benchmark_results.csv (default: {DEFAULT_OVERDRIVE_CSV})",
     )
+    p.add_argument(
+        "--min-abs-delta-pct",
+        type=float,
+        default=None,
+        metavar="PCT",
+        help="Hide metric rows below PCT |Δ%%|; non-numeric Δ%% rows always shown (compare subcommand).",
+    )
     args = p.parse_args(argv)
 
     out, n = write_metric_parsed_csv(path=args.parsed)
@@ -83,14 +100,33 @@ def _cmd_all(argv: list[str]) -> int:
         mode="readme-overdrive",
         headline="README vs overdrive (delta = measured − readme)",
     )
-    print_comparison_report(result)
+    before_filter: int | None = None
+    if args.min_abs_delta_pct is not None:
+        if args.min_abs_delta_pct < 0:
+            print("error: --min-abs-delta-pct must be >= 0", file=sys.stderr)
+            return 2
+        before_filter = len(result.delta_rows)
+        result.delta_rows = filter_rows_by_abs_delta_pct(
+            result.delta_rows, args.min_abs_delta_pct
+        )
+
+    print_comparison_report(
+        result,
+        delta_rows_before_filter=before_filter,
+        min_abs_delta_pct=args.min_abs_delta_pct,
+    )
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(argv if argv is not None else sys.argv[1:])
-    if not argv or (argv[0].startswith("-") and argv[0] not in ("-h", "--help")):
-        argv = ["all"] + argv
+    if not argv:
+        argv = ["all"]
+    elif argv[0].startswith("-") and argv[0] not in ("-h", "--help"):
+        if any(token in _COMPARE_ONLY_FLAGS for token in argv):
+            argv = ["compare"] + argv
+        else:
+            argv = ["all"] + argv
 
     if argv[0] in ("-h", "--help"):
         print(__doc__)
