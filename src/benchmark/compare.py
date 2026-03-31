@@ -1,4 +1,4 @@
-"""Compare benchmark / README metrics with configurable modes.
+"""Compare two datasources (README-parsed metrics and/or benchmark result CSVs).
 
 The official ST Model Zoo NPU figures parsed from object_detection README tables are
 measured in **overdrive mode** as part of the **default STM32Cube.AI configuration**
@@ -6,27 +6,24 @@ measured in **overdrive mode** as part of the **default STM32Cube.AI configurati
 That matches the high-performance supply/setup used for STM32N6570-DK reference
 benchmarking, not a separate “underdrive vs overdrive” split on the README side.
 
-Modes (see ``--mode``):
+Datasources (select via ``--left/--right``):
 
-- **readme-overdrive** — ``benchmark_parsed.csv`` vs ``benchmark_overdrive/benchmark_results.csv``
-  (delta = measured − readme). Parsed rows with no metrics are skipped; empty parsed
-  cells are not compared.
+- **readme**: parsed CSV (default ``results/benchmark_parsed.csv``)
+- **underdrive**: benchmark CSV (default ``results/benchmark_underdrive/benchmark_results.csv``)
+- **nominal**: benchmark CSV (default ``results/benchmark_nominal/benchmark_results.csv``)
+- **overdrive**: benchmark CSV (default ``results/benchmark_overdrive/benchmark_results.csv``)
 
-- **readme-underdrive** — same, but measured file is ``benchmark_underdrive/benchmark_results.csv``.
+Delta is always defined as ``right − left``.
 
-- **underdrive-overdrive** — underdrive vs overdrive ``benchmark_results.csv`` (delta = overdrive − underdrive)
-  for every shared config and metric column, **including inference power** (``pm_avg_inf_*``) when present;
-  ``pm_avg_idle_*`` and ``pm_avg_delta_mW`` are omitted (idle/delta splits are not comparable across runs).
-  ``stedgeai_version`` is listed when present on either side.
+For readme comparisons, empty README metric cells are ignored (not compared). For
+``stedgeai_version``, values are compared as strings (delta column shows ``≠`` when they
+differ), and rows with the same value on both sides are omitted.
 
-For readme modes, ``stedgeai_version`` is also listed per matched row (README-parsed vs measured
-``benchmark_results``); values are compared as strings (delta column shows ``≠`` when they differ).
-
-Output is grouped by ``model_variant`` with plain-text tables (no pass/fail).
+Output is grouped by ``(model_variant, format)`` with plain-text tables (no pass/fail).
 
 Use ``--delta-pct PCT`` to hide metric rows whose numeric ``|delta_pct|`` is below PCT. Rows
-without a numeric ``delta_pct`` (e.g. baseline zero) stay listed; ``stedgeai_version`` rows with
-the same value on both sides are omitted.
+without a numeric ``delta_pct`` (e.g. baseline zero) stay listed; matching ``stedgeai_version``
+rows are omitted.
 """
 
 from __future__ import annotations
@@ -48,10 +45,8 @@ from .utils.logutil import configure_logging, typer_install_exception_hook
 
 DEFAULT_PARSED_CSV = RESULTS_DIR / "benchmark_parsed.csv"
 DEFAULT_UNDERDRIVE_CSV = RESULTS_DIR / "benchmark_underdrive" / "benchmark_results.csv"
+DEFAULT_NOMINAL_CSV = RESULTS_DIR / "benchmark_nominal" / "benchmark_results.csv"
 DEFAULT_OVERDRIVE_CSV = RESULTS_DIR / "benchmark_overdrive" / "benchmark_results.csv"
-DEFAULT_BENCHMARK_CSV = DEFAULT_OVERDRIVE_CSV
-
-COMPARE_MODES = ("readme-overdrive", "readme-underdrive", "underdrive-overdrive")
 
 IDENTITY_COLS = (
     "model_family",
@@ -119,17 +114,78 @@ PER_VARIANT_COLUMNS_BENCH_PAIR = (
 )
 
 
+_DATASOURCE_CHOICES = ("readme", "underdrive", "nominal", "overdrive")
+
+
+def _ds_norm(s: str) -> str:
+    return (s or "").strip().casefold()
+
+
+def _ds_error_choices() -> str:
+    return ", ".join(_DATASOURCE_CHOICES)
+
+
+def _require_file_exists(path: Path, *, label: str) -> None:
+    if not path.is_file():
+        _err_console.print(f"[red]error: {label} CSV not found: {path}[/red]")
+        raise typer.Exit(2)
+
+
+def _bench_path_for_ds(
+    ds: str,
+    *,
+    nominal: Path,
+    underdrive: Path,
+    overdrive: Path,
+) -> Path:
+    dsn = _ds_norm(ds)
+    if dsn == "nominal":
+        return nominal
+    if dsn == "underdrive":
+        return underdrive
+    if dsn == "overdrive":
+        return overdrive
+    raise ValueError(f"not a benchmark datasource: {ds!r}")
+
+
+def _columns_for_readme_pair(left_label: str, right_label: str) -> tuple[str, ...]:
+    return (
+        "dataset",
+        "format",
+        "res",
+        "metric",
+        left_label,
+        right_label,
+        "delta",
+        "delta_pct",
+    )
+
+
+def _columns_for_bench_pair(left_label: str, right_label: str) -> tuple[str, ...]:
+    return (
+        "dataset",
+        "format",
+        "res",
+        "metric",
+        left_label,
+        right_label,
+        "delta",
+        "delta_pct",
+    )
+
+
 @dataclass
 class ComparisonResult:
-    mode: str = "readme-overdrive"
+    left: str = ""
+    right: str = ""
     headline: str = ""
     table_columns: tuple[str, ...] = field(default_factory=lambda: PER_VARIANT_COLUMNS_README)
     skipped_parsed_no_readme: int = 0
     matched_rows: int = 0
-    missing_in_benchmark: list[str] = field(default_factory=list)
-    missing_in_parsed: list[str] = field(default_factory=list)
-    duplicate_benchmark_keys: list[str] = field(default_factory=list)
-    duplicate_underdrive_keys: list[str] = field(default_factory=list)
+    missing_in_right: list[str] = field(default_factory=list)
+    missing_in_left: list[str] = field(default_factory=list)
+    duplicate_left_keys: list[str] = field(default_factory=list)
+    duplicate_right_keys: list[str] = field(default_factory=list)
     missed_numeric_compare: int = 0
     delta_rows: list[dict[str, str]] = field(default_factory=list)
 
@@ -310,14 +366,14 @@ def _append_duplicate_labels(
     size_by_key: pd.Series,
     out: ComparisonResult,
     *,
-    underdrive: bool,
+    left: bool,
 ) -> None:
     for key_tuple, cnt in size_by_key.items():
         if cnt <= 1:
             continue
         kt = tuple(str(x) for x in (key_tuple if isinstance(key_tuple, tuple) else (key_tuple,)))
         lbl = key_label(kt)
-        dup_list = out.duplicate_underdrive_keys if underdrive else out.duplicate_benchmark_keys
+        dup_list = out.duplicate_left_keys if left else out.duplicate_right_keys
         dup_list.extend([lbl] * (cnt - 1))
 
 
@@ -336,7 +392,9 @@ def compare_readme_to_bench(
     parsed_path: Path,
     bench_path: Path,
     *,
-    mode: str,
+    left_label: str,
+    right_label: str,
+    left_is_readme: bool,
     headline: str,
 ) -> ComparisonResult:
     parsed_df = load_csv_df(parsed_path)
@@ -344,16 +402,17 @@ def compare_readme_to_bench(
     parsed_cols = list(parsed_df.columns)
 
     out = ComparisonResult(
-        mode=mode,
+        left=left_label,
+        right=right_label,
         headline=headline,
-        table_columns=PER_VARIANT_COLUMNS_README,
+        table_columns=_columns_for_readme_pair(left_label, right_label),
     )
 
     parsed_n = _normalize_identity_df(parsed_df)
     bench_n = _normalize_identity_df(bench_df)
 
     g_sizes = bench_n.groupby(list(KEY_MERGE), sort=False).size()
-    _append_duplicate_labels(g_sizes, out, underdrive=False)
+    _append_duplicate_labels(g_sizes, out, left=False)
 
     bench_first = bench_n.drop_duplicates(subset=list(KEY_MERGE), keep="first")
 
@@ -375,9 +434,10 @@ def compare_readme_to_bench(
         for _, r in parsed_with.iterrows():
             parsed_key_set.add(tuple(str(r[c]) for c in KEY_MERGE))
 
+    left_df_m, right_df_m = (parsed_with, bench_first) if left_is_readme else (bench_first, parsed_with)
     left_m = pd.merge(
-        parsed_with,
-        bench_first,
+        left_df_m,
+        right_df_m,
         on=list(KEY_MERGE),
         how="left",
         indicator=True,
@@ -386,24 +446,31 @@ def compare_readme_to_bench(
 
     out.matched_rows = int((left_m["_merge"] == "both").sum())
 
-    for _, r in left_m[left_m["_merge"] == "left_only"].iterrows():
-        k = tuple(str(r[c]) for c in KEY_MERGE)
-        out.missing_in_benchmark.append(key_label(k))
+    for _, rrow in left_m[left_m["_merge"] == "left_only"].iterrows():
+        k = tuple(str(rrow[c]) for c in KEY_MERGE)
+        out.missing_in_right.append(key_label(k))
 
-    for _, r in bench_first.iterrows():
-        k = tuple(str(r[c]) for c in KEY_MERGE)
-        if k not in parsed_key_set:
-            out.missing_in_parsed.append(key_label(k))
+    if left_is_readme:
+        for _, rrow in bench_first.iterrows():
+            k = tuple(str(rrow[c]) for c in KEY_MERGE)
+            if k not in parsed_key_set:
+                out.missing_in_left.append(key_label(k))
+    else:
+        bench_key_set = {tuple(str(rrow[c]) for c in KEY_MERGE) for _, rrow in bench_first.iterrows()}
+        for k in parsed_key_set:
+            if k not in bench_key_set:
+                out.missing_in_left.append(key_label(k))
 
     delta_src = left_m[left_m["_merge"] == "both"].drop(columns=["_merge"], errors="ignore")
     for _, mrow in delta_src.iterrows():
         res_s = str(mrow["_res"])
         for col in METRIC_COLS:
-            praw = _merged_side(mrow, col, True)
-            if _blank(praw):
+            lraw = _merged_side(mrow, col, True)
+            rraw = _merged_side(mrow, col, False)
+            readme_raw = lraw if left_is_readme else rraw
+            if _blank(readme_raw):
                 continue
-            braw = _merged_side(mrow, col, False)
-            pr, br = metric_floats(col, praw, braw)
+            pr, br = metric_floats(col, lraw, rraw)
             if pr is None or br is None:
                 out.missed_numeric_compare += 1
             d_str, pct_str = _delta_cells(pr, br)
@@ -414,15 +481,16 @@ def compare_readme_to_bench(
                     "format": _merged_side(mrow, "format", True),
                     "res": res_s,
                     "metric": col,
-                    "readme": _fmt_num(pr) if pr is not None else praw.strip(),
-                    "measured": _fmt_num(br) if br is not None else "",
+                    left_label: _fmt_num(pr) if pr is not None else lraw.strip(),
+                    right_label: _fmt_num(br) if br is not None else rraw.strip(),
                     "delta": d_str,
                     "delta_pct": pct_str,
                 }
             )
-        pv = _merged_side(mrow, "stedgeai_version", True)
-        bv = _merged_side(mrow, "stedgeai_version", False)
-        if pv or bv:
+
+        lv = _merged_side(mrow, "stedgeai_version", True)
+        rv = _merged_side(mrow, "stedgeai_version", False)
+        if (lv or rv) and lv != rv:
             out.delta_rows.append(
                 {
                     "model_variant": _merged_side(mrow, "model_variant", True),
@@ -430,9 +498,9 @@ def compare_readme_to_bench(
                     "format": _merged_side(mrow, "format", True),
                     "res": res_s,
                     "metric": "stedgeai_version",
-                    "readme": pv,
-                    "measured": bv,
-                    "delta": "" if pv == bv else "≠",
+                    left_label: lv,
+                    right_label: rv,
+                    "delta": "≠",
                     "delta_pct": "—",
                 }
             )
@@ -440,42 +508,44 @@ def compare_readme_to_bench(
     return out
 
 
-def compare_underdrive_to_overdrive(
-    underdrive_path: Path, overdrive_path: Path
+def compare_bench_to_bench(
+    left_label: str,
+    left_path: Path,
+    right_label: str,
+    right_path: Path,
 ) -> ComparisonResult:
-    underdrive_df = load_csv_df(underdrive_path)
-    over_df = load_csv_df(overdrive_path)
+    left_df = load_csv_df(left_path)
+    right_df = load_csv_df(right_path)
 
     out = ComparisonResult(
-        mode="underdrive-overdrive",
-        headline="Underdrive vs overdrive (delta = overdrive − underdrive)",
-        table_columns=PER_VARIANT_COLUMNS_BENCH_PAIR,
+        left=left_label,
+        right=right_label,
+        headline=f"{left_label} vs {right_label} (delta = {right_label} − {left_label})",
+        table_columns=_columns_for_bench_pair(left_label, right_label),
     )
 
-    underdrive_n = _normalize_identity_df(underdrive_df)
-    over_n = _normalize_identity_df(over_df)
+    left_n = _normalize_identity_df(left_df)
+    right_n = _normalize_identity_df(right_df)
 
     _append_duplicate_labels(
-        underdrive_n.groupby(list(KEY_MERGE), sort=False).size(),
+        left_n.groupby(list(KEY_MERGE), sort=False).size(),
         out,
-        underdrive=True,
+        left=True,
     )
     _append_duplicate_labels(
-        over_n.groupby(list(KEY_MERGE), sort=False).size(),
+        right_n.groupby(list(KEY_MERGE), sort=False).size(),
         out,
-        underdrive=False,
+        left=False,
     )
 
-    underdrive_first = underdrive_n.drop_duplicates(subset=list(KEY_MERGE), keep="first")
-    over_first = over_n.drop_duplicates(subset=list(KEY_MERGE), keep="first")
+    left_first = left_n.drop_duplicates(subset=list(KEY_MERGE), keep="first")
+    right_first = right_n.drop_duplicates(subset=list(KEY_MERGE), keep="first")
 
-    underdrive_key_set = {
-        tuple(str(r[c]) for c in KEY_MERGE) for _, r in underdrive_first.iterrows()
-    }
+    left_key_set = {tuple(str(r[c]) for c in KEY_MERGE) for _, r in left_first.iterrows()}
 
     left_m = pd.merge(
-        underdrive_first,
-        over_first,
+        left_first,
+        right_first,
         on=list(KEY_MERGE),
         how="left",
         indicator=True,
@@ -486,22 +556,22 @@ def compare_underdrive_to_overdrive(
 
     for _, r in left_m[left_m["_merge"] == "left_only"].iterrows():
         k = tuple(str(r[c]) for c in KEY_MERGE)
-        out.missing_in_benchmark.append(key_label(k))
+        out.missing_in_right.append(key_label(k))
 
-    for _, r in over_first.iterrows():
+    for _, r in right_first.iterrows():
         k = tuple(str(r[c]) for c in KEY_MERGE)
-        if k not in underdrive_key_set:
-            out.missing_in_parsed.append(key_label(k))
+        if k not in left_key_set:
+            out.missing_in_left.append(key_label(k))
 
     delta_src = left_m[left_m["_merge"] == "both"].drop(columns=["_merge"], errors="ignore")
     for _, mrow in delta_src.iterrows():
         res_s = str(mrow["_res"])
         for col in METRIC_COLS_BENCH_PAIR:
-            nraw = _merged_side(mrow, col, True)
-            oraw = _merged_side(mrow, col, False)
-            if _blank(nraw) and _blank(oraw):
+            lraw = _merged_side(mrow, col, True)
+            rraw = _merged_side(mrow, col, False)
+            if _blank(lraw) and _blank(rraw):
                 continue
-            pr, br = metric_floats(col, nraw, oraw)
+            pr, br = metric_floats(col, lraw, rraw)
             if pr is None or br is None:
                 out.missed_numeric_compare += 1
             d_str, pct_str = _delta_cells(pr, br)
@@ -512,15 +582,16 @@ def compare_underdrive_to_overdrive(
                     "format": _merged_side(mrow, "format", True),
                     "res": res_s,
                     "metric": col,
-                    "underdrive": _fmt_num(pr) if pr is not None else nraw.strip(),
-                    "overdrive": _fmt_num(br) if br is not None else oraw.strip(),
+                    left_label: _fmt_num(pr) if pr is not None else lraw.strip(),
+                    right_label: _fmt_num(br) if br is not None else rraw.strip(),
                     "delta": d_str,
                     "delta_pct": pct_str,
                 }
             )
-        nv = _merged_side(mrow, "stedgeai_version", True)
-        ov = _merged_side(mrow, "stedgeai_version", False)
-        if nv or ov:
+
+        lv = _merged_side(mrow, "stedgeai_version", True)
+        rv = _merged_side(mrow, "stedgeai_version", False)
+        if (lv or rv) and lv != rv:
             out.delta_rows.append(
                 {
                     "model_variant": _merged_side(mrow, "model_variant", True),
@@ -528,23 +599,14 @@ def compare_underdrive_to_overdrive(
                     "format": _merged_side(mrow, "format", True),
                     "res": res_s,
                     "metric": "stedgeai_version",
-                    "underdrive": nv,
-                    "overdrive": ov,
-                    "delta": "" if nv == ov else "≠",
+                    left_label: lv,
+                    right_label: rv,
+                    "delta": "≠",
                     "delta_pct": "—",
                 }
             )
 
     return out
-
-
-def compare(parsed_path: Path, benchmark_path: Path) -> ComparisonResult:
-    return compare_readme_to_bench(
-        parsed_path,
-        benchmark_path,
-        mode="readme-overdrive",
-        headline="README vs measured (delta = measured − readme)",
-    )
 
 
 def _row_sort_key(r: dict[str, str]) -> tuple:
@@ -575,16 +637,16 @@ def print_comparison_report(
     if not result.delta_rows:
         console.print("No overlapping metric cells (nothing to tabulate).")
     else:
-        by_variant: dict[str, list[dict[str, str]]] = defaultdict(list)
+        by_variant_and_format: dict[tuple[str, str], list[dict[str, str]]] = defaultdict(list)
         for r in result.delta_rows:
-            by_variant[r["model_variant"]].append(r)
+            by_variant_and_format[(r["model_variant"], r["format"])].append(r)
 
-        for i, variant in enumerate(sorted(by_variant.keys())):
-            rows = by_variant[variant]
+        for i, (variant, fmt) in enumerate(sorted(by_variant_and_format.keys())):
+            rows = by_variant_and_format[(variant, fmt)]
             rows.sort(key=_row_sort_key)
             if i:
                 console.print()
-            console.print(Rule(title=variant, style="bold"))
+            console.print(Rule(title=f"{variant} | {fmt}", style="bold"))
             console.print()
             table = Table(show_header=True, header_style="bold", show_lines=False)
             for c in result.table_columns:
@@ -601,53 +663,36 @@ def print_comparison_report(
         f"{result.matched_rows} config(s) matched",
         f"{len(result.delta_rows)} metric cell(s) listed",
     ]
-    if result.mode.startswith("readme"):
+    if result.left == "readme" or result.right == "readme":
         parts.insert(
             0,
             f"{result.skipped_parsed_no_readme} parsed row(s) skipped (no readme metrics)",
         )
     console.print("Summary: " + "; ".join(parts) + ".")
 
-    if result.duplicate_underdrive_keys:
+    if result.duplicate_left_keys:
         console.print(
-            f"Note: {len(result.duplicate_underdrive_keys)} duplicate key(s) in underdrive CSV "
-            f"(first row kept): {', '.join(sorted(set(result.duplicate_underdrive_keys)))}"
+            f"Note: {len(result.duplicate_left_keys)} duplicate key(s) in {result.left} CSV "
+            f"(first row kept): {', '.join(sorted(set(result.duplicate_left_keys)))}"
         )
-    if result.duplicate_benchmark_keys:
-        label = (
-            "overdrive CSV"
-            if result.mode == "underdrive-overdrive"
-            else "measured benchmark CSV"
-        )
+    if result.duplicate_right_keys:
         console.print(
-            f"Note: {len(result.duplicate_benchmark_keys)} duplicate key(s) in {label} "
-            f"(first row kept): {', '.join(sorted(set(result.duplicate_benchmark_keys)))}"
+            f"Note: {len(result.duplicate_right_keys)} duplicate key(s) in {result.right} CSV "
+            f"(first row kept): {', '.join(sorted(set(result.duplicate_right_keys)))}"
         )
-    if result.missing_in_benchmark:
-        keys = ", ".join(sorted(set(result.missing_in_benchmark)))
-        if result.mode == "underdrive-overdrive":
-            msg = (
-                f"Note: {len(result.missing_in_benchmark)} underdrive config(s) have no overdrive row "
-                f"(compare missed; not in table): {keys}"
-            )
-        else:
-            msg = (
-                f"Note: {len(result.missing_in_benchmark)} readme config(s) with metrics have no measured row "
-                f"(compare missed; not in table): {keys}"
-            )
+    if result.missing_in_right:
+        keys = ", ".join(sorted(set(result.missing_in_right)))
+        msg = (
+            f"Note: {len(result.missing_in_right)} {result.left} config(s) have no {result.right} row "
+            f"(compare missed; not in table): {keys}"
+        )
         console.print(msg)
-    if result.missing_in_parsed:
-        keys = ", ".join(sorted(set(result.missing_in_parsed)))
-        if result.mode == "underdrive-overdrive":
-            msg = (
-                f"Note: {len(result.missing_in_parsed)} overdrive row(s) have no matching underdrive row "
-                f"(compare missed; not in table): {keys}"
-            )
-        else:
-            msg = (
-                f"Note: {len(result.missing_in_parsed)} measured row(s) have no matching readme metrics row "
-                f"(compare missed; not in table): {keys}"
-            )
+    if result.missing_in_left:
+        keys = ", ".join(sorted(set(result.missing_in_left)))
+        msg = (
+            f"Note: {len(result.missing_in_left)} {result.right} row(s) have no matching {result.left} row "
+            f"(compare missed; not in table): {keys}"
+        )
         console.print(msg)
     if result.missed_numeric_compare:
         console.print(
@@ -670,15 +715,27 @@ compare_app = typer.Typer(
 @compare_app.callback()
 def compare_entry(
     ctx: typer.Context,
-    mode: str = typer.Option(
-        "readme-overdrive",
-        "--mode",
-        help="readme-overdrive | readme-underdrive | underdrive-overdrive",
+    left: str = typer.Option(
+        "readme",
+        "-l",
+        "--left",
+        help=f"Datasource ({_ds_error_choices()})",
     ),
-    parsed: Path = typer.Option(
+    right: str = typer.Option(
+        "overdrive",
+        "-r",
+        "--right",
+        help=f"Datasource ({_ds_error_choices()})",
+    ),
+    readme: Path = typer.Option(
         DEFAULT_PARSED_CSV,
-        "--parsed",
-        help=f"README-parsed CSV for readme-* modes (default: {DEFAULT_PARSED_CSV})",
+        "--readme",
+        help=f"README-parsed CSV (default: {DEFAULT_PARSED_CSV})",
+    ),
+    nominal: Path = typer.Option(
+        DEFAULT_NOMINAL_CSV,
+        "--nominal",
+        help=f"Nominal benchmark_results.csv (default: {DEFAULT_NOMINAL_CSV})",
     ),
     underdrive: Path = typer.Option(
         DEFAULT_UNDERDRIVE_CSV,
@@ -690,14 +747,6 @@ def compare_entry(
         "--overdrive",
         help=f"Overdrive benchmark_results.csv (default: {DEFAULT_OVERDRIVE_CSV})",
     ),
-    benchmark: Path | None = typer.Option(
-        None,
-        "--benchmark",
-        help=(
-            "Alias for measured CSV in readme-* only (overrides --overdrive for readme-overdrive "
-            "and --underdrive for readme-underdrive)."
-        ),
-    ),
     delta_pct: float | None = typer.Option(
         None,
         "--delta-pct",
@@ -707,11 +756,23 @@ def compare_entry(
         ),
     ),
 ) -> None:
-    """Compare README-parsed metrics to benchmark CSVs or underdrive vs overdrive."""
+    """Compare any two datasources (delta = right − left)."""
     if getattr(ctx, "resilient_parsing", False):
         return
-    if mode not in COMPARE_MODES:
-        _err_console.print(f"[red]error: invalid mode {mode!r}[/red]")
+    l = _ds_norm(left)
+    r = _ds_norm(right)
+    if l not in _DATASOURCE_CHOICES:
+        _err_console.print(
+            f"[red]error: invalid --left {left!r}; expected one of: {_ds_error_choices()}[/red]"
+        )
+        raise typer.Exit(2)
+    if r not in _DATASOURCE_CHOICES:
+        _err_console.print(
+            f"[red]error: invalid --right {right!r}; expected one of: {_ds_error_choices()}[/red]"
+        )
+        raise typer.Exit(2)
+    if l == r:
+        _err_console.print("[red]error: --left and --right must be different[/red]")
         raise typer.Exit(2)
 
     configure_logging()
@@ -720,47 +781,36 @@ def compare_entry(
     result: ComparisonResult | None = None
     before_filter: int | None = None
 
-    if mode == "readme-overdrive":
-        bench = benchmark if benchmark is not None else overdrive
-        if not parsed.is_file():
-            _err_console.print(f"[red]error: parsed CSV not found: {parsed}[/red]")
-            raise typer.Exit(2)
-        if not bench.is_file():
-            _err_console.print(f"[red]error: overdrive/measured CSV not found: {bench}[/red]")
-            raise typer.Exit(2)
-        result = compare_readme_to_bench(
-            parsed,
-            bench,
-            mode="readme-overdrive",
-            headline="README vs overdrive (delta = measured − readme)",
-        )
-    elif mode == "readme-underdrive":
-        bench = benchmark if benchmark is not None else underdrive
-        if not parsed.is_file():
-            _err_console.print(f"[red]error: parsed CSV not found: {parsed}[/red]")
-            raise typer.Exit(2)
-        if not bench.is_file():
-            _err_console.print(f"[red]error: underdrive/measured CSV not found: {bench}[/red]")
-            raise typer.Exit(2)
-        result = compare_readme_to_bench(
-            parsed,
-            bench,
-            mode="readme-underdrive",
-            headline="README vs underdrive (delta = measured − readme)",
-        )
-    else:
-        if benchmark is not None:
-            _err_console.print(
-                "[red]error: --benchmark is only valid for readme-overdrive or readme-underdrive[/red]"
+    if l == "readme" or r == "readme":
+        _require_file_exists(readme, label="--readme")
+        if l == "readme":
+            bench_path = _bench_path_for_ds(r, nominal=nominal, underdrive=underdrive, overdrive=overdrive)
+            _require_file_exists(bench_path, label=r)
+            result = compare_readme_to_bench(
+                readme,
+                bench_path,
+                left_label=l,
+                right_label=r,
+                left_is_readme=True,
+                headline=f"{l} vs {r} (delta = {r} − {l})",
             )
-            raise typer.Exit(2)
-        if not underdrive.is_file():
-            _err_console.print(f"[red]error: underdrive CSV not found: {underdrive}[/red]")
-            raise typer.Exit(2)
-        if not overdrive.is_file():
-            _err_console.print(f"[red]error: overdrive CSV not found: {overdrive}[/red]")
-            raise typer.Exit(2)
-        result = compare_underdrive_to_overdrive(underdrive, overdrive)
+        else:
+            bench_path = _bench_path_for_ds(l, nominal=nominal, underdrive=underdrive, overdrive=overdrive)
+            _require_file_exists(bench_path, label=l)
+            result = compare_readme_to_bench(
+                readme,
+                bench_path,
+                left_label=l,
+                right_label=r,
+                left_is_readme=False,
+                headline=f"{l} vs {r} (delta = {r} − {l})",
+            )
+    else:
+        left_path = _bench_path_for_ds(l, nominal=nominal, underdrive=underdrive, overdrive=overdrive)
+        right_path = _bench_path_for_ds(r, nominal=nominal, underdrive=underdrive, overdrive=overdrive)
+        _require_file_exists(left_path, label=l)
+        _require_file_exists(right_path, label=r)
+        result = compare_bench_to_bench(l, left_path, r, right_path)
 
     assert result is not None
     if delta_pct is not None:
