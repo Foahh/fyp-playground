@@ -216,5 +216,3 @@ All power columns (`pm_avg_*`) are captured via an **ESP32 + INA228** hardware m
 **Interpreting `pm_avg_delta_mW`:** This is `pm_avg_inf_mW − pm_avg_idle_mW`, i.e. the net *system-level* power change during inference. It is **not** pure NPU power — it reflects `(NPU active + CPU sleep) − (NPU idle + CPU active)`, so the CPU's transition to WFE sleep partially offsets the NPU's power draw. Delta **underestimates** isolated NPU power. For model comparison this is acceptable: the offset is approximately constant across models, so delta remains a valid **relative** ranking signal.
 
 **`pm_avg_inf_mJ`** (energy per inference) is the most battery-relevant metric: it integrates power over the full inference duration, so faster models naturally benefit even at equal power draw.
-
-**Clock configuration:** All benchmarks use the same clock mode (underdrive, nominal, or overdrive, as indicated by the dataset). Results across different clock modes are not directly comparable.
