@@ -8,20 +8,24 @@ Run from the repository root (outputs under $FYP_RESULTS_DIR/model/ or results/m
 Quantization to INT8 TFLite is handled separately by run_quantize.py.
 """
 
+import atexit
+import signal
+import sys
 from pathlib import Path
 
 import typer
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
 
 from src.common.paths import get_results_dir
 from src.dataset.dataset_common import materialize_coco_data_yaml
-from ultralytics import YOLO
+from src.ml.backup_rclone import BackupManager, build_dest
 
 TINY = ROOT / "external" / "TinyissimoYOLO"
 MODEL_YAML = str(TINY / "ultralytics/cfg/models/tinyissimo/tinyissimo-v8.yaml")
-PROJECT = str(get_results_dir() / "model")
+PROJECT = get_results_dir() / "model"
 
 
 def run_name_for(size: int) -> str:
@@ -38,6 +42,9 @@ def main(
     device: str | None = typer.Option(None, help="Ultralytics device (e.g. 0, 0,1 for multi-GPU, cpu); default is auto"),
     workers: int | None = typer.Option(None, help="Data loader workers; omit to use Ultralytics default"),
     cache: str | None = typer.Option(None, help="Dataset cache mode (none, disk, ram); omit to use Ultralytics default"),
+    backup_dest: str | None = typer.Option(None, "--backup-dest", help="rclone destination base (enables backups when set)"),
+    backup_every_n_epochs: int = typer.Option(1, "--backup-every-n-epochs", help="Backup cadence in epochs"),
+    backup_timeout_s: int = typer.Option(600, "--backup-timeout-s", help="Per-sync timeout in seconds"),
 ):
     if size not in [192, 256, 288, 320]:
         typer.echo(f"Error: size must be one of [192, 256, 288, 320]", err=True)
@@ -46,20 +53,34 @@ def main(
         raise FileNotFoundError(f"Expected TinyissimoYOLO at {TINY}")
 
     run_name = run_name_for(size)
-    weights_dir = Path(PROJECT) / run_name / "weights"
+    local_run_dir = PROJECT / run_name
+    weights_dir = local_run_dir / "weights"
     resume = not no_resume
+
+    if backup_every_n_epochs <= 0:
+        typer.echo("Error: --backup-every-n-epochs must be > 0", err=True)
+        raise typer.Exit(1)
+    if backup_timeout_s <= 0:
+        typer.echo("Error: --backup-timeout-s must be > 0", err=True)
+        raise typer.Exit(1)
 
     if resume:
         last_pt = weights_dir / "last.pt"
         if last_pt.exists():
             print(f"Resuming from {last_pt} ...")
+            from ultralytics import YOLO
+
             model = YOLO(str(last_pt))
         else:
             print(f"No checkpoint found at {last_pt}; starting a new run ...")
             resume = False
+            from ultralytics import YOLO
+
             model = YOLO(MODEL_YAML)
     else:
         print(f"Creating new model from {MODEL_YAML} ...")
+        from ultralytics import YOLO
+
         model = YOLO(MODEL_YAML)
 
     data_yaml = materialize_coco_data_yaml(require_person=True)
@@ -81,6 +102,51 @@ def main(
         f"cache={cache_norm if cache_norm is not None else 'auto'}, "
         f"device={device or 'auto'}"
     )
+
+    backup_mgr: BackupManager | None = None
+    termination_requested = False
+
+    if backup_dest:
+        dest = build_dest(backup_dest, run_name)
+        backup_mgr = BackupManager(local_run_dir=local_run_dir, dest=dest, timeout_s=backup_timeout_s)
+
+        def _on_exit() -> None:
+            backup_mgr.request_sync("atexit")
+            backup_mgr.maybe_run_sync()
+
+        atexit.register(_on_exit)
+
+        def _handle_signal(signum, _frame) -> None:  # type: ignore[no-untyped-def]
+            nonlocal termination_requested
+            termination_requested = True
+            backup_mgr.request_sync(f"signal_{signum}")
+
+        signal.signal(signal.SIGTERM, _handle_signal)
+        signal.signal(signal.SIGINT, _handle_signal)
+
+        warned_save_dir = False
+
+        def on_train_epoch_end(trainer):  # type: ignore[no-untyped-def]
+            nonlocal warned_save_dir
+            if not warned_save_dir:
+                save_dir = getattr(trainer, "save_dir", None)
+                if save_dir is not None:
+                    try:
+                        save_dir_p = Path(str(save_dir)).resolve()
+                        if save_dir_p != local_run_dir.resolve():
+                            print(f"[backup] warning: trainer.save_dir={save_dir_p} != expected={local_run_dir.resolve()}")
+                    except Exception:
+                        print(f"[backup] warning: could not parse trainer.save_dir={save_dir!r}")
+                warned_save_dir = True
+
+            epoch_idx = int(getattr(trainer, "epoch", 0))
+            if termination_requested or ((epoch_idx + 1) % backup_every_n_epochs == 0):
+                backup_mgr.request_sync("epoch_end")
+                backup_mgr.maybe_run_sync()
+
+        def on_train_end(_trainer):  # type: ignore[no-untyped-def]
+            backup_mgr.request_sync("train_end")
+            backup_mgr.maybe_run_sync()
 
     train_kw: dict = {
         "data": data_yaml,
@@ -107,7 +173,7 @@ def main(
         "scale": 0.5,
         "mosaic": 1.0,
         "deterministic": False,
-        "project": PROJECT,
+        "project": str(PROJECT),
         "name": run_name,
         "exist_ok": True,
         "patience": 0,
@@ -120,7 +186,18 @@ def main(
     if cache_norm is not None:
         train_kw["cache"] = False if cache_norm == "none" else cache_norm
 
-    model.train(**train_kw)
+    if backup_mgr:
+        model.add_callback("on_train_epoch_end", on_train_epoch_end)
+        model.add_callback("on_train_end", on_train_end)
+
+    try:
+        model.train(**train_kw)
+    except KeyboardInterrupt:
+        print("Interrupted.")
+    finally:
+        if backup_mgr:
+            backup_mgr.request_sync("finalize")
+            backup_mgr.maybe_run_sync()
 
     print(f"Training done. Weights under {weights_dir}")
 
