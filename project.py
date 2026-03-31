@@ -8,6 +8,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+from src.conda.conda_setup_common import (
+    conda_cli_available,
+    conda_run_argv,
+    target_conda_env_for_command,
+)
+
 ROOT = Path(__file__).resolve().parent
 
 LOCAL_COMMANDS: dict[str, str] = {
@@ -42,7 +48,18 @@ def main() -> int:
 
     script_path = LOCAL_COMMANDS[args.command]
     module_path = script_path.replace("/", ".").replace(".py", "")
-    cmd = [sys.executable, "-m", module_path, *passthrough]
+    inner = ["python", "-m", module_path, *passthrough]
+    conda_env = target_conda_env_for_command(args.command)
+    if conda_env is not None and conda_cli_available():
+        cmd = conda_run_argv(conda_env, inner)
+    else:
+        if conda_env is not None and not conda_cli_available():
+            print(
+                "conda/mamba not on PATH; running with current interpreter "
+                f"(expected env {conda_env!r})",
+                file=sys.stderr,
+            )
+        cmd = [sys.executable, *inner[1:]]
     print("+", " ".join(cmd))
     return subprocess.run(cmd, cwd=ROOT, check=False).returncode
 

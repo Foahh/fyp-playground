@@ -24,7 +24,7 @@ from src.conda.conda_setup_common import (
 )
 
 YOLO_ENV_NAME = os.environ.get("FYP_YOLO_ENV", "fyp-ml")
-PYTHON_VERSION = "3.12"
+PYTHON_VERSION = "3.14"
 PYTORCH_WHL_INDEX = "https://download.pytorch.org/whl/cu128"
 
 

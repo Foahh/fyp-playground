@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -17,11 +18,78 @@ def _conda_exe() -> str:
     """Prefer mamba when available; otherwise fall back to conda."""
     return "mamba" if which("mamba") else "conda"
 
+
+def conda_cli_available() -> bool:
+    """True if ``mamba`` or ``conda`` is on ``PATH``."""
+    return which(_conda_exe()) is not None
+
 def _conda_run_cmd(env: str, *args: str) -> list[str]:
     exe = _conda_exe()
     if exe == "conda":
         return ["conda", "run", "-n", env, "--no-capture-output", *args]
     return ["mamba", "run", "-n", env, *args]
+
+
+def conda_run_argv(env: str, argv: list[str]) -> list[str]:
+    """Build ``conda run`` / ``mamba run`` argv so ``argv`` executes inside ``env``."""
+    return _conda_run_cmd(env, *argv)
+
+
+def ml_conda_env_name() -> str:
+    """Training / quantization / dataset-prep env (``FYP_YOLO_ENV``, default ``fyp-ml``)."""
+    return os.environ.get("FYP_YOLO_ENV", "fyp-ml")
+
+
+def bhmk_conda_env_name() -> str:
+    """Benchmarking / Model Zoo finetune env (``FYP_STZOO_ENV``, default ``fyp-bhmk``)."""
+    return os.environ.get("FYP_STZOO_ENV", "fyp-bhmk")
+
+def qtlz_conda_env_name() -> str:
+    """Ultralytics export / INT8 TFLite quantization env (``FYP_QTLZ_ENV``, default ``fyp-qtlz``)."""
+    return os.environ.get("FYP_QTLZ_ENV", "fyp-qtlz")
+
+
+_BASE_ENV_COMMANDS = frozenset(
+    {
+        "setup-env-qtlz",
+        "setup-env-ml",
+        "setup-env-bhmk",
+    }
+)
+
+_ML_COMMANDS = frozenset(
+    {
+        "download-coco",
+        "download-finetune",
+        "train",
+    }
+)
+
+_QTLZ_COMMANDS = frozenset({"quantize"})
+
+_BHMK_COMMANDS = frozenset(
+    {
+        "benchmark",
+        "compare-runs",
+        "prepare-finetune-dataset",
+        "verify-model-dtypes",
+        "parse-modelzoo-readme",
+        "finetune",
+    }
+)
+
+
+def target_conda_env_for_command(command: str) -> str | None:
+    """Return the conda env name ``project.py`` should run ``command`` in, or ``None``."""
+    if command in _BASE_ENV_COMMANDS:
+        return None
+    if command in _ML_COMMANDS:
+        return ml_conda_env_name()
+    if command in _QTLZ_COMMANDS:
+        return qtlz_conda_env_name()
+    if command in _BHMK_COMMANDS:
+        return bhmk_conda_env_name()
+    raise ValueError(f"Unknown command for conda routing: {command!r}")
 
 
 def run(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
