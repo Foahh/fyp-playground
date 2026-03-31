@@ -28,6 +28,28 @@ Use `project.py` as the main entry point for most tasks.
 - [`configs/`](configs) — YAML configs for export and finetuning
 - [`requirements-ml.txt`](requirements-ml.txt), [`requirements-bhmk.txt`](requirements-bhmk.txt) — extra pip constraints
 
+### `project.py` command reference
+
+All workflows are exposed as the first argument to [`project.py`](project.py). Extra flags are passed through to the underlying module (use `python project.py COMMAND -- --help` if a script needs `--` before flags).
+
+| Command | Conda env | Purpose |
+| --- | --- | --- |
+| `setup-env-ml` | *(none — runs installer)* | Create/update `fyp-ml` |
+| `setup-env-qtlz` | *(none)* | Create/update `fyp-qtlz` |
+| `setup-env-bhmk` | *(none)* | Create/update `fyp-bhmk` |
+| `download-coco` | `fyp-ml` | Download and prepare COCO (person) for training |
+| `download-finetune` | `fyp-ml` | Download and prepare hand / hazardous-tool finetune sources |
+| `train` | `fyp-ml` | Train TinyissimoYOLO |
+| `quantize` | `fyp-qtlz` | INT8 TFLite export from a trained checkpoint |
+| `benchmark` | `fyp-bhmk` | On-device STM32 benchmark |
+| `evaluate` | `fyp-bhmk` | Host-side AP evaluation via Model Zoo → `results/evaluation_result.csv` |
+| `parse-modelzoo` | `fyp-bhmk` | Parse Model Zoo README tables → `results/benchmark_parsed.csv` |
+| `compare` | `fyp-bhmk` | Compare two metric sources (README vs bench CSVs, etc.) |
+| `verify-model` | `fyp-bhmk` | Print I/O tensor dtypes for each registered model (TFLite / ONNX QDQ) |
+| `select-model` | `fyp-bhmk` | Score and rank candidates from benchmark + optional AP CSV |
+| `prepare-finetune-dataset` | `fyp-bhmk` | Prepare STM32 Model Zoo finetune dataset pipeline |
+| `finetune` | `fyp-bhmk` | Run Model Zoo finetune / chain modes from YAML |
+
 ---
 
 ## Quick start
@@ -97,7 +119,7 @@ Command mapping:
 |---|---|
 | `download-coco`, `download-finetune`, `train` | `fyp-ml` |
 | `quantize` | `fyp-qtlz` |
-| `benchmark`, `compare-runs`, `prepare-finetune-dataset`, `finetune`, `verify-model-dtypes`, `parse-modelzoo-readme` | `fyp-bhmk` |
+| `benchmark`, `evaluate`, `compare`, `select-model`, `verify-model`, `parse-modelzoo`, `prepare-finetune-dataset`, `finetune` | `fyp-bhmk` |
 | `setup-env-ml`, `setup-env-qtlz`, `setup-env-bhmk` | base or any env with `conda` |
 
 Create environments:
@@ -132,6 +154,18 @@ To use a different dataset directory:
 ```sh
 FYP_DATASETS_DIR=~/datasets python project.py download-coco
 ```
+
+### Finetune source datasets (optional)
+
+For hand / hazardous-tool detection finetunes, download and convert sources in `fyp-ml`:
+
+```sh
+python project.py download-finetune
+python project.py download-finetune -- --dataset ego2hands
+python project.py download-finetune -- --skip-download
+```
+
+See the docstring in [`src/dataset/run_download_finetune_dataset.py`](src/dataset/run_download_finetune_dataset.py) for all datasets and flags.
 
 ---
 
@@ -263,43 +297,68 @@ Continuous logs are appended to:
 results/benchmark_underdrive/power_measure.csv
 ```
 
-### Compare README metrics
+### Host-side evaluation (`evaluate`)
 
-Use `project.py compare-runs` in `fyp-bhmk` to parse STM32 Model Zoo README tables and compare them against measured results.
-
-Reference README files are scraped from:
+Runs the STM32 Model Zoo evaluator on the host (CPU) for each registered model and appends rows to:
 
 ```text
-external/stm32ai-modelzoo/object_detection/
+results/evaluation_result.csv
 ```
-
-Default files:
-
-| Artifact | Path |
-|---|---|
-| Parsed README metrics | `results/benchmark_parsed.csv` |
-| Underdrive results | `results/benchmark_underdrive/benchmark_results.csv` |
-| Overdrive results | `results/benchmark_overdrive/benchmark_results.csv` |
 
 Examples:
 
-- Refresh parsed CSV and compare to overdrive: `python project.py compare-runs`
-- Parse only: `python project.py compare-runs parse`
-- Compare README vs underdrive: `python project.py compare-runs compare --mode readme-underdrive`
-- Compare underdrive vs overdrive: `python project.py compare-runs compare --mode underdrive-overdrive`
+- `python project.py evaluate`
+- `python project.py evaluate -- --filter st_yoloxn`
+- `python project.py evaluate -- --output results/my_eval.csv`
 
-Useful flags:
+### Parse README reference metrics (`parse-modelzoo`)
 
-- `--parsed`
-- `--underdrive`
-- `--overdrive`
-- `--benchmark`
-- `--delta-pct PCT`
+Extracts NPU metrics from `external/stm32ai-modelzoo/object_detection/` README tables into:
+
+```text
+results/benchmark_parsed.csv
+```
+
+```sh
+python project.py parse-modelzoo
+```
+
+### Compare metrics (`compare`)
+
+Compares two metric sources; delta is **right − left**. Datasource names: `readme`, `underdrive`, `nominal`, `overdrive`, `evaluate`. Paths default to the CSVs under `results/` (override with `--readme`, `--underdrive`, `--overdrive`, `--nominal`, `--evaluate`).
+
+Examples:
+
+- README (parsed) vs on-board overdrive (defaults): `python project.py compare`
+- README vs underdrive: `python project.py compare -- --left readme --right underdrive`
+- Underdrive vs overdrive: `python project.py compare -- --left underdrive --right overdrive`
+- Filter large deltas: `python project.py compare -- --delta-pct 5`
 
 Full help:
 
 ```sh
-python project.py compare-runs compare --help
+python project.py compare -- --help
+```
+
+### Verify model I/O dtypes (`verify-model`)
+
+Prints input/output tensor dtypes from each model in the registry (TFLite FlatBuffers; ONNX QDQ reported as quant types).
+
+```sh
+python project.py verify-model
+```
+
+### Model selection / ranking (`select-model`)
+
+Scores and ranks benchmark candidates using `results/benchmark_underdrive/benchmark_results.csv` by default, optionally joined with host AP from `results/evaluation_result.csv`. Tunable weights via `--w-acc`, `--w-energy`, `--w-eff`, `--w-lat`, `--w-mem`, `--w-modern`; `--option-b` enables alternate memory scoring.
+
+Examples:
+
+- `python project.py select-model`
+- `python project.py select-model -- --csv results/benchmark_overdrive/benchmark_results.csv --output results/scored.csv`
+
+```sh
+python project.py select-model -- --help
 ```
 
 ---
