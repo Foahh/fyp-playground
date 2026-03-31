@@ -16,12 +16,6 @@ host_time_iso,model_family,model_variant,hyperparameters,dataset,format,resoluti
 2026-03-31T16:03:59.548432+00:00,st_yolodv2tiny_pt,st_yolodv2tiny_actrelu_pt_coco_person_192,actrelu,COCO-Person,Int8,192,62.3
 2026-03-31T16:03:59.548438+00:00,st_yolodv2tiny_pt,st_yolodv2tiny_actrelu_pt_coco_person_256,actrelu,COCO-Person,Int8,256,68.7
 2026-03-31T16:03:59.548442+00:00,st_yolodv2tiny_pt,st_yolodv2tiny_actrelu_pt_coco_person_288,actrelu,COCO-Person,Int8,288,70.8
-2026-03-31T16:03:59.548448+00:00,st_yololcv1,st_yololcv1_192,,COCO-Person,Int8,192,32.1
-2026-03-31T16:03:59.548454+00:00,st_yololcv1,st_yololcv1_192,,COCO-Person,W4A8,192,34.5
-2026-03-31T16:03:59.548459+00:00,st_yololcv1,st_yololcv1_224,,COCO-Person,Int8,224,31.1
-2026-03-31T16:03:59.548466+00:00,st_yololcv1,st_yololcv1_224,,COCO-Person,W4A8,224,35.5
-2026-03-31T16:03:59.548471+00:00,st_yololcv1,st_yololcv1_256,,COCO-Person,Int8,256,38.8
-2026-03-31T16:03:59.548478+00:00,st_yololcv1,st_yololcv1_256,,COCO-Person,W4A8,256,37.4
 2026-03-31T16:03:59.548483+00:00,st_yoloxn,st_yoloxn_d033_w025_192,d033_w025,COCO-Person,Int8,192,38.6
 2026-03-31T16:03:59.548489+00:00,st_yoloxn,st_yoloxn_d033_w025_192,d033_w025,COCO-Person,W4A8,192,37.9
 2026-03-31T16:03:59.548496+00:00,st_yoloxn,st_yoloxn_d033_w025_256,d033_w025,COCO-Person,Int8,256,45.7
@@ -45,3 +39,9 @@ host_time_iso,model_family,model_variant,hyperparameters,dataset,format,resoluti
 2026-03-31T16:03:59.548615+00:00,yolov8n,yolov8n_256,,COCO-Person,Int8,256,58.5
 2026-03-31T16:05:30.519719+00:00,yolov8n,yolov8n_320,,COCO-Person,Int8,320,62.1
 2026-03-31T16:06:17.719958+00:00,yolov8n,yolov8n_416,,COCO-Person,Int8,416,65.0
+2026-03-31T16:27:42.281188+00:00,st_yololcv1,st_yololcv1_192,,COCO-Person,W4A8,192,34.5
+2026-03-31T16:29:02.001886+00:00,st_yololcv1,st_yololcv1_224,,COCO-Person,W4A8,224,35.5
+2026-03-31T16:29:51.563551+00:00,st_yololcv1,st_yololcv1_256,,COCO-Person,W4A8,256,37.4
+2026-03-31T16:33:09.942427+00:00,st_yololcv1,st_yololcv1_192,,COCO-Person,Int8,192,35.1
+2026-03-31T16:33:23.872084+00:00,st_yololcv1,st_yololcv1_224,,COCO-Person,Int8,224,36.1
+2026-03-31T16:33:39.028377+00:00,st_yololcv1,st_yololcv1_256,,COCO-Person,Int8,256,37.7
