@@ -15,7 +15,6 @@ from pathlib import Path
 PATCH_SCRIPT = Path(__file__).resolve().parent / "run_patch_ultralytics_per_channel_quant.py"
 
 from src.conda.conda_setup_common import (
-    conda_install,
     conda_run,
     ensure_conda_env,
     main_guard,
@@ -39,12 +38,6 @@ def main() -> None:
 
     ensure_conda_env(YOLO_ENV_NAME, PYTHON_VERSION, f"Python {PYTHON_VERSION}")
 
-    print(f"Installing Ultralytics into '{YOLO_ENV_NAME}' from conda-forge ...")
-    conda_install(
-        YOLO_ENV_NAME,
-        "ultralytics",
-        channels=("conda-forge",),
-    )
     print(f"Installing PyTorch wheels into '{YOLO_ENV_NAME}' from {PYTORCH_WHL_INDEX} ...")
     pip_install(
         YOLO_ENV_NAME,
