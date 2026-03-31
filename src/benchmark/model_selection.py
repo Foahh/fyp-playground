@@ -47,8 +47,8 @@ SELECTION_EXCLUDED_FAMILY_PREFIXES: tuple[str, ...] = ("ssdlite_",)
 # ── Default scoring weights ──────────────────────────────────────
 
 DEFAULT_WEIGHTS: dict[str, float] = {
-    "w_acc": 0.50,
-    "w_energy": 0.20,
+    "w_acc": 0.40,
+    "w_energy": 0.30,
     "w_eff": 0.20,
     "w_lat": 0.10,
 }
