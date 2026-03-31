@@ -88,12 +88,19 @@ def run_evaluate(
         "-o",
         help="Output CSV path for evaluation results",
     ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        "-f",
+        help="Re-run evaluation for all models even if they already appear in the output CSV",
+    ),
 ) -> None:
     """Run host-side evaluation for all registered models."""
     if getattr(ctx, "resilient_parsing", False):
         return
 
-    configure_logging()
+    audit_log = output.expanduser().resolve().parent / "evaluation.log"
+    configure_logging(audit_log_path=audit_log)
     typer_install_exception_hook()
     logger = get_logger("evaluate")
 
@@ -103,15 +110,17 @@ def run_evaluate(
     if filter_substr:
         entries = [e for e in entries if filter_substr in e.variant]
 
-    completed = load_eval_completed(output)
+    completed = set() if force else load_eval_completed(output)
     total = len(entries)
 
     logger.info(
         "Evaluation started",
         total=total,
         completed=len(completed),
+        force=force,
         filter=filter_substr or None,
         output_csv=str(output),
+        audit_log=str(audit_log),
     )
 
     for i, entry in enumerate(entries, 1):
@@ -181,7 +190,6 @@ def run_evaluate(
 
 
 def evaluate_main(argv: list[str] | None = None) -> int:
-    configure_logging()
     typer_install_exception_hook()
     args = [] if argv is None else argv
     try:

@@ -3,6 +3,11 @@
 From repo root:
   python src/benchmark/run_evaluate.py [flags]
   python project.py evaluate [flags]
+
+Use ``--force`` / ``-f`` to re-evaluate models already present in the output CSV.
+
+Structured logs are appended to ``evaluation.log`` in the same directory as the output CSV
+(default: ``results/evaluation.log``).
 """
 
 from __future__ import annotations
@@ -10,12 +15,9 @@ from __future__ import annotations
 import sys
 
 from src.benchmark.evaluate import evaluate_main
-from src.benchmark.utils.logutil import configure_logging, typer_install_exception_hook
 
 
 def main() -> int:
-    configure_logging()
-    typer_install_exception_hook()
     return evaluate_main(sys.argv[1:])
 
 
