@@ -1,7 +1,7 @@
 """
 Train TinyissimoYOLO v8 on COCO Person (single class).
 
-Run from the repository root (outputs under $RESULTS_DIR/model/ or results/model/):
+Run from the repository root (outputs under $FYP_RESULTS_DIR/model/ or results/model/):
     python src/ml/run_train_tinyissimo_coco_person.py --size 192
     python src/ml/run_train_tinyissimo_coco_person.py --size 192 --no-resume
 

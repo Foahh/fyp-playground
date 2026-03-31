@@ -130,7 +130,7 @@ python project.py download-coco
 To use a different dataset directory:
 
 ```sh
-DATASETS_DIR=~/datasets python project.py download-coco
+FYP_DATASETS_DIR=~/datasets python project.py download-coco
 ```
 
 ---

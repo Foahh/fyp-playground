@@ -11,15 +11,15 @@ def get_repo_root() -> Path:
 
 
 def get_datasets_dir() -> Path:
-    """Return the datasets directory, respecting DATASETS_DIR env var."""
+    """Return the datasets directory, respecting FYP_DATASETS_DIR env var."""
     root = get_repo_root()
-    return Path(os.environ.get("DATASETS_DIR", str(root / "datasets"))).expanduser()
+    return Path(os.environ.get("FYP_DATASETS_DIR", str(root / "datasets"))).expanduser()
 
 
 def get_results_dir() -> Path:
-    """Return the results root directory, respecting RESULTS_DIR env var."""
+    """Return the results root directory, respecting FYP_RESULTS_DIR env var."""
     root = get_repo_root()
-    return Path(os.environ.get("RESULTS_DIR", str(root / "results"))).expanduser()
+    return Path(os.environ.get("FYP_RESULTS_DIR", str(root / "results"))).expanduser()
 
 
 def resolve_repo_relative_path(rel: str | Path) -> Path:
@@ -59,7 +59,7 @@ def resolve_coco_root() -> Path:
     """Resolve COCO dataset root directory.
 
     Searches in order:
-    1. $DATASETS_DIR/coco
+    1. $FYP_DATASETS_DIR/coco
     2. <repo>/datasets/coco
     3. ~/datasets/coco
 

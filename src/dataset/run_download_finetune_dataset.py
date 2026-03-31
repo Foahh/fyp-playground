@@ -40,10 +40,9 @@ import numpy as np
 import typer
 from PIL import Image
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-DATASETS_DIR = Path(
-    os.environ.get("DATASETS_DIR", str(REPO_ROOT / "datasets"))
-).expanduser()
+from ..common.paths import get_datasets_dir
+
+DATASETS_DIR = get_datasets_dir()
 
 # ── Raw (downloaded) and output (YOLO) directories ──────────────────────────
 EGO2HANDS_RAW = DATASETS_DIR / "ego2hands_raw"

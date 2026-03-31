@@ -72,7 +72,7 @@ def materialize_coco_data_yaml(require_person: bool = False) -> str:
         raise FileNotFoundError(
             "Missing COCO split files. Checked: "
             + ", ".join(f"{p / 'train2017.txt'} and {p / 'val2017.txt'}" for p in tried)
-            + ". Set DATASETS_DIR (optional) and run src/dataset/run_download_coco_dataset.py."
+            + ". Set FYP_DATASETS_DIR (optional) and run src/dataset/run_download_coco_dataset.py."
         )
     with COCO_TEMPLATE_YAML.open(encoding="utf-8") as f:
         cfg = yaml.safe_load(f)

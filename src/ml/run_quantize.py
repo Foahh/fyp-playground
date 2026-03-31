@@ -116,7 +116,7 @@ def main(
     size: int = typer.Option(..., help="Must match training resolution"),
     checkpoint: Path | None = typer.Option(
         None,
-        help="Path to .pt checkpoint (default: best.pt under $RESULTS_DIR/model/ or <repo>/results/model/)",
+        help="Path to .pt checkpoint (default: best.pt under $FYP_RESULTS_DIR/model/ or <repo>/results/model/)",
     ),
     no_eval: bool = typer.Option(False, help="Skip evaluation after quantization"),
 ):

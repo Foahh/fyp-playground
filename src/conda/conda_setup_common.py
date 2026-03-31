@@ -184,6 +184,16 @@ def conda_run(env: str, *args: str) -> None:
 
 
 def conda_prefix(env: str) -> str:
+    """Resolve the filesystem path of conda env ``env``.
+
+    If ``FYP_CONDA_PREFIX_BASE`` is set, the env lives at
+    ``<base>/<env>`` and that path is returned directly (same layout as
+    ``conda_env_spec_args`` uses ``-p``).
+
+    Otherwise envs are addressed by name (``-n``); ``conda`` / ``mamba run``
+    injects ``CONDA_PREFIX`` inside the child process, so printing it is a
+    reliable way to get the real prefix without duplicating conda's naming rules.
+    """
     prefix = conda_env_prefix(env)
     if prefix is not None:
         return str(prefix)
