@@ -4,14 +4,18 @@ from __future__ import annotations
 
 import csv
 import datetime
+import os
+import subprocess
+import time
 from pathlib import Path
 
 import typer
 
-from .constants import GENERATE_CSV_COLUMNS
-from .core.models import load_models
-from .execution.workflow import generated_model_dir, get_stedgeai_version, run_generate_model
-from .paths import GENERATE_LOG_PATH, GENERATE_RESULT_CSV_PATH, RESULTS_DIR
+from .constants import GENERATE_CSV_COLUMNS, SSD_FAMILIES
+from .core.models import ModelEntry, load_models
+from .execution.workflow import generated_model_dir, generated_st_ai_output_dir, get_stedgeai_version
+from .io.parsing import parse_metrics
+from .paths import GENERATE_LOG_PATH, GENERATE_RESULT_CSV_PATH, RESULTS_DIR, STEDGEAI_PATH
 from .utils.logutil import (
     configure_logging,
     get_logger,
@@ -21,6 +25,118 @@ from .utils.logutil import (
     log_model_start,
     typer_install_exception_hook,
 )
+
+
+def _get_n6_scripts_dir() -> Path:
+    return Path(os.environ["STEDGEAI_CORE_DIR"]) / "scripts" / "N6_scripts"
+
+
+def _neuralart_profile() -> str:
+    return f"profile_O3@{_get_n6_scripts_dir() / 'user_neuralart.json'}"
+
+
+def _run_streaming(
+    cmd: list[str],
+    *,
+    cwd: Path,
+    timeout: int,
+    benchmark_log: Path,
+    log_header: str = "",
+) -> tuple[str, str, int]:
+    try:
+        result = subprocess.run(
+            cmd,
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        stdout, stderr, rc = result.stdout, result.stderr, result.returncode
+    except subprocess.TimeoutExpired as e:
+        stdout = e.stdout.decode() if e.stdout else ""
+        stderr = e.stderr.decode() if e.stderr else ""
+        benchmark_log.parent.mkdir(parents=True, exist_ok=True)
+        with open(benchmark_log, "a", encoding="utf-8") as f:
+            if log_header:
+                f.write(log_header + "\n")
+            f.write(stdout)
+            f.write(stderr)
+        raise
+
+    benchmark_log.parent.mkdir(parents=True, exist_ok=True)
+    with open(benchmark_log, "a", encoding="utf-8") as f:
+        if log_header:
+            f.write(log_header + "\n")
+        f.write(stdout)
+        f.write(stderr)
+    return stdout, stderr, rc
+
+
+def _run_generate_step(entry: ModelEntry, benchmark_log: Path) -> tuple[str, str, int]:
+    model_path = entry.model_path
+    if not model_path.startswith(("http://", "https://")):
+        model_path = str(Path(model_path).resolve())
+    output_chpos = "chfirst" if entry.family in SSD_FAMILIES else "chlast"
+    cmd = [
+        STEDGEAI_PATH,
+        "generate",
+        "--quiet",
+        "--c-api",
+        "st-ai",
+        "--model",
+        model_path,
+        "--target",
+        "stm32n6",
+        "--st-neural-art",
+        _neuralart_profile(),
+        "--enable-epoch-controller",
+        "--input-data-type",
+        entry.input_data_type,
+        "--output-data-type",
+        entry.output_data_type,
+        "--inputs-ch-position",
+        "chlast",
+        "--outputs-ch-position",
+        output_chpos,
+    ]
+    workdir = generated_model_dir(entry)
+    workdir.mkdir(parents=True, exist_ok=True)
+    get_logger("workflow").info(
+        "Generate step started",
+        step="generate",
+        variant=entry.variant,
+        fmt=entry.fmt,
+        model_path=model_path,
+        input_dtype=entry.input_data_type,
+        output_dtype=entry.output_data_type,
+        output_chpos=output_chpos,
+    )
+    t0 = time.monotonic()
+    out, err, rc = _run_streaming(
+        cmd,
+        cwd=workdir,
+        timeout=600,
+        benchmark_log=benchmark_log,
+        log_header=f"\n=== GENERATE | {entry.variant} | {entry.fmt} ===",
+    )
+    get_logger("workflow").info(
+        "Generate step completed",
+        step="generate",
+        variant=entry.variant,
+        rc=rc,
+        elapsed_s=f"{(time.monotonic() - t0):.3f}",
+    )
+    return out, err, rc
+
+
+def run_generate_model(entry: ModelEntry, benchmark_log: Path) -> tuple[dict[str, str], int]:
+    out, err, rc = _run_generate_step(entry, benchmark_log)
+    if rc != 0:
+        return {}, rc
+    cinfo_path = generated_st_ai_output_dir(entry) / "network_c_info.json"
+    if not cinfo_path.is_file():
+        return {}, 1
+    return parse_metrics(out, err, cinfo_path=cinfo_path), 0
 
 
 def _append_generate_row(csv_path: Path, row: dict[str, str]) -> None:

@@ -13,7 +13,6 @@ from typing import Optional
 
 from tenacity import Retrying, stop_after_attempt, wait_fixed
 
-from ..constants import SSD_FAMILIES
 from ..paths import BASE_DIR, BenchmarkPaths, GENERATED_NETWORK_DIR, STEDGEAI_PATH
 from ..core.models import ModelEntry
 from ..utils.logutil import get_logger
@@ -79,11 +78,6 @@ def generated_model_dir(entry: ModelEntry) -> Path:
 def generated_st_ai_output_dir(entry: ModelEntry) -> Path:
     """Return persistent st_ai_output path for one generated model."""
     return generated_model_dir(entry) / "st_ai_output"
-
-
-def _neuralart_profile() -> str:
-    """Return the --st-neural-art argument with absolute path to user_neuralart.json."""
-    return f"profile_O3@{_get_n6_scripts_dir() / 'user_neuralart.json'}"
 
 
 def _quiet_ai_runner_logger() -> logging.Logger:
@@ -161,73 +155,6 @@ def _run_streaming(
     return stdout, stderr, rc
 
 
-def _step_generate(
-    entry: ModelEntry,
-    benchmark_log: Path,
-    *,
-    output_root: Path | None = None,
-) -> tuple[str, str, int]:
-    """Step 1: stedgeai generate — produce C files + memory initializers."""
-    model_path = entry.model_path
-    if not model_path.startswith(("http://", "https://")):
-        model_path = str(Path(model_path).resolve())
-
-    output_chpos = "chfirst" if entry.family in SSD_FAMILIES else "chlast"
-
-    cmd = [
-        STEDGEAI_PATH,
-        "generate",
-        "--quiet",
-        "--c-api",
-        "st-ai",
-        "--model",
-        model_path,
-        "--target",
-        "stm32n6",
-        "--st-neural-art",
-        _neuralart_profile(),
-        "--enable-epoch-controller",
-        "--input-data-type",
-        entry.input_data_type,
-        "--output-data-type",
-        entry.output_data_type,
-        "--inputs-ch-position",
-        "chlast",
-        "--outputs-ch-position",
-        output_chpos,
-    ]
-
-    get_logger("workflow").info(
-        "Generate step started",
-        step="generate",
-        variant=entry.variant,
-        fmt=entry.fmt,
-        model_path=model_path,
-        input_dtype=entry.input_data_type,
-        output_dtype=entry.output_data_type,
-        output_chpos=output_chpos,
-    )
-    t0 = time.monotonic()
-    workdir = output_root or generated_model_dir(entry)
-    workdir.mkdir(parents=True, exist_ok=True)
-    out, err, rc = _run_streaming(
-        cmd,
-        cwd=str(workdir),
-        timeout=600,
-        log_header=f"\n=== GENERATE | {entry.variant} | {entry.fmt} ===",
-        benchmark_log=benchmark_log,
-    )
-    elapsed = time.monotonic() - t0
-    get_logger("workflow").info(
-        "Generate step completed",
-        step="generate",
-        variant=entry.variant,
-        rc=rc,
-        elapsed_s=f"{elapsed:.3f}",
-    )
-    return out, err, rc
-
-
 def _ensure_generated_output(entry: ModelEntry, benchmark_log: Path) -> bool:
     """Ensure generated st_ai_output exists for benchmark load step."""
     src = generated_st_ai_output_dir(entry)
@@ -246,31 +173,6 @@ def _ensure_generated_output(entry: ModelEntry, benchmark_log: Path) -> bool:
         )
         return False
     return True
-
-
-def run_generate_model(entry: ModelEntry, benchmark_log: Path) -> tuple[dict[str, str], int]:
-    """
-    Run generate and persist artifacts under results/network.
-
-    Returns (parsed_metrics, rc). On failure, metrics is empty and rc != 0.
-    """
-    model_dir = generated_model_dir(entry)
-    out, err, rc = _step_generate(entry, benchmark_log, output_root=model_dir)
-    if rc != 0:
-        return {}, rc
-
-    cinfo_path = generated_st_ai_output_dir(entry) / "network_c_info.json"
-    if not cinfo_path.is_file():
-        _append_stdout_log(
-            f"Generate output file missing: {cinfo_path}",
-            benchmark_log,
-        )
-        return {}, 1
-
-    from ..io.parsing import parse_metrics
-
-    metrics = parse_metrics(out, err, cinfo_path=cinfo_path)
-    return metrics, 0
 
 
 def _step_load(entry: ModelEntry, benchmark_log: Path) -> tuple[str, str, int]:
