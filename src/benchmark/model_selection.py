@@ -37,7 +37,6 @@ MAX_WEIGHTS_FLASH_KIB = 10240  # 10 MiB octoFlash (for glass deployment, altough
 
 # ── Architecture modernity classification ────────────────────────────────────
 # 1.0 = anchor-free decoupled head
-# 0.5 = anchor-based + modern backbone
 # 0.0 = legacy anchor-based
 
 ARCHITECTURE_MODERNITY: dict[str, float] = {
@@ -45,9 +44,8 @@ ARCHITECTURE_MODERNITY: dict[str, float] = {
     "ssdlite_mobilenetv2_pt": 0.0,
     "ssdlite_mobilenetv3large_pt": 0.0,
     "ssdlite_mobilenetv3small_pt": 0.0,
-    "st_yolodv2milli_pt": 0.5,
-    "st_yolodv2tiny_pt": 0.5,
-    "st_yololcv1": 1.0,
+    "st_yolodv2milli_pt": 1.0,
+    "st_yolodv2tiny_pt": 1.0,
     "st_yoloxn": 1.0,
     "tinyissimoyolo_v8": 1.0,
     "yolo11n": 1.0,
@@ -58,30 +56,30 @@ ARCHITECTURE_MODERNITY: dict[str, float] = {
 # ── Default scoring weights (Option A) ──────────────────────────────────────
 
 DEFAULT_WEIGHTS: dict[str, float] = {
-    "w_acc": 0.10,
-    "w_energy": 0.20,
-    "w_eff": 0.25,
-    "w_lat": 0.10,
+    "w_acc": 0.30,
+    "w_energy": 0.10,
+    "w_eff": 0.15,
+    "w_lat": 0.05,
     "w_mem": 0.20,
-    "w_modern": 0.15,
+    "w_modern": 0.20,
 }
 
 WEIGHT_RATIONALE: dict[str, str] = {
     "w_acc": (
-        "Pre-trained AP is a capacity proxy; fine-tuning closes gaps. "
-        "De-emphasised per Issue 2."
+        "Pre-trained AP signals feature-extraction capacity; "
+        "critical for fine-tuning to small-object tasks (hand/tool detection)."
     ),
     "w_energy": (
-        "Battery life critical for wearable safety device. "
-        "Integrates power × duration."
+        "Battery life matters for wearable but secondary to detection "
+        "reliability in safety-critical applications."
     ),
     "w_eff": (
-        "AP-per-unit-cost best predicts fine-tuning ROI on fixed "
-        "hardware budget (Issue 2)."
+        "Per-resolution-tier efficiency avoids systematic low-resolution "
+        "bias; measures resource utilisation within each resolution class."
     ),
     "w_lat": (
-        "Beyond 15 FPS gate, lower latency improves responsiveness "
-        "but is secondary."
+        "Beyond 15 FPS gate, additional latency margin is a minor "
+        "differentiator."
     ),
     "w_mem": (
         "Full score when activation budget fits on-chip (no spill); "
@@ -89,7 +87,7 @@ WEIGHT_RATIONALE: dict[str, str] = {
     ),
     "w_modern": (
         "Anchor-free decoupled heads fine-tune more reliably "
-        "on small custom datasets."
+        "on small custom datasets; critical for hand/tool domain."
     ),
 }
 
@@ -336,13 +334,24 @@ def score_candidates(
         if (~has_e).any():
             out.loc[~has_e, "s_energy"] = out.loc[has_e, "s_energy"].median()
 
-    # Efficiency curve — geometric mean of AP/ms and AP/mJ
+    # Efficiency curve — geometric mean of AP/ms and AP/mJ,
+    # normalised within each resolution tier so that higher-resolution
+    # models are not systematically penalised by their inherently
+    # larger compute cost.
     has_eff = out["efficiency_geo"].notna() & (out["efficiency_geo"] > 0)
+    out["s_eff"] = 0.0
     if has_eff.sum() >= 2:
-        out["s_eff"] = 0.0
-        out.loc[has_eff, "s_eff"] = _minmax(out.loc[has_eff, "efficiency_geo"])
-        if (~has_eff).any():
-            out.loc[~has_eff, "s_eff"] = _minmax(out.loc[~has_eff, "acc_per_ms"])
+        for res in out["resolution"].unique():
+            tier = has_eff & (out["resolution"] == res)
+            if tier.sum() >= 2:
+                out.loc[tier, "s_eff"] = _minmax(out.loc[tier, "efficiency_geo"])
+            elif tier.sum() == 1:
+                out.loc[tier, "s_eff"] = 0.5
+        no_eff_rows = (~has_eff) & out["acc_per_ms"].notna()
+        if no_eff_rows.sum() >= 2:
+            out.loc[no_eff_rows, "s_eff"] = _minmax(out.loc[no_eff_rows, "acc_per_ms"])
+        elif no_eff_rows.sum() == 1:
+            out.loc[no_eff_rows, "s_eff"] = 0.5
     else:
         out["s_eff"] = _minmax(out["acc_per_ms"])
 
@@ -440,14 +449,19 @@ def print_section1(
             "marked 'Superseded'. Accuracy normalised within each cohort separately.",
         ),
         (
-            "Issue 2 — Fine-Tuning Context",
-            "Efficiency curve (geometric mean of AP/ms and AP/mJ) weighted 0.25 — "
-            "highest single weight. Raw AP weighted 0.10 only.",
+            "Issue 2 — Fine-Tuning & Safety-Critical Context",
+            "Accuracy weighted 0.30 (highest) — pre-trained AP signals feature-extraction "
+            "capacity critical for fine-tuning to small-object tasks (hand/tool detection). "
+            "Efficiency normalised within resolution tiers to avoid systematic "
+            "low-resolution bias.",
         ),
         (
             "Issue 3 — Resolution Variants",
             "All passing resolutions scored independently. Best per-family identified "
-            "post-scoring. Variants within 5% composite listed as alternatives.",
+            "post-scoring. Variants within 5% composite listed as alternatives. "
+            "Optional --min-size gate excludes resolutions too low for small-object "
+            "detection. Optional --min-ap gate excludes models with insufficient "
+            "baseline accuracy for fine-tuning viability.",
         ),
         (
             "Issue 4 — Quantisation Format Selection",
@@ -550,8 +564,13 @@ def print_section2(weights: dict[str, float], option_label: str) -> None:
 
     criteria = [
         ("w_acc", "Architecture capacity", "🟡 Primary", "norm_cohort(ap_50)"),
-        ("w_energy", "Energy per inference", "🟡 Primary", "norm(1/pm_avg_inf_mJ)"),
-        ("w_eff", "Efficiency curve", "🟡 Primary", "norm(geomean(AP/ms, AP/mJ))"),
+        ("w_energy", "Energy per inference", "🟢 Secondary", "norm(1/pm_avg_inf_mJ)"),
+        (
+            "w_eff",
+            "Efficiency curve",
+            "🟡 Primary",
+            "norm_per_res_tier(geomean(AP/ms, AP/mJ))",
+        ),
         ("w_lat", "Latency margin", "🟢 Secondary", "norm(1/inference_time_ms)"),
         (
             "w_mem",
@@ -559,7 +578,7 @@ def print_section2(weights: dict[str, float], option_label: str) -> None:
             "🟡 Primary",
             "1.0 if no spill else norm(1/estimated_spill_kib)",
         ),
-        ("w_modern", "Arch. modernity", "🟢 Secondary", "anchor_free_score ∈ {0,0.5,1}"),
+        ("w_modern", "Arch. modernity", "🟡 Primary", "anchor_free_score ∈ {0,0.5,1}"),
     ]
     for key, name, tier, metric in criteria:
         table.add_row(name, tier, metric, f"{weights[key]:.2f}", WEIGHT_RATIONALE[key])
@@ -650,184 +669,6 @@ def print_section3(scored: pd.DataFrame, weights: dict[str, float]) -> None:
     _console.print()
 
 
-def print_section4(scored: pd.DataFrame) -> None:
-    _console.print(Rule("[bold]Section 4 — Interpretation[/bold]"))
-    _console.print()
-
-    top_n = min(10, len(scored))
-    for rank in range(top_n):
-        row = scored.iloc[rank]
-        _console.print(
-            Rule(
-                f"[bold]Rank {rank + 1}: {row['model_variant']}[/bold]",
-                style="dim",
-            )
-        )
-
-        res = int(row["resolution"])
-        _console.print(
-            f"  [bold]Configuration:[/bold] {row['model_family']} / "
-            f"{row['model_variant']} | {row['format']} | {res}×{res} | "
-            f"{row['dataset']}"
-        )
-
-        components = {
-            "accuracy": row["s_acc"],
-            "energy": row["s_energy"],
-            "efficiency": row["s_eff"],
-            "latency": row["s_lat"],
-            "memory": row["s_mem"],
-            "modernity": row["s_modern"],
-        }
-        top_drivers = sorted(components.items(), key=lambda x: -x[1])[:3]
-        drivers_str = ", ".join(f"{n}={v:.3f}" for n, v in top_drivers)
-        _console.print(f"  [bold]Score drivers:[/bold] {drivers_str}")
-
-        act = row["activations_without_io"]
-        spill = row["estimated_spill_kib"]
-        pct = min(100, 100 * ON_CHIP_ACTIVATION_KIB / act) if act > 0 else 100
-        _console.print(
-            f"  [bold]Memory:[/bold] activations_without_io = {act:.1f} KiB "
-            f"({pct:.0f}% on-chip) | spill = {spill:.1f} KiB"
-        )
-
-        caveats: list[str] = []
-        if spill > 0:
-            caveats.append(f"HyperRAM spill of {spill:.0f} KiB")
-        if row["dataset"] == "COCO-80":
-            caveats.append(
-                "COCO-80 only — conservative accuracy signal; "
-                "fine-tuning uplift may be greater"
-            )
-        if row["inference_time_ms"] > 50:
-            margin = MAX_LATENCY_MS - row["inference_time_ms"]
-            caveats.append(f"Tight latency margin ({margin:.1f} ms to deadline)")
-        if not caveats:
-            caveats.append("None significant")
-        _console.print(f"  [bold]Caveats:[/bold] {'; '.join(caveats)}")
-
-        energy_str = _f(row.get("pm_avg_inf_mJ", float("nan")))
-        _console.print(
-            f"  [bold]Operating point:[/bold] {row['format']} @ {res} "
-            f"({row['inference_time_ms']:.1f} ms, {energy_str} mJ)"
-        )
-
-        arch = row["arch_modernity"]
-        if arch >= 1.0:
-            ft = (
-                "Anchor-free decoupled head — straightforward fine-tuning "
-                "with standard YOLO pipelines"
-            )
-        elif arch >= 0.5:
-            ft = (
-                "Anchor-based + modern backbone — requires anchor tuning "
-                "for custom dataset"
-            )
-        else:
-            ft = (
-                "Legacy SSD architecture — anchor priors may need "
-                "significant recalibration"
-            )
-        _console.print(f"  [bold]Fine-tuning:[/bold] {ft}")
-        _console.print()
-
-    # ── Format comparisons (Int8 vs W4A8 at same config) ─────────────────
-
-    _console.print(Rule("[bold]Format Comparisons (Int8 vs W4A8)[/bold]", style="dim"))
-    _console.print()
-
-    any_fmt_pair = False
-    fmt_groups = scored.groupby(["model_family", "hyperparameters", "resolution"])
-    for (family, hypers, res), group in fmt_groups:
-        formats = group["format"].unique()
-        if "Int8" not in formats or "W4A8" not in formats:
-            continue
-        any_fmt_pair = True
-        i8 = group[group["format"] == "Int8"].iloc[0]
-        w4 = group[group["format"] == "W4A8"].iloc[0]
-
-        i8_wins: list[str] = []
-        w4_wins: list[str] = []
-        for metric, lower_better in [
-            ("inference_time_ms", True),
-            ("pm_avg_inf_mJ", True),
-            ("weights_flash_kib", True),
-            ("ap_50", False),
-        ]:
-            vi, vw = i8[metric], w4[metric]
-            if pd.isna(vi) or pd.isna(vw):
-                continue
-            label = metric.split("_")[0] if "_" in metric else metric
-            if lower_better:
-                (i8_wins if vi < vw else w4_wins).append(label)
-            else:
-                (i8_wins if vi >= vw else w4_wins).append(label)
-
-        delta_score = i8["score"] - w4["score"]
-        hyp_label = f" ({hypers})" if hypers else ""
-        _console.print(
-            f"  [bold]{family}{hyp_label} @ {int(res)}:[/bold]"
-        )
-        _console.print(
-            f"    Int8 score={i8['score']:.4f} | W4A8 score={w4['score']:.4f} | "
-            f"Δ={delta_score:+.4f}"
-        )
-        _console.print(
-            f"    Int8 wins: {', '.join(i8_wins) or '—'} | "
-            f"W4A8 wins: {', '.join(w4_wins) or '—'}"
-        )
-
-        if delta_score >= 0:
-            verdict = "→ Int8 preferred (fine-tuning stability)"
-        elif abs(delta_score) < 0.02:
-            verdict = (
-                "→ Int8 preferred (marginal W4A8 advantage insufficient "
-                "for fine-tuning risk)"
-            )
-        else:
-            verdict = "→ W4A8 preferred (decisive efficiency advantage)"
-        _console.print(f"    {verdict}")
-        _console.print()
-
-    if not any_fmt_pair:
-        _console.print("  No families with both Int8 and W4A8 at same resolution.\n")
-
-    # ── Resolution variants per family ───────────────────────────────────
-
-    _console.print(
-        Rule("[bold]Resolution Variants (per family)[/bold]", style="dim")
-    )
-    _console.print()
-
-    res_groups = scored.groupby(["model_family", "hyperparameters", "format"])
-    any_multi_res = False
-    for (family, hypers, fmt), group in res_groups:
-        if len(group) < 2:
-            continue
-        any_multi_res = True
-        group_s = group.sort_values("score", ascending=False)
-        best_score = group_s.iloc[0]["score"]
-        hyp_label = f" ({hypers})" if hypers else ""
-        _console.print(f"  [bold]{family}{hyp_label} {fmt}:[/bold]")
-
-        for i, (_, row) in enumerate(group_s.iterrows()):
-            marker = "★" if i == 0 else " "
-            delta = (row["score"] - best_score) / best_score if best_score > 0 else 0
-            within_5 = abs(delta) < 0.05 and i > 0
-            alt = " [dim][viable alternative][/dim]" if within_5 else ""
-            _console.print(
-                f"    {marker} {int(row['resolution'])}×{int(row['resolution'])}: "
-                f"score={row['score']:.4f} | {row['inference_time_ms']:.1f} ms | "
-                f"AP={row['ap_50']:.1f}{alt}"
-            )
-        _console.print()
-
-    if not any_multi_res:
-        _console.print(
-            "  No families with multiple resolution variants in scoring pool.\n"
-        )
-
-
 # ── Main pipeline ────────────────────────────────────────────────────────────
 
 
@@ -843,6 +684,8 @@ def run_selection(
     *,
     option_b: bool = False,
     dataset_filter: str | None = None,
+    min_size: int | None = None,
+    min_ap: float | None = None,
     output_csv: Path | None = None,
     ap_csv: Path = DEFAULT_EVAL_CSV,
     memory_csv: Path = DEFAULT_MEMORY_CSV,
@@ -852,6 +695,12 @@ def run_selection(
     *dataset_filter* restricts candidates to a single dataset
     ("80" for COCO-80, "person" for COCO-Person).  When set, the
     deduplication step is skipped since only one dataset is present.
+
+    *min_size* drops candidates whose resolution is below this value.
+
+    *min_ap* drops candidates whose AP@0.5 is below this value,
+    filtering out models with insufficient feature-extraction capacity
+    for fine-tuning to harder tasks.
     """
     w = weights or DEFAULT_WEIGHTS.copy()
     option_label = "B (split memory: head + spill)" if option_b else "A (unified memory)"
@@ -860,6 +709,20 @@ def run_selection(
     df = merge_benchmark_with_memory(df, memory_csv)
     df = merge_benchmark_with_ap(df, ap_csv)
     df = add_derived(df)
+
+    if min_size is not None:
+        before = len(df)
+        df = df[df["resolution"] >= min_size].copy()
+        dropped = before - len(df)
+        if dropped:
+            option_label += f" | min-size={min_size} ({dropped} rows dropped)"
+
+    if min_ap is not None:
+        before = len(df)
+        df = df[(df["ap_50"].notna()) & (df["ap_50"] >= min_ap)].copy()
+        dropped = before - len(df)
+        if dropped:
+            option_label += f" | min-ap={min_ap} ({dropped} rows dropped)"
 
     if dataset_filter is not None:
         ds_label = _DATASET_LABELS[dataset_filter]
@@ -880,7 +743,6 @@ def run_selection(
     print_section1(df, scored, excluded, superseded)
     print_section2(w, option_label)
     print_section3(scored, w)
-    print_section4(scored)
 
     if output_csv is not None:
         out_cols = [
@@ -944,6 +806,16 @@ def _cli_entry(
         "--dataset",
         help="Filter to a single dataset: '80' for COCO-80, 'person' for COCO-Person.",
     ),
+    min_size: int | None = typer.Option(
+        None,
+        "--min-size",
+        help="Minimum input resolution (px). Models below this are dropped.",
+    ),
+    min_ap: float | None = typer.Option(
+        None,
+        "--min-ap",
+        help="Minimum AP@0.5. Models below this baseline accuracy are dropped.",
+    ),
     output: Path | None = typer.Option(
         None,
         "--output",
@@ -996,6 +868,8 @@ def _cli_entry(
         weights,
         option_b=option_b,
         dataset_filter=dataset,
+        min_size=min_size,
+        min_ap=min_ap,
         output_csv=output,
     )
 
