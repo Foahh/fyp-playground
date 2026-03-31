@@ -15,7 +15,6 @@ import os
 import subprocess
 import sys
 import time
-from pathlib import Path
 
 import typer
 
@@ -82,12 +81,6 @@ def run_evaluate(
         "--filter",
         help="Only evaluate variants whose name contains this string",
     ),
-    output: Path = typer.Option(
-        DEFAULT_EVAL_CSV,
-        "--output",
-        "-o",
-        help="Output CSV path for evaluation results",
-    ),
     force: bool = typer.Option(
         False,
         "--force",
@@ -99,6 +92,7 @@ def run_evaluate(
     if getattr(ctx, "resilient_parsing", False):
         return
 
+    output = DEFAULT_EVAL_CSV
     audit_log = output.expanduser().resolve().parent / "evaluation.log"
     configure_logging(audit_log_path=audit_log)
     typer_install_exception_hook()

@@ -805,36 +805,6 @@ def compare_entry(
         "--right",
         help=f"Datasource ({_ds_error_choices()})",
     ),
-    readme: Path = typer.Option(
-        DEFAULT_PARSED_CSV,
-        "--readme",
-        help=f"README-parsed CSV (default: {DEFAULT_PARSED_CSV})",
-    ),
-    nominal: Path = typer.Option(
-        DEFAULT_NOMINAL_CSV,
-        "--nominal",
-        help=f"Nominal benchmark_results.csv (default: {DEFAULT_NOMINAL_CSV})",
-    ),
-    underdrive: Path = typer.Option(
-        DEFAULT_UNDERDRIVE_CSV,
-        "--underdrive",
-        help=f"Underdrive benchmark_results.csv (default: {DEFAULT_UNDERDRIVE_CSV})",
-    ),
-    overdrive: Path = typer.Option(
-        DEFAULT_OVERDRIVE_CSV,
-        "--overdrive",
-        help=f"Overdrive benchmark_results.csv (default: {DEFAULT_OVERDRIVE_CSV})",
-    ),
-    memory: Path = typer.Option(
-        DEFAULT_MEMORY_CSV,
-        "--memory",
-        help=f"Memory generate_result.csv (default: {DEFAULT_MEMORY_CSV})",
-    ),
-    evaluate: Path = typer.Option(
-        DEFAULT_EVALUATE_CSV,
-        "--evaluate",
-        help=f"Evaluation result CSV (default: {DEFAULT_EVALUATE_CSV})",
-    ),
     delta_pct: float | None = typer.Option(
         None,
         "--delta-pct",
@@ -880,11 +850,11 @@ def compare_entry(
     typer_install_exception_hook()
 
     ds_paths = dict(
-        nominal=nominal,
-        underdrive=underdrive,
-        overdrive=overdrive,
-        memory=memory,
-        evaluate=evaluate,
+        nominal=DEFAULT_NOMINAL_CSV,
+        underdrive=DEFAULT_UNDERDRIVE_CSV,
+        overdrive=DEFAULT_OVERDRIVE_CSV,
+        memory=DEFAULT_MEMORY_CSV,
+        evaluate=DEFAULT_EVALUATE_CSV,
     )
 
     result: ComparisonResult | None = None
@@ -905,12 +875,12 @@ def compare_entry(
         delta_abs_desc = "; ".join(f"{n} |Δ| ≥ {t:g}" for n, t in ordered_spec)
 
     if l == "readme" or r == "readme":
-        _require_file_exists(readme, label="--readme")
+        _require_file_exists(DEFAULT_PARSED_CSV, label="readme")
         if l == "readme":
             bench_path = _bench_path_for_ds(r, ds_paths)
             _require_file_exists(bench_path, label=r)
             result = compare_readme_to_bench(
-                readme,
+                DEFAULT_PARSED_CSV,
                 bench_path,
                 left_label=l,
                 right_label=r,
@@ -921,7 +891,7 @@ def compare_entry(
             bench_path = _bench_path_for_ds(l, ds_paths)
             _require_file_exists(bench_path, label=l)
             result = compare_readme_to_bench(
-                readme,
+                DEFAULT_PARSED_CSV,
                 bench_path,
                 left_label=l,
                 right_label=r,

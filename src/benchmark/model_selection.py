@@ -1098,21 +1098,6 @@ app = typer.Typer(
 @app.callback()
 def _cli_entry(
     ctx: typer.Context,
-    csv: Path = typer.Option(
-        DEFAULT_CSV,
-        "--csv",
-        help="Benchmark results CSV",
-    ),
-    eval_csv: Path = typer.Option(
-        DEFAULT_EVAL_CSV,
-        "--eval-csv",
-        help="Host-side AP evaluation results CSV",
-    ),
-    memory_csv: Path = typer.Option(
-        DEFAULT_MEMORY_CSV,
-        "--memory-csv",
-        help="Generate-model memory results CSV",
-    ),
     option_b: bool = typer.Option(
         False,
         "--option-b",
@@ -1173,18 +1158,18 @@ def _cli_entry(
             )
             weights = {k: v / total for k, v in weights.items()}
 
-    if not csv.is_file():
-        _err.print(f"[red]Error: CSV not found: {csv}[/red]")
+    if not DEFAULT_CSV.is_file():
+        _err.print(f"[red]Error: CSV not found: {DEFAULT_CSV}[/red]")
         raise typer.Exit(2)
 
     run_selection(
-        csv,
+        DEFAULT_CSV,
         weights,
         option_b=option_b,
         finetune=finetune,
         output_csv=output,
-        ap_csv=eval_csv,
-        memory_csv=memory_csv,
+        ap_csv=DEFAULT_EVAL_CSV,
+        memory_csv=DEFAULT_MEMORY_CSV,
     )
 
 
