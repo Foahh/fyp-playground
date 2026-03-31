@@ -49,7 +49,7 @@ def main() -> None:
     )
 
     print(f"Installing Ultralytics into '{YOLO_ENV_NAME}' from conda-forge ...")
-    conda_install(YOLO_ENV_NAME, "ultralytics[export]", channels=("conda-forge",))
+    conda_install(YOLO_ENV_NAME, "ultralytics", channels=("conda-forge",))
 
     pip_install(YOLO_ENV_NAME, "-r", str(yolo_req))
 
