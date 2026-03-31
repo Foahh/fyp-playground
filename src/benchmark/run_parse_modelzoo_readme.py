@@ -16,7 +16,7 @@ from urllib.parse import unquote, urlparse
 import markdown
 from bs4 import BeautifulSoup
 
-from src.benchmark.constants import CSV_COLUMNS_NO_POWER
+from src.benchmark.constants import BENCHMARK_CLOCK_MHZ, CSV_COLUMNS_NO_POWER
 from src.benchmark.core.registry import load_model_registry
 from src.benchmark.paths import BASE_DIR, METRIC_PARSED_CSV_PATH, MODELZOO_DIR
 from src.common.paths import resolve_repo_relative_path
@@ -174,18 +174,25 @@ def _registry_plain_ap_key(reg: dict) -> str:
     return f"{reg['family']}::{_fmt_norm_cell(reg['fmt'])}::{reg['resolution']}"
 
 
-def _extract_family_metrics(readme_path: Path) -> dict[str, dict]:
+_DEFAULT_MEASURES_FOOTNOTE = "Measures are done with default"
+
+
+def _extract_family_metrics(readme_path: Path) -> tuple[dict[str, dict], bool]:
     """
     Build map: norm_model_basename -> merged metrics dict with keys:
     link_key, internal_ram_kib, external_ram_kib, weights_flash_kib,
     inference_time_ms, inf_per_sec, stedgeai_version, ap_50 (optional),
     dataset (normalized), format, hyperparameter (optional), resolution (from table).
+
+    Second return value is True when the README states default-tooling measurements
+    (CPU 800 MHz / NPU 1000 MHz overdrive clocks for STM32N6570-DK).
     """
     if not readme_path.is_file():
-        return {}
+        return {}, False
 
     family = readme_path.parent.name
     md_text = readme_path.read_text(encoding="utf-8")
+    default_overdrive_clocks = _DEFAULT_MEASURES_FOOTNOTE in md_text
     soup = _parse_md_tables(md_text)
 
     mem_by_key: dict[str, dict] = {}
@@ -348,7 +355,7 @@ def _extract_family_metrics(readme_path: Path) -> dict[str, dict]:
                 continue
         merged[k]["ap_50"] = ent.get("ap_50", "")
 
-    return merged
+    return merged, default_overdrive_clocks
 
 
 def _fmt_match(reg: dict, row_fmt: str) -> bool:
@@ -446,27 +453,32 @@ def _pick_metrics(
 
 
 def build_metric_rows() -> list[dict[str, str]]:
-    cache: dict[str, dict[str, dict]] = {}
+    cache: dict[str, tuple[dict[str, dict], bool]] = {}
     rows: list[dict[str, str]] = []
+
+    od_cpu, od_npu = BENCHMARK_CLOCK_MHZ["overdrive"]
 
     for reg in load_model_registry():
         readme_rel = reg.get("readme")
         if readme_rel is None:
             family_metrics: dict[str, dict] = {}
+            default_od_clocks = False
         else:
             readme = BASE_DIR / readme_rel
             ck = str(readme)
             if ck not in cache:
                 cache[ck] = _extract_family_metrics(readme)
-            family_metrics = cache[ck]
+            family_metrics, default_od_clocks = cache[ck]
 
         mets = _pick_metrics(reg, family_metrics)
+        cpu_mhz = str(od_cpu) if default_od_clocks else ""
+        npu_mhz = str(od_npu) if default_od_clocks else ""
         rows.append(
             {
                 "host_time_iso": "",
                 "stedgeai_version": mets["stedgeai_version"],
-                "cpu_mhz": "",
-                "npu_mhz": "",
+                "cpu_mhz": cpu_mhz,
+                "npu_mhz": npu_mhz,
                 "model_family": reg["family"],
                 "model_variant": reg["variant"],
                 "hyperparameters": reg.get("hyperparameters", "") or "",

@@ -93,61 +93,6 @@ WEIGHT_RATIONALE: dict[str, str] = {
     ),
 }
 
-# ── Fine-tuning profile (hand + hazardous-tool detection) ────────────────
-#
-# When selecting a base model to fine-tune for a NEW multi-class task,
-# backbone capacity and transfer readiness dominate.  Hardware fit is
-# still gated but the soft-score emphasis shifts.
-
-FINETUNE_WEIGHTS: dict[str, float] = {
-    "w_acc": 0.20,
-    "w_energy": 0.15,
-    "w_eff": 0.15,
-    "w_lat": 0.05,
-    "w_mem": 0.15,
-    "w_modern": 0.30,
-}
-
-FINETUNE_WEIGHT_RATIONALE: dict[str, str] = {
-    "w_acc": (
-        "Backbone feature richness is the strongest predictor of "
-        "transfer learning success. Higher pre-trained AP indicates "
-        "more discriminative features for hand and tool detection."
-    ),
-    "w_energy": (
-        "Battery life remains critical for a wearable safety device "
-        "but is slightly de-emphasised vs. transfer potential."
-    ),
-    "w_eff": (
-        "AP-per-unit-cost still relevant but less decisive than "
-        "raw backbone capacity for base model selection."
-    ),
-    "w_lat": (
-        "Beyond the 15 FPS hard gate, latency margin is the least "
-        "important factor when choosing a fine-tuning base."
-    ),
-    "w_mem": (
-        "On-chip activation fit still matters; HyperRAM spill penalty "
-        "applies equally to the fine-tuned model."
-    ),
-    "w_modern": (
-        "Transfer readiness: combines architecture modernity (anchor-free "
-        "heads are replaceable for new class counts) with pre-training "
-        "diversity (COCO-80 backbones learn richer features for multi-class "
-        "hand + hazardous-tool detection than COCO-Person)."
-    ),
-}
-
-# Dataset diversity scores for transfer readiness.
-# COCO-80 pre-training teaches the backbone to separate 80 categories
-# (including scissors, knife, person) — superior starting point for
-# multi-class fine-tuning.  COCO-Person is still useful because body/hand
-# features overlap strongly with the "hand" class.
-_DATASET_TRANSFER_SCORE: dict[str, float] = {
-    "COCO-80": 1.0,
-    "COCO-Person": 0.4,
-}
-
 DEFAULT_CSV = RESULTS_DIR / "benchmark_underdrive" / "benchmark_results.csv"
 
 _MIN_WIDTH = 160
@@ -330,29 +275,16 @@ _DEDUP_KEY = ["model_family", "hyperparameters", "format", "resolution"]
 
 def deduplicate_datasets(
     df: pd.DataFrame,
-    *,
-    prefer_multiclass: bool = False,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Remove duplicate configs where both COCO-Person and COCO-80 exist.
-
-    Default (prefer_multiclass=False): keep COCO-Person, supersede COCO-80.
-    Fine-tuning (prefer_multiclass=True): keep COCO-80, supersede COCO-Person,
-    because multi-class pre-training produces richer backbone features for
-    transfer to a new multi-class task (hand + hazardous-tool detection).
-    """
-    if prefer_multiclass:
-        preferred_ds, superseded_ds = "COCO-80", "COCO-Person"
-    else:
-        preferred_ds, superseded_ds = "COCO-Person", "COCO-80"
-
-    preferred_configs: set[tuple] = set()
-    for _, row in df[df["dataset"] == preferred_ds].iterrows():
-        preferred_configs.add(tuple(row[c] for c in _DEDUP_KEY))
+    """Prefer COCO-Person over COCO-80. Returns (kept, superseded)."""
+    person_configs: set[tuple] = set()
+    for _, row in df[df["dataset"] == "COCO-Person"].iterrows():
+        person_configs.add(tuple(row[c] for c in _DEDUP_KEY))
 
     superseded_mask = pd.Series(False, index=df.index)
     for idx, row in df.iterrows():
-        if row["dataset"] == superseded_ds:
-            if tuple(row[c] for c in _DEDUP_KEY) in preferred_configs:
+        if row["dataset"] == "COCO-80":
+            if tuple(row[c] for c in _DEDUP_KEY) in person_configs:
                 superseded_mask.at[idx] = True
 
     return df[~superseded_mask].copy(), df[superseded_mask].copy()
@@ -383,15 +315,8 @@ def score_candidates(
     *,
     option_b: bool = False,
     w_head_frac: float = 0.6,
-    finetune: bool = False,
 ) -> pd.DataFrame:
-    """Compute composite scores. Returns df sorted descending by score.
-
-    When *finetune* is True the "modernity" sub-score is expanded into a
-    **transfer readiness** signal that blends architecture modernity with
-    pre-training dataset diversity (COCO-80 > COCO-Person for multi-class
-    fine-tuning).
-    """
+    """Compute composite scores. Returns df sorted descending by score."""
     out = df.copy()
 
     # Accuracy — within-cohort normalisation (Issue 1)
@@ -445,13 +370,8 @@ def score_candidates(
             sub = _minmax_inv(out.loc[spillers, "estimated_spill_kib"])
             out.loc[spillers, "s_mem"] = sub * (1.0 - 1e-9)
 
-    # Architecture modernity / transfer readiness
-    if finetune:
-        arch = out["arch_modernity"]
-        diversity = out["dataset"].map(_DATASET_TRANSFER_SCORE).fillna(0.5)
-        out["s_modern"] = 0.5 * arch + 0.5 * diversity
-    else:
-        out["s_modern"] = out["arch_modernity"]
+    # Architecture modernity (already on 0–1 scale)
+    out["s_modern"] = out["arch_modernity"]
 
     # Composite
     out["score"] = (
@@ -509,41 +429,21 @@ def print_section1(
     scored: pd.DataFrame,
     excluded: pd.DataFrame,
     superseded: pd.DataFrame,
-    *,
-    finetune: bool = False,
 ) -> None:
     _console.print(Rule("[bold]Section 1 — Data Cleaning & Anomaly Report[/bold]"))
     _console.print()
 
-    if finetune:
-        issue1 = (
-            "Issue 1 — Dataset Selection for Fine-Tuning",
-            "COCO-80 pre-trained models preferred: multi-class pre-training produces "
-            "richer backbone features for transfer to hand + hazardous-tool detection. "
-            "COCO-Person rows with COCO-80 counterparts marked 'Superseded'. "
-            "Accuracy normalised within each cohort separately.",
-        )
-        issue2 = (
-            "Issue 2 — Fine-Tuning Base Selection",
-            "Transfer readiness (arch modernity + pre-training diversity) weighted 0.30 — "
-            "highest single weight. Backbone capacity (AP) weighted 0.20. "
-            "Hardware-fit criteria de-emphasised but hard gates still enforced.",
-        )
-    else:
-        issue1 = (
+    issues = [
+        (
             "Issue 1 — Dataset Incomparability",
             "COCO-Person AP used as primary. COCO-80 rows with Person counterparts "
             "marked 'Superseded'. Accuracy normalised within each cohort separately.",
-        )
-        issue2 = (
+        ),
+        (
             "Issue 2 — Fine-Tuning Context",
             "Efficiency curve (geometric mean of AP/ms and AP/mJ) weighted 0.25 — "
             "highest single weight. Raw AP weighted 0.10 only.",
-        )
-
-    issues = [
-        issue1,
-        issue2,
+        ),
         (
             "Issue 3 — Resolution Variants",
             "All passing resolutions scored independently. Best per-family identified "
@@ -591,7 +491,7 @@ def print_section1(
         if row.get("estimated_spill_kib", 0) > 0:
             flags.append("[ExtRAM]")
         if disposition == "Superseded":
-            flags.append(f"[{row['dataset']}]")
+            flags.append("[COCO-80]")
         table.add_row(
             str(row["model_variant"]),
             str(row["format"]),
@@ -623,13 +523,7 @@ def print_section1(
     _console.print()
 
 
-def print_section2(
-    weights: dict[str, float],
-    option_label: str,
-    *,
-    rationale: dict[str, str] | None = None,
-) -> None:
-    rat = rationale or WEIGHT_RATIONALE
+def print_section2(weights: dict[str, float], option_label: str) -> None:
     _console.print(Rule("[bold]Section 2 — Criteria Framework Table[/bold]"))
     _console.print()
     _console.print(f"  Scoring option: [bold]{option_label}[/bold]")
@@ -654,14 +548,6 @@ def print_section2(
         "octoFlash capacity",
     )
 
-    is_finetune = rat is FINETUNE_WEIGHT_RATIONALE
-    modern_name = "Transfer readiness" if is_finetune else "Arch. modernity"
-    modern_metric = (
-        "0.5·arch_modernity + 0.5·dataset_diversity"
-        if is_finetune
-        else "anchor_free_score ∈ {0,0.5,1}"
-    )
-
     criteria = [
         ("w_acc", "Architecture capacity", "🟡 Primary", "norm_cohort(ap_50)"),
         ("w_energy", "Energy per inference", "🟡 Primary", "norm(1/pm_avg_inf_mJ)"),
@@ -673,10 +559,10 @@ def print_section2(
             "🟡 Primary",
             "1.0 if no spill else norm(1/estimated_spill_kib)",
         ),
-        ("w_modern", modern_name, "🟡 Primary" if is_finetune else "🟢 Secondary", modern_metric),
+        ("w_modern", "Arch. modernity", "🟢 Secondary", "anchor_free_score ∈ {0,0.5,1}"),
     ]
     for key, name, tier, metric in criteria:
-        table.add_row(name, tier, metric, f"{weights[key]:.2f}", rat[key])
+        table.add_row(name, tier, metric, f"{weights[key]:.2f}", WEIGHT_RATIONALE[key])
 
     _console.print(table)
     total = sum(weights.values())
@@ -685,19 +571,13 @@ def print_section2(
     _console.print()
 
 
-def print_section3(
-    scored: pd.DataFrame,
-    weights: dict[str, float],
-    *,
-    finetune: bool = False,
-) -> None:
-    mod_label = "xfer" if finetune else "modern"
+def print_section3(scored: pd.DataFrame, weights: dict[str, float]) -> None:
     _console.print(Rule("[bold]Section 3 — Composite Scoring & Ranked Table[/bold]"))
     _console.print()
     _console.print(
         f"  [dim]score = {weights['w_acc']:.2f}·acc + {weights['w_energy']:.2f}·energy"
         f" + {weights['w_eff']:.2f}·eff + {weights['w_lat']:.2f}·lat"
-        f" + {weights['w_mem']:.2f}·mem + {weights['w_modern']:.2f}·{mod_label}[/dim]"
+        f" + {weights['w_mem']:.2f}·mem + {weights['w_modern']:.2f}·modern[/dim]"
     )
     _console.print()
 
@@ -709,7 +589,7 @@ def print_section3(
     table.add_column("DS", min_width=4)
     for h in ("acc", "nrg", "eff", "lat", "mem"):
         table.add_column(h, min_width=5, justify="right")
-    table.add_column(mod_label[:4], min_width=4, justify="right")
+    table.add_column("mod", min_width=3, justify="right")
     table.add_column("inf_mW", min_width=6, justify="right")
     table.add_column("Score", style="bold cyan", min_width=6, justify="right")
     table.add_column("Flags", no_wrap=True)
@@ -741,18 +621,6 @@ def print_section3(
     _console.print(table)
     _console.print()
     _console.print("  [bold]Abbreviations[/bold] (table columns)")
-    if finetune:
-        mod_abbr = (
-            "xfer",
-            "Transfer readiness: 0.5·arch_modernity + 0.5·dataset_diversity "
-            "(COCO-80=1.0, COCO-Person=0.4).",
-        )
-    else:
-        mod_abbr = (
-            "mod",
-            "Architecture modernity: 0.0 legacy anchor, 0.5 modern backbone, "
-            "1.0 anchor-free decoupled.",
-        )
     _abbr_lines: list[tuple[str, str]] = [
         ("fmt", "Quantisation format (e.g. Int8, W4A8)."),
         ("res", "Input resolution (px)."),
@@ -762,7 +630,11 @@ def print_section3(
         ("eff", "Normalised efficiency (geom. mean AP/ms & AP/mJ)."),
         ("lat", "Normalised latency subscore (faster → higher)."),
         ("mem", "Normalised activation-memory (on-chip vs spill)."),
-        mod_abbr,
+        (
+            "mod",
+            "Architecture modernity: 0.0 legacy anchor, 0.5 modern backbone, "
+            "1.0 anchor-free decoupled.",
+        ),
         ("inf_mW", "Mean inference power draw (pm_avg_inf_mW)."),
         ("Score", "Weighted composite (see formula above)."),
         (
@@ -778,23 +650,9 @@ def print_section3(
     _console.print()
 
 
-def print_section4(scored: pd.DataFrame, *, finetune: bool = False) -> None:
-    title = (
-        "Section 4 — Interpretation (Fine-Tuning Base Selection)"
-        if finetune
-        else "Section 4 — Interpretation"
-    )
-    _console.print(Rule(f"[bold]{title}[/bold]"))
+def print_section4(scored: pd.DataFrame) -> None:
+    _console.print(Rule("[bold]Section 4 — Interpretation[/bold]"))
     _console.print()
-
-    if finetune:
-        _console.print(
-            "  [dim]Target task: hand + hazardous-tool detection (multi-class).[/dim]"
-        )
-        _console.print(
-            "  [dim]Selecting backbone + architecture for subsequent fine-tuning.[/dim]"
-        )
-        _console.print()
 
     top_n = min(10, len(scored))
     for rank in range(top_n):
@@ -813,14 +671,13 @@ def print_section4(scored: pd.DataFrame, *, finetune: bool = False) -> None:
             f"{row['dataset']}"
         )
 
-        mod_key = "transfer" if finetune else "modernity"
         components = {
             "accuracy": row["s_acc"],
             "energy": row["s_energy"],
             "efficiency": row["s_eff"],
             "latency": row["s_lat"],
             "memory": row["s_mem"],
-            mod_key: row["s_modern"],
+            "modernity": row["s_modern"],
         }
         top_drivers = sorted(components.items(), key=lambda x: -x[1])[:3]
         drivers_str = ", ".join(f"{n}={v:.3f}" for n, v in top_drivers)
@@ -837,15 +694,10 @@ def print_section4(scored: pd.DataFrame, *, finetune: bool = False) -> None:
         caveats: list[str] = []
         if spill > 0:
             caveats.append(f"HyperRAM spill of {spill:.0f} KiB")
-        if row["dataset"] == "COCO-80" and not finetune:
+        if row["dataset"] == "COCO-80":
             caveats.append(
                 "COCO-80 only — conservative accuracy signal; "
                 "fine-tuning uplift may be greater"
-            )
-        if row["dataset"] == "COCO-Person" and finetune:
-            caveats.append(
-                "COCO-Person only — single-class pre-training; backbone features "
-                "less diverse than COCO-80 for multi-class transfer"
             )
         if row["inference_time_ms"] > 50:
             margin = MAX_LATENCY_MS - row["inference_time_ms"]
@@ -861,43 +713,21 @@ def print_section4(scored: pd.DataFrame, *, finetune: bool = False) -> None:
         )
 
         arch = row["arch_modernity"]
-        if finetune:
-            ds_note = (
-                "COCO-80 backbone (rich multi-class features)"
-                if row["dataset"] == "COCO-80"
-                else "COCO-Person backbone (strong body/hand priors)"
+        if arch >= 1.0:
+            ft = (
+                "Anchor-free decoupled head — straightforward fine-tuning "
+                "with standard YOLO pipelines"
             )
-            if arch >= 1.0:
-                ft = (
-                    f"Anchor-free decoupled head + {ds_note} — replace head "
-                    "with 2-class (hand, hazardous_tool) and fine-tune"
-                )
-            elif arch >= 0.5:
-                ft = (
-                    f"Modern backbone + {ds_note} — requires anchor "
-                    "recalibration for hand + tool aspect ratios"
-                )
-            else:
-                ft = (
-                    f"Legacy SSD + {ds_note} — anchor priors need "
-                    "significant recalibration; least recommended for fine-tuning"
-                )
+        elif arch >= 0.5:
+            ft = (
+                "Anchor-based + modern backbone — requires anchor tuning "
+                "for custom dataset"
+            )
         else:
-            if arch >= 1.0:
-                ft = (
-                    "Anchor-free decoupled head — straightforward fine-tuning "
-                    "with standard YOLO pipelines"
-                )
-            elif arch >= 0.5:
-                ft = (
-                    "Anchor-based + modern backbone — requires anchor tuning "
-                    "for custom dataset"
-                )
-            else:
-                ft = (
-                    "Legacy SSD architecture — anchor priors may need "
-                    "significant recalibration"
-                )
+            ft = (
+                "Legacy SSD architecture — anchor priors may need "
+                "significant recalibration"
+            )
         _console.print(f"  [bold]Fine-tuning:[/bold] {ft}")
         _console.print()
 
@@ -1001,50 +831,56 @@ def print_section4(scored: pd.DataFrame, *, finetune: bool = False) -> None:
 # ── Main pipeline ────────────────────────────────────────────────────────────
 
 
+_DATASET_LABELS: dict[str, str] = {
+    "80": "COCO-80",
+    "person": "COCO-Person",
+}
+
+
 def run_selection(
     csv_path: Path,
     weights: dict[str, float] | None = None,
     *,
     option_b: bool = False,
-    finetune: bool = False,
+    dataset_filter: str | None = None,
     output_csv: Path | None = None,
     ap_csv: Path = DEFAULT_EVAL_CSV,
     memory_csv: Path = DEFAULT_MEMORY_CSV,
 ) -> pd.DataFrame:
     """Run the full model selection pipeline and print the report.
 
-    When *finetune* is True the algorithm shifts to base-model selection
-    for fine-tuning to hand + hazardous-tool detection:
-    - COCO-80 pre-trained models are preferred over COCO-Person
-    - Transfer readiness (architecture + pre-training diversity) is
-      weighted more heavily
-    - Backbone capacity (accuracy) is emphasised
+    *dataset_filter* restricts candidates to a single dataset
+    ("80" for COCO-80, "person" for COCO-Person).  When set, the
+    deduplication step is skipped since only one dataset is present.
     """
-    w = weights or (FINETUNE_WEIGHTS.copy() if finetune else DEFAULT_WEIGHTS.copy())
-    rationale = FINETUNE_WEIGHT_RATIONALE if finetune else WEIGHT_RATIONALE
+    w = weights or DEFAULT_WEIGHTS.copy()
     option_label = "B (split memory: head + spill)" if option_b else "A (unified memory)"
-    if finetune:
-        option_label += " | fine-tune profile (hand + hazardous-tool)"
 
     df = load_benchmark(csv_path)
     df = merge_benchmark_with_memory(df, memory_csv)
     df = merge_benchmark_with_ap(df, ap_csv)
     df = add_derived(df)
 
-    passing, excluded = gate_constraints(df)
-    scoring_pool, superseded = deduplicate_datasets(
-        passing, prefer_multiclass=finetune
-    )
+    if dataset_filter is not None:
+        ds_label = _DATASET_LABELS[dataset_filter]
+        before = len(df)
+        df = df[df["dataset"] == ds_label].copy()
+        option_label += f" | dataset={ds_label} ({before - len(df)} rows filtered)"
 
-    scored = score_candidates(
-        scoring_pool, w, option_b=option_b, finetune=finetune
-    )
+    passing, excluded = gate_constraints(df)
+
+    if dataset_filter is not None:
+        scoring_pool, superseded = passing, pd.DataFrame(columns=passing.columns)
+    else:
+        scoring_pool, superseded = deduplicate_datasets(passing)
+
+    scored = score_candidates(scoring_pool, w, option_b=option_b)
 
     print_section0(df)
-    print_section1(df, scored, excluded, superseded, finetune=finetune)
-    print_section2(w, option_label, rationale=rationale)
-    print_section3(scored, w, finetune=finetune)
-    print_section4(scored, finetune=finetune)
+    print_section1(df, scored, excluded, superseded)
+    print_section2(w, option_label)
+    print_section3(scored, w)
+    print_section4(scored)
 
     if output_csv is not None:
         out_cols = [
@@ -1098,18 +934,30 @@ app = typer.Typer(
 @app.callback()
 def _cli_entry(
     ctx: typer.Context,
+    csv: Path = typer.Option(
+        DEFAULT_CSV,
+        "--csv",
+        help="Benchmark results CSV",
+    ),
+    eval_csv: Path = typer.Option(
+        DEFAULT_EVAL_CSV,
+        "--eval-csv",
+        help="Host-side AP evaluation results CSV",
+    ),
+    memory_csv: Path = typer.Option(
+        DEFAULT_MEMORY_CSV,
+        "--memory-csv",
+        help="Generate-model memory results CSV",
+    ),
     option_b: bool = typer.Option(
         False,
         "--option-b",
         help="Use Option B scoring (split memory into head + spill terms)",
     ),
-    finetune: bool = typer.Option(
-        False,
-        "--finetune",
-        help=(
-            "Fine-tuning base selection mode: prefer COCO-80 pre-training, "
-            "boost transfer readiness weight, emphasise backbone capacity."
-        ),
+    dataset: str | None = typer.Option(
+        None,
+        "--dataset",
+        help="Filter to a single dataset: '80' for COCO-80, 'person' for COCO-Person.",
     ),
     output: Path | None = typer.Option(
         None,
@@ -1131,7 +979,13 @@ def _cli_entry(
     configure_logging()
     typer_install_exception_hook()
 
-    cli_weights = {
+    if dataset is not None and dataset not in _DATASET_LABELS:
+        _err.print(
+            f"[red]Error: --dataset must be '80' or 'person', got '{dataset}'[/red]"
+        )
+        raise typer.Exit(2)
+
+    weights = {
         "w_acc": w_acc,
         "w_energy": w_energy,
         "w_eff": w_eff,
@@ -1140,36 +994,26 @@ def _cli_entry(
         "w_modern": w_modern,
     }
 
-    # When --finetune is set and no --w-* flags were explicitly provided,
-    # let run_selection use FINETUNE_WEIGHTS instead of the CLI defaults.
-    weights_match_defaults = all(
-        abs(cli_weights[k] - DEFAULT_WEIGHTS[k]) < 1e-9 for k in DEFAULT_WEIGHTS
-    )
-    weights: dict[str, float] | None
-    if finetune and weights_match_defaults:
-        weights = None
-    else:
-        weights = cli_weights
-        total = sum(weights.values())
-        if abs(total - 1.0) > 0.01:
-            _err.print(
-                f"[yellow]Warning: weights sum to {total:.3f}, not 1.0. "
-                "Normalising.[/yellow]"
-            )
-            weights = {k: v / total for k, v in weights.items()}
+    total = sum(weights.values())
+    if abs(total - 1.0) > 0.01:
+        _err.print(
+            f"[yellow]Warning: weights sum to {total:.3f}, not 1.0. "
+            "Normalising.[/yellow]"
+        )
+        weights = {k: v / total for k, v in weights.items()}
 
-    if not DEFAULT_CSV.is_file():
-        _err.print(f"[red]Error: CSV not found: {DEFAULT_CSV}[/red]")
+    if not csv.is_file():
+        _err.print(f"[red]Error: CSV not found: {csv}[/red]")
         raise typer.Exit(2)
 
     run_selection(
-        DEFAULT_CSV,
+        csv,
         weights,
         option_b=option_b,
-        finetune=finetune,
+        dataset_filter=dataset,
         output_csv=output,
-        ap_csv=DEFAULT_EVAL_CSV,
-        memory_csv=DEFAULT_MEMORY_CSV,
+        ap_csv=eval_csv,
+        memory_csv=memory_csv,
     )
 
 

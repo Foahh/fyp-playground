@@ -3,6 +3,7 @@
 From repo root:
   python src/benchmark/run_compare.py [compare flags]
   python src/benchmark/run_compare.py --delta METRIC:NUMBER ...
+  python src/benchmark/run_compare.py --exclude METRIC_OR_MODEL_SUBSTRING ...
   python project.py compare [flags]
 """
 

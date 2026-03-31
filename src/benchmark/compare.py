@@ -17,8 +17,9 @@ Datasources (select via ``--left/--right``):
 Delta is always defined as ``right − left``.
 
 For readme comparisons, empty README metric cells are ignored (not compared). For
-``stedgeai_version``, values are compared as strings (delta column shows ``≠`` when they
-differ), and rows with the same value on both sides are omitted.
+``stedgeai_version``, when **both** sides are non-empty, values are compared as strings; any
+mismatch is summarized once under the report headline (rows with a missing value on either side
+are skipped).
 
 Output is grouped by ``(model_variant, format)`` with plain-text tables (no pass/fail).
 
@@ -396,6 +397,25 @@ def filter_rows_by_metric(
     return [r for r in rows if (r.get("metric") or "").strip().casefold() in want]
 
 
+def filter_rows_excluding(
+    rows: list[dict[str, str]],
+    patterns: list[str],
+) -> list[dict[str, str]]:
+    pats = {(p or "").strip().casefold() for p in patterns if (p or "").strip()}
+    if not pats:
+        return rows
+    out: list[dict[str, str]] = []
+    for r in rows:
+        mv = (r.get("model_variant") or "").casefold()
+        m = (r.get("metric") or "").strip().casefold()
+        if any(pat in mv for pat in pats):
+            continue
+        if m in pats:
+            continue
+        out.append(r)
+    return out
+
+
 def load_csv_df(path: Path) -> pd.DataFrame:
     df = pd.read_csv(path, dtype=str, keep_default_na=False, na_filter=False)
     if df.shape[1] == 0 or df.columns[0] == "":
@@ -561,7 +581,7 @@ def compare_readme_to_bench(
 
         lv = _merged_side(mrow, "stedgeai_version", True)
         rv = _merged_side(mrow, "stedgeai_version", False)
-        if (lv or rv) and lv != rv:
+        if lv and rv and lv != rv:
             out.delta_rows.append(
                 {
                     "model_variant": _merged_side(mrow, "model_variant", True),
@@ -662,7 +682,7 @@ def compare_bench_to_bench(
 
         lv = _merged_side(mrow, "stedgeai_version", True)
         rv = _merged_side(mrow, "stedgeai_version", False)
-        if (lv or rv) and lv != rv:
+        if lv and rv and lv != rv:
             out.delta_rows.append(
                 {
                     "model_variant": _merged_side(mrow, "model_variant", True),
@@ -690,6 +710,44 @@ def _row_sort_key(r: dict[str, str]) -> tuple:
     )
 
 
+def _partition_stedgeai_rows(
+    rows: list[dict[str, str]],
+) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    body: list[dict[str, str]] = []
+    stedge: list[dict[str, str]] = []
+    for r in rows:
+        if (r.get("metric") or "").strip() == "stedgeai_version":
+            stedge.append(r)
+        else:
+            body.append(r)
+    return body, stedge
+
+
+def _stedgeai_hoist_banner(
+    stedge_rows: list[dict[str, str]],
+    left_label: str,
+    right_label: str,
+) -> str | None:
+    """Single-line summary for stedgeai_version mismatches (not shown in per-variant tables)."""
+    if not stedge_rows:
+        return None
+    counts: dict[tuple[str, str], int] = defaultdict(int)
+    for r in stedge_rows:
+        lv = (r.get(left_label) or "").strip()
+        rv = (r.get(right_label) or "").strip()
+        counts[(lv, rv)] += 1
+    if len(counts) == 1:
+        (lv, rv) = next(iter(counts.keys()))
+        return (
+            f"stedgeai_version: {left_label}={lv} │ {right_label}={rv} (≠)"
+        )
+    parts: list[str] = []
+    for (lv, rv) in sorted(counts.keys()):
+        n = counts[(lv, rv)]
+        parts.append(f"{left_label}={lv} {right_label}={rv} ({n} configs)")
+    return "stedgeai_version mismatches: " + "; ".join(parts)
+
+
 def print_comparison_report(
     result: ComparisonResult,
     *,
@@ -700,6 +758,12 @@ def print_comparison_report(
 ) -> None:
     console = Console()
     console.print(result.headline)
+
+    body_rows, stedge_rows = _partition_stedgeai_rows(result.delta_rows)
+    hoist = _stedgeai_hoist_banner(stedge_rows, result.left, result.right)
+    if hoist:
+        console.print(hoist)
+
     if delta_abs_desc is not None and delta_abs_before is not None:
         console.print(
             f"(filtered: {delta_abs_desc} — "
@@ -712,11 +776,11 @@ def print_comparison_report(
         )
     console.print()
 
-    if not result.delta_rows:
+    if not body_rows:
         console.print("No overlapping metric cells (nothing to tabulate).")
     else:
         by_variant_and_format: dict[tuple[str, str], list[dict[str, str]]] = defaultdict(list)
-        for r in result.delta_rows:
+        for r in body_rows:
             by_variant_and_format[(r["model_variant"], r["format"])].append(r)
 
         for i, (variant, fmt) in enumerate(sorted(by_variant_and_format.keys())):
@@ -739,8 +803,12 @@ def print_comparison_report(
     console.print()
     parts = [
         f"{result.matched_rows} config(s) matched",
-        f"{len(result.delta_rows)} metric cell(s) listed",
+        f"{len(body_rows)} metric cell(s) listed",
     ]
+    if stedge_rows:
+        parts.append(
+            f"{len(stedge_rows)} stedgeai_version mismatch(es) summarized above (not in tables)"
+        )
     if result.left == "readme" or result.right == "readme":
         parts.insert(
             0,
@@ -821,10 +889,19 @@ def compare_entry(
             "Repeat for multiple. Rows without numeric Δ stay; empty stedgeai_version rows omitted."
         ),
     ),
-    metric: list[str] = typer.Option(
+    include: list[str] = typer.Option(
         [],
-        "--metric",
+        "--include",
         help="Only include these metric(s). Repeat flag to include multiple (case-insensitive exact match).",
+    ),
+    exclude: list[str] = typer.Option(
+        [],
+        "--exclude",
+        help=(
+            "Drop delta rows when model_variant contains this substring (case-insensitive), "
+            "or when metric equals this name (case-insensitive, same rules as --include). "
+            "Repeat for multiple patterns."
+        ),
     ),
 ) -> None:
     """Compare any two datasources (delta = right − left)."""
@@ -906,8 +983,10 @@ def compare_entry(
         result = compare_bench_to_bench(l, left_path, r, right_path)
 
     assert result is not None
-    if metric:
-        result.delta_rows = filter_rows_by_metric(result.delta_rows, metric)
+    if include:
+        result.delta_rows = filter_rows_by_metric(result.delta_rows, include)
+    if exclude:
+        result.delta_rows = filter_rows_excluding(result.delta_rows, exclude)
     if thresh_by_metric:
         before_delta_abs = len(result.delta_rows)
         result.delta_rows = filter_rows_by_delta_spec(result.delta_rows, thresh_by_metric)
