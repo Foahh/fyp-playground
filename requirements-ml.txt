@@ -1,5 +1,3 @@
 ultralytics[export]>=8.4.32
-pillow>=12.1.1
 pycocotools>=2.0.11
-tensorflow
 typer>=0.24.1
