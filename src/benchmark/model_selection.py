@@ -31,37 +31,25 @@ DEFAULT_MEMORY_CSV = RESULTS_DIR / "generate_result.csv"
 
 # ── Hardware constants (STM32N6570-DK) ──────────────────────────────────────
 
-ON_CHIP_ACTIVATION_KIB = 2304  # 512 (cpuRAM2) + 4×448 (npuRAM3–6)
-MAX_LATENCY_MS = 66.666666667  # 15 FPS ceiling
-MAX_WEIGHTS_FLASH_KIB = 10240  # 10 MiB octoFlash (for glass deployment, altough 60 MiB is given on the STM32N6570-DK)
+NPU_RAM_ACTIVATION_KIB = 4 * 448 # npuRAM3–6
+CPU_RAM_ACTIVATION_KIB = 512     # cpuRAM2
+MAX_LATENCY_MS = 66.666666667    # 15 FPS ceiling
+MAX_WEIGHTS_FLASH_KIB = 10240    # 10 MiB octoFlash (for glass deployment, altough 60 MiB is given on the STM32N6570-DK)
 
-# ── Architecture modernity classification ────────────────────────────────────
-# 1.0 = anchor-free decoupled head
-# 0.0 = legacy anchor-based
+# Quantisation formats dropped before gating and scoring.
+SELECTION_EXCLUDED_FORMATS: frozenset[str] = frozenset({"W4A8"})
 
-ARCHITECTURE_MODERNITY: dict[str, float] = {
-    "ssdlite_mobilenetv1_pt": 0.0,
-    "ssdlite_mobilenetv2_pt": 0.0,
-    "ssdlite_mobilenetv3large_pt": 0.0,
-    "ssdlite_mobilenetv3small_pt": 0.0,
-    "st_yolodv2milli_pt": 1.0,
-    "st_yolodv2tiny_pt": 1.0,
-    "st_yoloxn": 1.0,
-    "tinyissimoyolo_v8": 1.0,
-    "yolo11n": 1.0,
-    "yolo26": 1.0,
-    "yolov8n": 1.0,
-}
+# Model families dropped before gating and scoring (by ``model_family`` prefix).
+SELECTION_EXCLUDED_FAMILY_PREFIXES: tuple[str, ...] = ("ssdlite_",)
 
-# ── Default scoring weights (Option A) ──────────────────────────────────────
+# ── Default scoring weights ──────────────────────────────────────
 
 DEFAULT_WEIGHTS: dict[str, float] = {
-    "w_acc": 0.30,
-    "w_energy": 0.10,
-    "w_eff": 0.15,
-    "w_lat": 0.05,
-    "w_mem": 0.20,
-    "w_modern": 0.20,
+    "w_acc": 0.375,
+    "w_energy": 0.125,
+    "w_eff": 0.1875,
+    "w_lat": 0.0625,
+    "w_mem": 0.25,
 }
 
 WEIGHT_RATIONALE: dict[str, str] = {
@@ -82,12 +70,8 @@ WEIGHT_RATIONALE: dict[str, str] = {
         "differentiator."
     ),
     "w_mem": (
-        "Full score when activation budget fits on-chip (no spill); "
-        "HyperRAM spill scored lower by spill amount."
-    ),
-    "w_modern": (
-        "Anchor-free decoupled heads fine-tune more reliably "
-        "on small custom datasets; critical for hand/tool domain."
+        "Full score when activations fit NPU on-chip tiles only; "
+        "pressure beyond that scored lower; flag [ExtRAM] only past full on-chip."
     ),
 }
 
@@ -227,7 +211,7 @@ def add_derived(df: pd.DataFrame) -> pd.DataFrame:
     io_buf = out["input_buffer_kib"] + out["output_buffer_kib"]
     out["activations_without_io"] = total_act - io_buf
     out["estimated_spill_kib"] = (
-        out["activations_without_io"] - ON_CHIP_ACTIVATION_KIB
+        out["activations_without_io"] - NPU_RAM_ACTIVATION_KIB
     ).clip(lower=0)
 
     out["acc_per_ms"] = out["ap_50"] / out["inference_time_ms"]
@@ -245,10 +229,6 @@ def add_derived(df: pd.DataFrame) -> pd.DataFrame:
     out.loc[valid_eff, "efficiency_geo"] = (
         out.loc[valid_eff, "acc_per_ms"] * out.loc[valid_eff, "acc_per_mj"]
     ).apply(math.sqrt)
-
-    out["arch_modernity"] = (
-        out["model_family"].map(ARCHITECTURE_MODERNITY).fillna(0.5)
-    )
 
     return out
 
@@ -310,9 +290,6 @@ def _minmax_inv(s: pd.Series) -> pd.Series:
 def score_candidates(
     df: pd.DataFrame,
     weights: dict[str, float],
-    *,
-    option_b: bool = False,
-    w_head_frac: float = 0.6,
 ) -> pd.DataFrame:
     """Compute composite scores. Returns df sorted descending by score."""
     out = df.copy()
@@ -358,29 +335,19 @@ def score_candidates(
     # Latency margin — lower is better
     out["s_lat"] = _minmax_inv(out["inference_time_ms"])
 
-    # Memory: full normalised score when activations fit on-chip (no spill);
-    # spilling models are ranked by spill volume, strictly below on-chip.
+    # Memory: full score when activations fit NPU tiles only; beyond that, rank by
+    # estimated_spill_kib (pressure including cpuRAM2 / external).
     on_chip = out["estimated_spill_kib"] <= 0
-    if option_b:
-        s_head = _minmax_inv(out["activations_without_io"])
-        spill_denom = 1.0 + out["estimated_spill_kib"]
-        s_spill = _minmax(1.0 / spill_denom)
-        out["s_mem"] = w_head_frac * s_head + (1 - w_head_frac) * s_spill
-        out.loc[on_chip, "s_mem"] = 1.0
+    spillers = ~on_chip
+    if on_chip.all():
+        out["s_mem"] = 1.0
+    elif spillers.all():
+        out["s_mem"] = _minmax_inv(out["estimated_spill_kib"])
     else:
-        spillers = ~on_chip
-        if on_chip.all():
-            out["s_mem"] = 1.0
-        elif spillers.all():
-            out["s_mem"] = _minmax_inv(out["estimated_spill_kib"])
-        else:
-            out["s_mem"] = 0.0
-            out.loc[on_chip, "s_mem"] = 1.0
-            sub = _minmax_inv(out.loc[spillers, "estimated_spill_kib"])
-            out.loc[spillers, "s_mem"] = sub * (1.0 - 1e-9)
-
-    # Architecture modernity (already on 0–1 scale)
-    out["s_modern"] = out["arch_modernity"]
+        out["s_mem"] = 0.0
+        out.loc[on_chip, "s_mem"] = 1.0
+        sub = _minmax_inv(out.loc[spillers, "estimated_spill_kib"])
+        out.loc[spillers, "s_mem"] = sub * (1.0 - 1e-9)
 
     # Composite
     out["score"] = (
@@ -389,10 +356,40 @@ def score_candidates(
         + weights["w_eff"] * out["s_eff"]
         + weights["w_lat"] * out["s_lat"]
         + weights["w_mem"] * out["s_mem"]
-        + weights["w_modern"] * out["s_modern"]
     )
 
     return out.sort_values("score", ascending=False).reset_index(drop=True)
+
+
+# ── Family-level aggregation ──────────────────────────────────────────────────
+
+_FAMILY_KEY = ["model_family", "hyperparameters"]
+
+
+def aggregate_families(scored: pd.DataFrame) -> pd.DataFrame:
+    """Pick the best-scoring variant per (model_family, hyperparameters).
+
+    Returns one row per family, sorted by score descending, with extra
+    columns: n_variants, res_min, res_max, ap_max.
+    """
+    best_idx = scored.groupby(_FAMILY_KEY)["score"].idxmax()
+    families = scored.loc[best_idx].copy()
+
+    for idx in families.index:
+        fam = families.loc[idx, "model_family"]
+        hyp = families.loc[idx, "hyperparameters"]
+        group = scored[
+            (scored["model_family"] == fam) & (scored["hyperparameters"] == hyp)
+        ]
+        families.loc[idx, "n_variants"] = len(group)
+        families.loc[idx, "res_min"] = group["resolution"].min()
+        families.loc[idx, "res_max"] = group["resolution"].max()
+        families.loc[idx, "ap_max"] = group["ap_50"].max()
+
+    for col in ("n_variants", "res_min", "res_max"):
+        families[col] = families[col].astype(int)
+
+    return families.sort_values("score", ascending=False).reset_index(drop=True)
 
 
 # ── Flags helper ─────────────────────────────────────────────────────────────
@@ -400,7 +397,9 @@ def score_candidates(
 
 def _flags(row: pd.Series) -> str:
     parts: list[str] = []
-    if row.get("estimated_spill_kib", 0) > 0:
+    if row.get("activations_without_io", 0) > (
+        NPU_RAM_ACTIVATION_KIB + CPU_RAM_ACTIVATION_KIB
+    ):
         parts.append("[ExtRAM]")
     if row["dataset"] == "COCO-80":
         parts.append("[80only]")
@@ -450,29 +449,29 @@ def print_section1(
         ),
         (
             "Issue 2 — Fine-Tuning & Safety-Critical Context",
-            "Accuracy weighted 0.30 (highest) — pre-trained AP signals feature-extraction "
-            "capacity critical for fine-tuning to small-object tasks (hand/tool detection). "
-            "Efficiency normalised within resolution tiers to avoid systematic "
-            "low-resolution bias.",
+            "Accuracy is the highest-weighted criterion — pre-trained AP signals "
+            "feature-extraction capacity critical for fine-tuning to small-object "
+            "tasks (hand/tool detection). Efficiency normalised within resolution "
+            "tiers to avoid systematic low-resolution bias.",
         ),
         (
-            "Issue 3 — Resolution Variants",
-            "All passing resolutions scored independently. Best per-family identified "
-            "post-scoring. Variants within 5% composite listed as alternatives. "
-            "Optional --min-size gate excludes resolutions too low for small-object "
-            "detection. Optional --min-ap gate excludes models with insufficient "
-            "baseline accuracy for fine-tuning viability.",
+            "Issue 3 — Family-Level Selection",
+            "All passing variants scored independently, then aggregated per "
+            "(model_family, hyperparameters). Each family represented by its "
+            "best-scoring variant. Optional --min-size gate excludes resolutions "
+            "too low for small-object detection before aggregation.",
         ),
         (
             "Issue 4 — Quantisation Format Selection",
-            "Both Int8 and W4A8 variants scored. Int8 preferred for fine-tuning "
-            "unless W4A8 shows decisive multi-dimensional advantage.",
+            "W4A8 variants are excluded from the scoring pool. Remaining formats "
+            "(e.g. Int8) are ranked on the composite score.",
         ),
         (
             "Issue 5 — HyperRAM Spillover",
-            "activations_without_io and estimated_spill_kib computed for every row. "
-            "[ExtRAM] flag added. Spill penalised via memory score + implicit "
-            "latency/energy cost.",
+            "activations_without_io and estimated_spill_kib computed for every row; "
+            "estimated_spill_kib counts KiB past NPU_RAM_ACTIVATION_KIB (penalty starts "
+            "when cpuRAM2 is needed). [ExtRAM] when past NPU + CPU on-chip SRAM. "
+            "Memory score + implicit latency/energy cost.",
         ),
         (
             "Issue 6 — Buffer Placement Correction",
@@ -502,7 +501,9 @@ def print_section1(
 
     def _disp_row(row: pd.Series, disposition: str) -> None:
         flags: list[str] = []
-        if row.get("estimated_spill_kib", 0) > 0:
+        if row.get("activations_without_io", 0) > (
+            NPU_RAM_ACTIVATION_KIB + CPU_RAM_ACTIVATION_KIB
+        ):
             flags.append("[ExtRAM]")
         if disposition == "Superseded":
             flags.append("[COCO-80]")
@@ -576,9 +577,8 @@ def print_section2(weights: dict[str, float], option_label: str) -> None:
             "w_mem",
             "Activation memory",
             "🟡 Primary",
-            "1.0 if no spill else norm(1/estimated_spill_kib)",
+            "1.0 if ≤ NPU activation budget else norm(1/estimated_spill_kib)",
         ),
-        ("w_modern", "Arch. modernity", "🟡 Primary", "anchor_free_score ∈ {0,0.5,1}"),
     ]
     for key, name, tier, metric in criteria:
         table.add_row(name, tier, metric, f"{weights[key]:.2f}", WEIGHT_RATIONALE[key])
@@ -590,83 +590,104 @@ def print_section2(weights: dict[str, float], option_label: str) -> None:
     _console.print()
 
 
-def print_section3(scored: pd.DataFrame, weights: dict[str, float]) -> None:
-    _console.print(Rule("[bold]Section 3 — Composite Scoring & Ranked Table[/bold]"))
+def print_section3(
+    families: pd.DataFrame,
+    scored: pd.DataFrame,
+    weights: dict[str, float],
+) -> None:
+    _console.print(Rule("[bold]Section 3 — Family Ranking[/bold]"))
     _console.print()
     _console.print(
         f"  [dim]score = {weights['w_acc']:.2f}·acc + {weights['w_energy']:.2f}·energy"
         f" + {weights['w_eff']:.2f}·eff + {weights['w_lat']:.2f}·lat"
-        f" + {weights['w_mem']:.2f}·mem + {weights['w_modern']:.2f}·modern[/dim]"
+        f" + {weights['w_mem']:.2f}·mem[/dim]"
+    )
+    _console.print(
+        "  [dim]Each family represented by its best-scoring variant.[/dim]"
     )
     _console.print()
 
-    table = Table(show_header=True, header_style="bold", show_lines=False)
+    # ── Family ranking table ──────────────────────────────────────────────
+
+    table = Table(
+        title="Family Ranking",
+        show_header=True,
+        header_style="bold",
+        show_lines=False,
+    )
     table.add_column("#", style="bold", min_width=2, justify="right")
-    table.add_column("Model Variant", no_wrap=True)
-    table.add_column("fmt", min_width=4)
-    table.add_column("res", min_width=3)
-    table.add_column("DS", min_width=4)
-    for h in ("acc", "nrg", "eff", "lat", "mem"):
-        table.add_column(h, min_width=5, justify="right")
-    table.add_column("mod", min_width=3, justify="right")
-    table.add_column("inf_mW", min_width=6, justify="right")
+    table.add_column("Family", no_wrap=True)
+    table.add_column("Best Variant", no_wrap=True)
+    table.add_column("res", min_width=5, justify="center")
+    table.add_column("AP", min_width=5, justify="right")
+    table.add_column("ms", min_width=5, justify="right")
+    table.add_column("mJ", min_width=5, justify="right")
     table.add_column("Score", style="bold cyan", min_width=6, justify="right")
+    table.add_column("#var", min_width=3, justify="right")
+    table.add_column("Res Range", min_width=7, justify="center")
     table.add_column("Flags", no_wrap=True)
 
-    for rank, (_, row) in enumerate(scored.iterrows(), 1):
-        flags = _flags(row)
-        inf_mw = _f(row.get("pm_avg_inf_mW", float("nan")))
-        ds = "Pers" if row["dataset"] == "COCO-Person" else "C80"
+    for rank, (_, row) in enumerate(families.iterrows(), 1):
+        hyp_label = f" ({row['hyperparameters']})" if row["hyperparameters"] else ""
+        family_label = f"{row['model_family']}{hyp_label}"
         score_str = f"{row['score']:.4f}"
         if rank <= 3:
             score_str = f"[bold]{score_str}[/bold]"
+        res_min = int(row["res_min"])
+        res_max = int(row["res_max"])
+        res_range = f"{res_min}–{res_max}" if res_min != res_max else str(res_min)
         table.add_row(
             str(rank),
+            family_label,
             str(row["model_variant"]),
-            str(row["format"]),
             str(int(row["resolution"])),
-            ds,
-            f"{row['s_acc']:.3f}",
-            f"{row['s_energy']:.3f}",
-            f"{row['s_eff']:.3f}",
-            f"{row['s_lat']:.3f}",
-            f"{row['s_mem']:.3f}",
-            f"{row['s_modern']:.1f}",
-            inf_mw,
+            _f(row["ap_50"]),
+            _f(row["inference_time_ms"]),
+            _f(row.get("pm_avg_inf_mJ", float("nan"))),
             score_str,
-            flags,
+            str(int(row["n_variants"])),
+            res_range,
+            _flags(row),
         )
 
     _console.print(table)
     _console.print()
-    _console.print("  [bold]Abbreviations[/bold] (table columns)")
-    _abbr_lines: list[tuple[str, str]] = [
-        ("fmt", "Quantisation format (e.g. Int8, W4A8)."),
-        ("res", "Input resolution (px)."),
-        ("DS", "Dataset: Pers = COCO-Person, C80 = COCO-80."),
-        ("acc", "Normalised accuracy subscore (cohort AP@0.5)."),
-        ("nrg", "Normalised energy subscore (lower mJ/infer → higher)."),
-        ("eff", "Normalised efficiency (geom. mean AP/ms & AP/mJ)."),
-        ("lat", "Normalised latency subscore (faster → higher)."),
-        ("mem", "Normalised activation-memory (on-chip vs spill)."),
-        (
-            "mod",
-            "Architecture modernity: 0.0 legacy anchor, 0.5 modern backbone, "
-            "1.0 anchor-free decoupled.",
-        ),
-        ("inf_mW", "Mean inference power draw (pm_avg_inf_mW)."),
-        ("Score", "Weighted composite (see formula above)."),
-        (
-            "Flags",
-            "[ExtRAM] activations exceed on-chip budget; [80only] COCO-80 row.",
-        ),
-    ]
-    col_w = max(len(a) for a, _ in _abbr_lines)
-    for abbr, desc in _abbr_lines:
-        _console.print(
-            f"    [bold]{abbr:<{col_w}}[/bold]  [dim]{desc}[/dim]"
-        )
+
+    # ── Per-family variant details ────────────────────────────────────────
+
+    _console.print(Rule("[bold]Per-Family Variant Details[/bold]", style="dim"))
     _console.print()
+
+    for _, fam_row in families.iterrows():
+        fam = fam_row["model_family"]
+        hyp = fam_row["hyperparameters"]
+        hyp_label = f" ({hyp})" if hyp else ""
+        group = scored[
+            (scored["model_family"] == fam) & (scored["hyperparameters"] == hyp)
+        ].sort_values("score", ascending=False)
+
+        _console.print(f"  [bold]{fam}{hyp_label}[/bold]")
+
+        for i, (_, row) in enumerate(group.iterrows()):
+            marker = "★" if i == 0 else " "
+            flags = _flags(row)
+            flag_str = f"  {flags}" if flags else ""
+            subs = (
+                f"acc={row['s_acc']:.2f} nrg={row['s_energy']:.2f} "
+                f"eff={row['s_eff']:.2f} lat={row['s_lat']:.2f} "
+                f"mem={row['s_mem']:.2f}"
+            )
+            _console.print(
+                f"    {marker} {int(row['resolution'])}×{int(row['resolution'])} "
+                f"{row['format']}: "
+                f"score={row['score']:.4f} | "
+                f"AP={_f(row['ap_50'])} | "
+                f"{row['inference_time_ms']:.1f} ms | "
+                f"{_f(row.get('pm_avg_inf_mJ', float('nan')))} mJ"
+                f"{flag_str}"
+            )
+            _console.print(f"      [dim]{subs}[/dim]")
+        _console.print()
 
 
 # ── Main pipeline ────────────────────────────────────────────────────────────
@@ -682,33 +703,53 @@ def run_selection(
     csv_path: Path,
     weights: dict[str, float] | None = None,
     *,
-    option_b: bool = False,
     dataset_filter: str | None = None,
     min_size: int | None = None,
-    min_ap: float | None = None,
     output_csv: Path | None = None,
     ap_csv: Path = DEFAULT_EVAL_CSV,
     memory_csv: Path = DEFAULT_MEMORY_CSV,
 ) -> pd.DataFrame:
-    """Run the full model selection pipeline and print the report.
+    """Run the full model-family selection pipeline and print the report.
 
     *dataset_filter* restricts candidates to a single dataset
     ("80" for COCO-80, "person" for COCO-Person).  When set, the
     deduplication step is skipped since only one dataset is present.
 
-    *min_size* drops candidates whose resolution is below this value.
+    *min_size* drops candidates whose resolution is below this value
+    before family aggregation — ensuring families are only evaluated on
+    variants that can resolve small objects.
 
-    *min_ap* drops candidates whose AP@0.5 is below this value,
-    filtering out models with insufficient feature-extraction capacity
-    for fine-tuning to harder tasks.
+    Rows whose *format* is in ``SELECTION_EXCLUDED_FORMATS`` (currently W4A8),
+    or whose *model_family* starts with a prefix in
+    ``SELECTION_EXCLUDED_FAMILY_PREFIXES``, are removed before constraint
+    gating and scoring.
     """
     w = weights or DEFAULT_WEIGHTS.copy()
-    option_label = "B (split memory: head + spill)" if option_b else "A (unified memory)"
+    option_label = "unified activation memory"
 
     df = load_benchmark(csv_path)
     df = merge_benchmark_with_memory(df, memory_csv)
     df = merge_benchmark_with_ap(df, ap_csv)
     df = add_derived(df)
+
+    before_fmt = len(df)
+    df = df[~df["format"].isin(SELECTION_EXCLUDED_FORMATS)].copy()
+    dropped_fmt = before_fmt - len(df)
+    if dropped_fmt:
+        shown = ", ".join(sorted(SELECTION_EXCLUDED_FORMATS))
+        option_label += f" | excluded format(s) {shown} ({dropped_fmt} rows dropped)"
+
+    before_fam = len(df)
+    fam_series = df["model_family"].astype(str)
+    df = df[
+        ~fam_series.str.startswith(SELECTION_EXCLUDED_FAMILY_PREFIXES)
+    ].copy()
+    dropped_fam = before_fam - len(df)
+    if dropped_fam:
+        shown = ", ".join(SELECTION_EXCLUDED_FAMILY_PREFIXES)
+        option_label += (
+            f" | excluded family prefix(es) {shown} ({dropped_fam} rows dropped)"
+        )
 
     if min_size is not None:
         before = len(df)
@@ -716,13 +757,6 @@ def run_selection(
         dropped = before - len(df)
         if dropped:
             option_label += f" | min-size={min_size} ({dropped} rows dropped)"
-
-    if min_ap is not None:
-        before = len(df)
-        df = df[(df["ap_50"].notna()) & (df["ap_50"] >= min_ap)].copy()
-        dropped = before - len(df)
-        if dropped:
-            option_label += f" | min-ap={min_ap} ({dropped} rows dropped)"
 
     if dataset_filter is not None:
         ds_label = _DATASET_LABELS[dataset_filter]
@@ -737,12 +771,13 @@ def run_selection(
     else:
         scoring_pool, superseded = deduplicate_datasets(passing)
 
-    scored = score_candidates(scoring_pool, w, option_b=option_b)
+    scored = score_candidates(scoring_pool, w)
+    families = aggregate_families(scored)
 
     print_section0(df)
     print_section1(df, scored, excluded, superseded)
     print_section2(w, option_label)
-    print_section3(scored, w)
+    print_section3(families, scored, w)
 
     if output_csv is not None:
         out_cols = [
@@ -760,17 +795,19 @@ def run_selection(
             "estimated_spill_kib",
             "weights_flash_kib",
             "efficiency_geo",
-            "arch_modernity",
             "s_acc",
             "s_energy",
             "s_eff",
             "s_lat",
             "s_mem",
-            "s_modern",
             "score",
+            "n_variants",
+            "res_min",
+            "res_max",
+            "ap_max",
         ]
         output_csv.parent.mkdir(parents=True, exist_ok=True)
-        scored[out_cols].to_csv(
+        families[out_cols].to_csv(
             output_csv,
             index=False,
             float_format="%.4f",
@@ -778,7 +815,7 @@ def run_selection(
         )
         _console.print(f"Scored results written to [bold]{output_csv}[/bold]")
 
-    return scored
+    return families
 
 
 # ── CLI ──────────────────────────────────────────────────────────────────────
@@ -796,11 +833,6 @@ app = typer.Typer(
 @app.callback()
 def _cli_entry(
     ctx: typer.Context,
-    option_b: bool = typer.Option(
-        False,
-        "--option-b",
-        help="Use Option B scoring (split memory into head + spill terms)",
-    ),
     dataset: str | None = typer.Option(
         None,
         "--dataset",
@@ -810,11 +842,6 @@ def _cli_entry(
         None,
         "--min-size",
         help="Minimum input resolution (px). Models below this are dropped.",
-    ),
-    min_ap: float | None = typer.Option(
-        None,
-        "--min-ap",
-        help="Minimum AP@0.5. Models below this baseline accuracy are dropped.",
     ),
     output: Path | None = typer.Option(
         None,
@@ -827,7 +854,6 @@ def _cli_entry(
     w_eff: float = typer.Option(DEFAULT_WEIGHTS["w_eff"], "--w-eff"),
     w_lat: float = typer.Option(DEFAULT_WEIGHTS["w_lat"], "--w-lat"),
     w_mem: float = typer.Option(DEFAULT_WEIGHTS["w_mem"], "--w-mem"),
-    w_modern: float = typer.Option(DEFAULT_WEIGHTS["w_modern"], "--w-modern"),
 ) -> None:
     """Score and rank benchmark candidates for STM32N6570-DK deployment."""
     if getattr(ctx, "resilient_parsing", False):
@@ -848,7 +874,6 @@ def _cli_entry(
         "w_eff": w_eff,
         "w_lat": w_lat,
         "w_mem": w_mem,
-        "w_modern": w_modern,
     }
 
     total = sum(weights.values())
@@ -866,10 +891,8 @@ def _cli_entry(
     run_selection(
         DEFAULT_CSV,
         weights,
-        option_b=option_b,
         dataset_filter=dataset,
         min_size=min_size,
-        min_ap=min_ap,
         output_csv=output,
     )
 
