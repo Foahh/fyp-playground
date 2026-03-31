@@ -17,6 +17,12 @@ def _conda_exe() -> str:
     """Prefer mamba when available; otherwise fall back to conda."""
     return "mamba" if which("mamba") else "conda"
 
+def _conda_run_cmd(env: str, *args: str) -> list[str]:
+    exe = _conda_exe()
+    if exe == "conda":
+        return ["conda", "run", "-n", env, "--no-capture-output", *args]
+    return ["mamba", "run", "-n", env, *args]
+
 
 def run(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, check=True, **kwargs)
@@ -59,7 +65,6 @@ def conda_install(
 ) -> None:
     cmd = [_conda_exe(), "install", "-n", env, "-y"]
     if channels:
-        # Without override, conda will also hit default channels -> slower and can mix deps.
         cmd.append("--override-channels")
         for c in channels:
             cmd.extend(["-c", c])
@@ -70,7 +75,7 @@ def conda_install(
 
 
 def conda_run(env: str, *args: str) -> None:
-    run([_conda_exe(), "run", "-n", env, "--no-capture-output", *args])
+    run(_conda_run_cmd(env, *args))
 
 
 def conda_prefix(env: str) -> str:
