@@ -36,8 +36,8 @@ def main(
     size: int = typer.Option(..., help="Input resolution (192, 256, 288, or 320)"),
     no_resume: bool = typer.Option(False, help="Start a fresh run instead of resuming from last checkpoint"),
     device: str | None = typer.Option(None, help="Ultralytics device (e.g. 0, 0,1 for multi-GPU, cpu); default is auto"),
-    workers: int = typer.Option(16, min=1, help="Data loader workers; increase on high-core machines"),
-    cache: str = typer.Option("disk", help="Dataset cache mode: none, disk, or ram"),
+    workers: int | None = typer.Option(None, help="Data loader workers; omit to use Ultralytics default"),
+    cache: str | None = typer.Option(None, help="Dataset cache mode (none, disk, ram); omit to use Ultralytics default"),
 ):
     if size not in [192, 256, 288, 320]:
         typer.echo(f"Error: size must be one of [192, 256, 288, 320]", err=True)
@@ -68,11 +68,19 @@ def main(
     print(f"Using dataset YAML: {data_yaml}")
     print(f"Dataset root: {data_cfg.get('path')}")
     print("Training profile: paper (fixed)")
-    cache_norm = cache.strip().lower()
-    if cache_norm not in {"none", "disk", "ram"}:
-        typer.echo("Error: cache must be one of [none, disk, ram]", err=True)
-        raise typer.Exit(1)
-    print(f"Runtime profile: workers={workers}, cache={cache_norm}, device={device or 'auto'}")
+    cache_norm: str | None = None
+    if cache is not None:
+        cache_norm = cache.strip().lower()
+        if cache_norm not in {"none", "disk", "ram"}:
+            typer.echo("Error: cache must be one of [none, disk, ram]", err=True)
+            raise typer.Exit(1)
+
+    print(
+        "Runtime profile: "
+        f"workers={workers if workers is not None else 'auto'}, "
+        f"cache={cache_norm if cache_norm is not None else 'auto'}, "
+        f"device={device or 'auto'}"
+    )
 
     train_kw: dict = {
         "data": data_yaml,
@@ -99,8 +107,6 @@ def main(
         "scale": 0.5,
         "mosaic": 1.0,
         "deterministic": False,
-        "workers": workers,
-        "cache": False if cache_norm == "none" else cache_norm,
         "project": PROJECT,
         "name": run_name,
         "exist_ok": True,
@@ -109,6 +115,10 @@ def main(
     }
     if device:
         train_kw["device"] = device
+    if workers is not None:
+        train_kw["workers"] = workers
+    if cache_norm is not None:
+        train_kw["cache"] = False if cache_norm == "none" else cache_norm
 
     model.train(**train_kw)
 
