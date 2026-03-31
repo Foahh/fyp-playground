@@ -13,7 +13,7 @@ import time
 import typer
 
 from .constants import BENCHMARK_CLOCK_MHZ
-from .paths import BenchmarkPaths, N6_WORKDIR, benchmark_paths_for_mode
+from .paths import BenchmarkPaths, benchmark_paths_for_mode
 from .utils.logutil import (
     configure_logging,
     typer_install_exception_hook,
@@ -33,7 +33,7 @@ from .execution.power_serial import (
     stop_power_session,
 )
 from .execution import workflow
-from .execution.workflow import _get_st_ai_output_dir, get_stedgeai_version
+from .execution.workflow import get_stedgeai_version
 
 APP_CONFIG_PATH = (
     Path(os.environ["STEDGEAI_CORE_DIR"])
@@ -145,8 +145,6 @@ def run_benchmark(
         return
 
     typer_install_exception_hook()
-
-    N6_WORKDIR.mkdir(parents=True, exist_ok=True)
 
     if mode == "all":
         _run_all_modes(filter_substr, power_serial, power_baud, validation_count)
@@ -298,11 +296,6 @@ def _run_benchmark_loop(
                 "dataset": entry.dataset,
                 "format": entry.fmt,
                 "resolution": entry.resolution,
-                "internal_ram_kib": metrics.get("internal_ram_kib", ""),
-                "external_ram_kib": metrics.get("external_ram_kib", ""),
-                "weights_flash_kib": metrics.get("weights_flash_kib", ""),
-                "input_buffer_kib": metrics.get("input_buffer_kib", ""),
-                "output_buffer_kib": metrics.get("output_buffer_kib", ""),
                 "inference_time_ms": metrics.get("inference_time_ms", ""),
                 "inf_per_sec": metrics.get("inf_per_sec", ""),
                 "pm_avg_inf_mW": (

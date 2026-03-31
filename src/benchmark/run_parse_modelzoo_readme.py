@@ -514,7 +514,11 @@ def write_metric_parsed_csv(path: Path | None = None) -> tuple[Path, int]:
             continue
         rows.append(r)
     with open(out, "w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=CSV_COLUMNS_NO_POWER)
+        w = csv.DictWriter(
+            f,
+            fieldnames=CSV_COLUMNS_NO_POWER,
+            quoting=csv.QUOTE_ALL,
+        )
         w.writeheader()
         w.writerows(rows)
     skipped = len(built) - len(rows)

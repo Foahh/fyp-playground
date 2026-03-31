@@ -104,6 +104,7 @@ _QTLZ_COMMANDS = frozenset({"quantize"})
 _BHMK_COMMANDS = frozenset(
     {
         "benchmark",
+        "generate-model",
         "evaluate",
         "compare",
         "select-model",

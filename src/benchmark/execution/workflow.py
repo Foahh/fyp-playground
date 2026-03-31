@@ -14,7 +14,7 @@ from typing import Optional
 from tenacity import Retrying, stop_after_attempt, wait_fixed
 
 from ..constants import SSD_FAMILIES
-from ..paths import BenchmarkPaths, N6_WORKDIR, STEDGEAI_PATH
+from ..paths import BASE_DIR, BenchmarkPaths, GENERATED_NETWORK_DIR, STEDGEAI_PATH
 from ..core.models import ModelEntry
 from ..utils.logutil import get_logger
 from .power_serial import (
@@ -44,7 +44,7 @@ def get_stedgeai_version(benchmark_log: Path) -> str:
     def _probe_version() -> tuple[str, str, int]:
         return _run_streaming(
             [STEDGEAI_PATH, "--version"],
-            cwd=str(N6_WORKDIR),
+            cwd=str(BASE_DIR),
             timeout=20,
             benchmark_log=benchmark_log,
         )
@@ -66,9 +66,19 @@ def get_stedgeai_version(benchmark_log: Path) -> str:
     return "unknown"
 
 
-def _get_st_ai_output_dir() -> Path:
-    """Return the st_ai_output directory where stedgeai generate writes."""
-    return N6_WORKDIR / "st_ai_output"
+def _sanitize_part(value: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_.-]+", "_", value).strip("_")
+
+
+def generated_model_dir(entry: ModelEntry) -> Path:
+    """Return persistent output directory for one generated model."""
+    key = f"{_sanitize_part(entry.variant)}__{_sanitize_part(entry.fmt.lower())}"
+    return GENERATED_NETWORK_DIR / key
+
+
+def generated_st_ai_output_dir(entry: ModelEntry) -> Path:
+    """Return persistent st_ai_output path for one generated model."""
+    return generated_model_dir(entry) / "st_ai_output"
 
 
 def _neuralart_profile() -> str:
@@ -86,22 +96,23 @@ def _quiet_ai_runner_logger() -> logging.Logger:
     return log
 
 
-def _write_n6_loader_config() -> Path:
-    """Write a config_n6l.json pointing to our workdir's generated files."""
+def _write_n6_loader_config(entry: ModelEntry) -> Path:
+    """Write config_n6l.json for n6_loader using generated model artifacts."""
     stedgeai_dir = Path(os.environ["STEDGEAI_CORE_DIR"])
     project_path = (
         stedgeai_dir / "Projects" / "STM32N6570-DK" / "Applications" / "NPU_Validation"
     )
 
     config = {
-        "network.c": str(_get_st_ai_output_dir() / "network.c"),
+        "network.c": str(generated_st_ai_output_dir(entry) / "network.c"),
         "project_path": str(project_path),
         "project_build_conf": "N6-DK",
         "skip_external_flash_programming": False,
         "skip_ram_data_programming": False,
     }
 
-    config_path = N6_WORKDIR / "config_n6l.json"
+    config_path = generated_model_dir(entry) / "config_n6l.json"
+    config_path.parent.mkdir(parents=True, exist_ok=True)
     config_path.write_text(json.dumps(config, indent=2), encoding="utf-8")
     return config_path
 
@@ -150,7 +161,12 @@ def _run_streaming(
     return stdout, stderr, rc
 
 
-def _step_generate(entry: ModelEntry, benchmark_log: Path) -> tuple[str, str, int]:
+def _step_generate(
+    entry: ModelEntry,
+    benchmark_log: Path,
+    *,
+    output_root: Path | None = None,
+) -> tuple[str, str, int]:
     """Step 1: stedgeai generate — produce C files + memory initializers."""
     model_path = entry.model_path
     if not model_path.startswith(("http://", "https://")):
@@ -192,9 +208,11 @@ def _step_generate(entry: ModelEntry, benchmark_log: Path) -> tuple[str, str, in
         output_chpos=output_chpos,
     )
     t0 = time.monotonic()
+    workdir = output_root or generated_model_dir(entry)
+    workdir.mkdir(parents=True, exist_ok=True)
     out, err, rc = _run_streaming(
         cmd,
-        cwd=str(N6_WORKDIR),
+        cwd=str(workdir),
         timeout=600,
         log_header=f"\n=== GENERATE | {entry.variant} | {entry.fmt} ===",
         benchmark_log=benchmark_log,
@@ -210,11 +228,59 @@ def _step_generate(entry: ModelEntry, benchmark_log: Path) -> tuple[str, str, in
     return out, err, rc
 
 
+def _ensure_generated_output(entry: ModelEntry, benchmark_log: Path) -> bool:
+    """Ensure generated st_ai_output exists for benchmark load step."""
+    src = generated_st_ai_output_dir(entry)
+    if not src.is_dir():
+        msg = (
+            f"Generated model not found for {entry.variant} {entry.fmt}: {src}. "
+            "Run generate-model first."
+        )
+        _append_stdout_log(msg, benchmark_log)
+        get_logger("workflow").error(
+            "Missing generated model artifact",
+            step="load",
+            variant=entry.variant,
+            fmt=entry.fmt,
+            source=str(src),
+        )
+        return False
+    return True
+
+
+def run_generate_model(entry: ModelEntry, benchmark_log: Path) -> tuple[dict[str, str], int]:
+    """
+    Run generate and persist artifacts under results/network.
+
+    Returns (parsed_metrics, rc). On failure, metrics is empty and rc != 0.
+    """
+    model_dir = generated_model_dir(entry)
+    out, err, rc = _step_generate(entry, benchmark_log, output_root=model_dir)
+    if rc != 0:
+        return {}, rc
+
+    cinfo_path = generated_st_ai_output_dir(entry) / "network_c_info.json"
+    if not cinfo_path.is_file():
+        _append_stdout_log(
+            f"Generate output file missing: {cinfo_path}",
+            benchmark_log,
+        )
+        return {}, 1
+
+    from ..io.parsing import parse_metrics
+
+    metrics = parse_metrics(out, err, cinfo_path=cinfo_path)
+    return metrics, 0
+
+
 def _step_load(entry: ModelEntry, benchmark_log: Path) -> tuple[str, str, int]:
     """Step 2: n6_loader.py — build, flash, and start the test app."""
+    if not _ensure_generated_output(entry, benchmark_log):
+        return "", "missing generated model artifact", 1
+
     n6_dir = _get_n6_scripts_dir()
     loader = n6_dir / "n6_loader.py"
-    config_path = _write_n6_loader_config()
+    config_path = _write_n6_loader_config(entry)
 
     cmd = [
         sys.executable,
@@ -398,40 +464,21 @@ class EvalResult:
 def run_benchmark(
     entry: ModelEntry, validation_count: int, paths: BenchmarkPaths
 ) -> EvalResult:
-    """Run the full doc-based 4-step benchmark workflow."""
+    """Run benchmark load+validate workflow using generated model artifacts."""
     res = EvalResult()
     benchmark_log = paths.benchmark_log
 
     try:
-        # Step 1: Generate
-        res.generate_out, res.generate_err, res.generate_rc = _step_generate(
-            entry, benchmark_log
-        )
-        if res.generate_rc != 0:
-            return res
-
-        # Parse and log generate metrics
         from ..io.parsing import parse_metrics
-        gen_metrics = parse_metrics(res.generate_out, res.generate_err)
-        get_logger("workflow").info(
-            "Generate metrics extracted",
-            step="generate",
-            variant=entry.variant,
-            internal_ram_kib=gen_metrics.get("internal_ram_kib", ""),
-            external_ram_kib=gen_metrics.get("external_ram_kib", ""),
-            weights_flash_kib=gen_metrics.get("weights_flash_kib", ""),
-            input_buffer_kib=gen_metrics.get("input_buffer_kib", ""),
-            output_buffer_kib=gen_metrics.get("output_buffer_kib", ""),
-        )
 
-        # Step 2: Build & Flash
+        # Step 1: Build & Flash
         res.load_out, res.load_err, res.load_rc = _step_load(entry, benchmark_log)
         if res.load_rc != 0:
             return res
 
         time.sleep(1)
 
-        # Step 3: Validate on device (power measurement).
+        # Step 2: Validate on device (power measurement).
         validate_t0 = time.monotonic()
         begin_validate_capture()
         validate_lines: list = []

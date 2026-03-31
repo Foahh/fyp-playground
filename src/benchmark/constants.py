@@ -60,7 +60,31 @@ CSV_COLUMNS = [
     "pm_avg_idle_mJ",
 ]
 
-BENCHMARK_CSV_COLUMNS = [c for c in CSV_COLUMNS if c != "ap_50"]
+_MEMORY_COLUMNS = [
+    "internal_ram_kib",
+    "external_ram_kib",
+    "weights_flash_kib",
+    "input_buffer_kib",
+    "output_buffer_kib",
+]
+
+BENCHMARK_CSV_COLUMNS = [
+    c for c in CSV_COLUMNS
+    if c not in (["ap_50"] + _MEMORY_COLUMNS)
+]
+
+GENERATE_CSV_COLUMNS = [
+    "host_time_iso",
+    "stedgeai_version",
+    "model_family",
+    "model_variant",
+    "hyperparameters",
+    "dataset",
+    "format",
+    "resolution",
+    *_MEMORY_COLUMNS,
+    "generated_model_dir",
+]
 
 EVAL_CSV_COLUMNS = [
     "host_time_iso",

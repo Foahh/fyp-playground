@@ -4,10 +4,8 @@ import json
 import re
 from pathlib import Path
 
-from ..paths import N6_WORKDIR
 
-
-def parse_metrics(stdout: str, stderr: str) -> dict:
+def parse_metrics(stdout: str, stderr: str, cinfo_path: Path | None = None) -> dict:
     """Extract metrics from stedgeai output and network_c_info.json."""
     metrics = {
         "ap_50": "",
@@ -23,8 +21,7 @@ def parse_metrics(stdout: str, stderr: str) -> dict:
     combined = stdout + "\n" + stderr
 
     # ── Read network_c_info.json for precise memory values ──
-    cinfo_path = N6_WORKDIR / "st_ai_output" / "network_c_info.json"
-    if cinfo_path.exists():
+    if cinfo_path is not None and cinfo_path.exists():
         try:
             with open(cinfo_path, "r") as f:
                 cinfo = json.load(f)

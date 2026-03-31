@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import struct
 import sys
 import threading
@@ -180,7 +181,14 @@ def compute_avg_power_mw(samples: list[dict]) -> Optional[float]:
 class PowerMeasureSession:
     """Reads INA228 protobuf serial for the whole benchmark run; logs to power_measure.csv."""
 
-    _CSV_HEADER = "host_time_iso,timestamp_us,energy_j,duration_us,is_inference,avg_mw\n"
+    _CSV_FIELDS = (
+        "host_time_iso",
+        "timestamp_us",
+        "energy_j",
+        "duration_us",
+        "is_inference",
+        "avg_mw",
+    )
     _HANDSHAKE_REQUEST = b"PM_PING\n"
     _HANDSHAKE_ACK_PREFIX = "PM_ACK"
     _HANDSHAKE_TIMEOUT_S = 2.0
@@ -191,6 +199,7 @@ class PowerMeasureSession:
         self._ser = None
         self.effective_port: Optional[str] = None
         self._csv_fd = None
+        self._csv_writer: Any = None
         self._validate_samples: list[dict] = []
         self._validate_lock = threading.Lock()
         self._capture_validate = False
@@ -252,8 +261,9 @@ class PowerMeasureSession:
         path.parent.mkdir(parents=True, exist_ok=True)
         write_header = not path.exists() or path.stat().st_size == 0
         self._csv_fd = open(path, "a", encoding="utf-8", newline="")
+        self._csv_writer = csv.writer(self._csv_fd, quoting=csv.QUOTE_ALL)
         if write_header:
-            self._csv_fd.write(self._CSV_HEADER)
+            self._csv_writer.writerow(self._CSV_FIELDS)
             self._csv_fd.flush()
 
         self._thread = threading.Thread(target=self._run, name="ina228-power", daemon=True)
@@ -306,14 +316,21 @@ class PowerMeasureSession:
             except Exception as e:
                 _log("error", "Failed to close power CSV", error=str(e))
             self._csv_fd = None
+            self._csv_writer = None
 
     def _write_csv_row(self, sample: dict) -> None:
-        if self._csv_fd is None:
+        if self._csv_writer is None:
             return
         host = datetime.now(timezone.utc).isoformat()
-        self._csv_fd.write(
-            f"{host},{sample['timestamp_us']},{sample['energy_j']},"
-            f"{sample['duration_us']},{int(sample['is_inference'])},{sample['avg_mw']}\n"
+        self._csv_writer.writerow(
+            [
+                host,
+                sample["timestamp_us"],
+                sample["energy_j"],
+                sample["duration_us"],
+                int(sample["is_inference"]),
+                sample["avg_mw"],
+            ]
         )
         self._csv_fd.flush()
 

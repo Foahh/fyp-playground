@@ -32,10 +32,11 @@ SERVICES_DIR = BASE_DIR / "external" / "stm32ai-modelzoo-services" / "object_det
 RESULTS_DIR = get_results_dir()
 
 BENCHMARK_PARSED_DIR = RESULTS_DIR
+GENERATED_NETWORK_DIR = RESULTS_DIR / "network"
+GENERATE_RESULT_CSV_PATH = RESULTS_DIR / "generate_result.csv"
+GENERATE_LOG_PATH = RESULTS_DIR / "generate.log"
 
 STEDGEAI_PATH = get_stedgeai_path()
-
-N6_WORKDIR = RESULTS_DIR / "n6_workdir"
 
 COCO_PERSON_TFS_TEST = str(DATASETS_DIR / "coco_2017_person" / "test")
 COCO_80_TFS_TEST = str(DATASETS_DIR / "coco_2017_80_classes" / "test")

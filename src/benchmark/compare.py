@@ -12,6 +12,7 @@ Datasources (select via ``--left/--right``):
 - **underdrive**: benchmark CSV (default ``results/benchmark_underdrive/benchmark_results.csv``)
 - **nominal**: benchmark CSV (default ``results/benchmark_nominal/benchmark_results.csv``)
 - **overdrive**: benchmark CSV (default ``results/benchmark_overdrive/benchmark_results.csv``)
+- **memory**: generate-model memory CSV (default ``results/generate_result.csv``)
 
 Delta is always defined as ``right − left``.
 
@@ -51,6 +52,7 @@ DEFAULT_PARSED_CSV = RESULTS_DIR / "benchmark_parsed.csv"
 DEFAULT_UNDERDRIVE_CSV = RESULTS_DIR / "benchmark_underdrive" / "benchmark_results.csv"
 DEFAULT_NOMINAL_CSV = RESULTS_DIR / "benchmark_nominal" / "benchmark_results.csv"
 DEFAULT_OVERDRIVE_CSV = RESULTS_DIR / "benchmark_overdrive" / "benchmark_results.csv"
+DEFAULT_MEMORY_CSV = RESULTS_DIR / "generate_result.csv"
 DEFAULT_EVALUATE_CSV = RESULTS_DIR / "evaluation_result.csv"
 
 IDENTITY_COLS = (
@@ -119,7 +121,7 @@ PER_VARIANT_COLUMNS_BENCH_PAIR = (
 )
 
 
-_DATASOURCE_CHOICES = ("readme", "underdrive", "nominal", "overdrive", "evaluate")
+_DATASOURCE_CHOICES = ("readme", "underdrive", "nominal", "overdrive", "memory", "evaluate")
 
 
 def _ds_norm(s: str) -> str:
@@ -823,6 +825,11 @@ def compare_entry(
         "--overdrive",
         help=f"Overdrive benchmark_results.csv (default: {DEFAULT_OVERDRIVE_CSV})",
     ),
+    memory: Path = typer.Option(
+        DEFAULT_MEMORY_CSV,
+        "--memory",
+        help=f"Memory generate_result.csv (default: {DEFAULT_MEMORY_CSV})",
+    ),
     evaluate: Path = typer.Option(
         DEFAULT_EVALUATE_CSV,
         "--evaluate",
@@ -872,7 +879,13 @@ def compare_entry(
     configure_logging()
     typer_install_exception_hook()
 
-    ds_paths = dict(nominal=nominal, underdrive=underdrive, overdrive=overdrive, evaluate=evaluate)
+    ds_paths = dict(
+        nominal=nominal,
+        underdrive=underdrive,
+        overdrive=overdrive,
+        memory=memory,
+        evaluate=evaluate,
+    )
 
     result: ComparisonResult | None = None
     before_filter: int | None = None

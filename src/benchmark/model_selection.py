@@ -13,6 +13,7 @@ From repo root:
 
 from __future__ import annotations
 
+import csv
 import math
 from pathlib import Path
 
@@ -26,12 +27,13 @@ from .paths import RESULTS_DIR
 from .utils.logutil import configure_logging, typer_install_exception_hook
 
 DEFAULT_EVAL_CSV = RESULTS_DIR / "evaluation_result.csv"
+DEFAULT_MEMORY_CSV = RESULTS_DIR / "generate_result.csv"
 
 # ── Hardware constants (STM32N6570-DK) ──────────────────────────────────────
 
 ON_CHIP_ACTIVATION_KIB = 2304  # 512 (cpuRAM2) + 4×448 (npuRAM3–6)
-MAX_LATENCY_MS = 66.67  # 15 FPS ceiling
-MAX_WEIGHTS_FLASH_KIB = 61440  # 60 MiB octoFlash
+MAX_LATENCY_MS = 66  # 15 FPS ceiling
+MAX_WEIGHTS_FLASH_KIB = 10240  # 10 MiB octoFlash (for glass deployment, altough 60 MiB is given on the STM32N6570-DK)
 
 # ── Architecture modernity classification ────────────────────────────────────
 # 1.0 = anchor-free decoupled head
@@ -82,8 +84,8 @@ WEIGHT_RATIONALE: dict[str, str] = {
         "but is secondary."
     ),
     "w_mem": (
-        "On-chip fit reduces latency jitter and power. "
-        "HyperRAM spill penalised implicitly."
+        "Full score when activation budget fits on-chip (no spill); "
+        "HyperRAM spill scored lower by spill amount."
     ),
     "w_modern": (
         "Anchor-free decoupled heads fine-tune more reliably "
@@ -99,13 +101,8 @@ _console = Console(width=_MIN_WIDTH, height=_MIN_HEIGHT)
 
 # ── Data loading ─────────────────────────────────────────────────────────────
 
-_NUMERIC_COLS = [
+_BENCH_NUMERIC_COLS = [
     "resolution",
-    "internal_ram_kib",
-    "external_ram_kib",
-    "weights_flash_kib",
-    "input_buffer_kib",
-    "output_buffer_kib",
     "inference_time_ms",
     "inf_per_sec",
     "ap_50",
@@ -116,6 +113,15 @@ _NUMERIC_COLS = [
     "pm_avg_idle_ms",
     "pm_avg_inf_mJ",
     "pm_avg_idle_mJ",
+]
+
+_MEMORY_NUMERIC_COLS = [
+    "resolution",
+    "internal_ram_kib",
+    "external_ram_kib",
+    "weights_flash_kib",
+    "input_buffer_kib",
+    "output_buffer_kib",
 ]
 
 
@@ -139,7 +145,11 @@ def _load_csv_with_numeric(path: Path, numeric_cols: list[str]) -> pd.DataFrame:
 
 
 def load_benchmark(path: Path) -> pd.DataFrame:
-    return _load_csv_with_numeric(path, _NUMERIC_COLS)
+    return _load_csv_with_numeric(path, _BENCH_NUMERIC_COLS)
+
+
+def load_memory_results(path: Path) -> pd.DataFrame:
+    return _load_csv_with_numeric(path, _MEMORY_NUMERIC_COLS)
 
 
 def load_ap_results(path: Path) -> pd.DataFrame:
@@ -172,6 +182,43 @@ def merge_benchmark_with_ap(
         _console.print(
             f"[yellow]Warning: {n_missing} benchmark row(s) have no matching "
             f"AP result — ap_50 will be NaN.[/yellow]"
+        )
+    return merged
+
+
+def merge_benchmark_with_memory(
+    bench: pd.DataFrame,
+    memory_csv: Path,
+) -> pd.DataFrame:
+    """Join generation-time memory columns into benchmark rows."""
+    mem_cols = [
+        "internal_ram_kib",
+        "external_ram_kib",
+        "weights_flash_kib",
+        "input_buffer_kib",
+        "output_buffer_kib",
+    ]
+    if not memory_csv.is_file():
+        _console.print(
+            f"[yellow]Warning: memory CSV not found: {memory_csv} — "
+            "memory-derived metrics will be NaN.[/yellow]"
+        )
+        for c in mem_cols:
+            bench[c] = float("nan")
+        return bench
+
+    mem = load_memory_results(memory_csv)
+    mem_dedup = mem.drop_duplicates(subset=_EVAL_JOIN_KEY, keep="last")
+    merged = bench.merge(
+        mem_dedup[_EVAL_JOIN_KEY + mem_cols],
+        on=_EVAL_JOIN_KEY,
+        how="left",
+    )
+    n_missing = merged["weights_flash_kib"].isna().sum()
+    if n_missing:
+        _console.print(
+            f"[yellow]Warning: {n_missing} benchmark row(s) have no matching "
+            "memory result — memory-derived metrics will be NaN.[/yellow]"
         )
     return merged
 
@@ -306,14 +353,26 @@ def score_candidates(
     # Latency margin — lower is better
     out["s_lat"] = _minmax_inv(out["inference_time_ms"])
 
-    # Memory footprint — lower is better
+    # Memory: full normalised score when activations fit on-chip (no spill);
+    # spilling models are ranked by spill volume, strictly below on-chip.
+    on_chip = out["estimated_spill_kib"] <= 0
     if option_b:
         s_head = _minmax_inv(out["activations_without_io"])
         spill_denom = 1.0 + out["estimated_spill_kib"]
         s_spill = _minmax(1.0 / spill_denom)
         out["s_mem"] = w_head_frac * s_head + (1 - w_head_frac) * s_spill
+        out.loc[on_chip, "s_mem"] = 1.0
     else:
-        out["s_mem"] = _minmax_inv(out["activations_without_io"])
+        spillers = ~on_chip
+        if on_chip.all():
+            out["s_mem"] = 1.0
+        elif spillers.all():
+            out["s_mem"] = _minmax_inv(out["estimated_spill_kib"])
+        else:
+            out["s_mem"] = 0.0
+            out.loc[on_chip, "s_mem"] = 1.0
+            sub = _minmax_inv(out.loc[spillers, "estimated_spill_kib"])
+            out.loc[spillers, "s_mem"] = sub * (1.0 - 1e-9)
 
     # Architecture modernity (already on 0–1 scale)
     out["s_modern"] = out["arch_modernity"]
@@ -443,8 +502,8 @@ def print_section1(
         show_lines=False,
     )
     table.add_column("Model Variant", no_wrap=True)
-    table.add_column("Fmt", min_width=4)
-    table.add_column("Res", min_width=3)
+    table.add_column("fmt", min_width=4)
+    table.add_column("res", min_width=3)
     table.add_column("act_no_io", min_width=8, justify="right")
     table.add_column("spill", min_width=6, justify="right")
     table.add_column("Flags", min_width=8)
@@ -517,7 +576,12 @@ def print_section2(weights: dict[str, float], option_label: str) -> None:
         ("w_energy", "Energy per inference", "🟡 Primary", "norm(1/pm_avg_inf_mJ)"),
         ("w_eff", "Efficiency curve", "🟡 Primary", "norm(geomean(AP/ms, AP/mJ))"),
         ("w_lat", "Latency margin", "🟢 Secondary", "norm(1/inference_time_ms)"),
-        ("w_mem", "Activation memory", "🟡 Primary", "norm(1/activations_without_io)"),
+        (
+            "w_mem",
+            "Activation memory",
+            "🟡 Primary",
+            "1.0 if no spill else norm(1/estimated_spill_kib)",
+        ),
         ("w_modern", "Arch. modernity", "🟢 Secondary", "anchor_free_score ∈ {0,0.5,1}"),
     ]
     for key, name, tier, metric in criteria:
@@ -543,8 +607,8 @@ def print_section3(scored: pd.DataFrame, weights: dict[str, float]) -> None:
     table = Table(show_header=True, header_style="bold", show_lines=False)
     table.add_column("#", style="bold", min_width=2, justify="right")
     table.add_column("Model Variant", no_wrap=True)
-    table.add_column("Fmt", min_width=4)
-    table.add_column("Res", min_width=3)
+    table.add_column("fmt", min_width=4)
+    table.add_column("res", min_width=3)
     table.add_column("DS", min_width=4)
     for h in ("acc", "nrg", "eff", "lat", "mem"):
         table.add_column(h, min_width=5, justify="right")
@@ -578,6 +642,34 @@ def print_section3(scored: pd.DataFrame, weights: dict[str, float]) -> None:
         )
 
     _console.print(table)
+    _console.print()
+    _console.print("  [bold]Abbreviations[/bold] (table columns)")
+    _abbr_lines: list[tuple[str, str]] = [
+        ("fmt", "Quantisation format (e.g. Int8, W4A8)."),
+        ("res", "Input resolution (px)."),
+        ("DS", "Dataset: Pers = COCO-Person, C80 = COCO-80."),
+        ("acc", "Normalised accuracy subscore (cohort AP@0.5)."),
+        ("nrg", "Normalised energy subscore (lower mJ/infer → higher)."),
+        ("eff", "Normalised efficiency (geom. mean AP/ms & AP/mJ)."),
+        ("lat", "Normalised latency subscore (faster → higher)."),
+        ("mem", "Normalised activation-memory (on-chip vs spill)."),
+        (
+            "mod",
+            "Architecture modernity: 0.0 legacy anchor, 0.5 modern backbone, "
+            "1.0 anchor-free decoupled.",
+        ),
+        ("Δ_mW", "Mean inference minus idle power (pm_avg_delta_mW)."),
+        ("Score", "Weighted composite (see formula above)."),
+        (
+            "Flags",
+            "[ExtRAM] activations exceed on-chip budget; [80only] COCO-80 row.",
+        ),
+    ]
+    col_w = max(len(a) for a, _ in _abbr_lines)
+    for abbr, desc in _abbr_lines:
+        _console.print(
+            f"    [bold]{abbr:<{col_w}}[/bold]  [dim]{desc}[/dim]"
+        )
     _console.print()
 
 
@@ -769,12 +861,14 @@ def run_selection(
     option_b: bool = False,
     output_csv: Path | None = None,
     ap_csv: Path = DEFAULT_EVAL_CSV,
+    memory_csv: Path = DEFAULT_MEMORY_CSV,
 ) -> pd.DataFrame:
     """Run the full model selection pipeline and print the report."""
     w = weights or DEFAULT_WEIGHTS.copy()
     option_label = "B (split memory: head + spill)" if option_b else "A (unified memory)"
 
     df = load_benchmark(csv_path)
+    df = merge_benchmark_with_memory(df, memory_csv)
     df = merge_benchmark_with_ap(df, ap_csv)
     df = add_derived(df)
 
@@ -815,7 +909,12 @@ def run_selection(
             "score",
         ]
         output_csv.parent.mkdir(parents=True, exist_ok=True)
-        scored[out_cols].to_csv(output_csv, index=False, float_format="%.4f")
+        scored[out_cols].to_csv(
+            output_csv,
+            index=False,
+            float_format="%.4f",
+            quoting=csv.QUOTE_ALL,
+        )
         _console.print(f"Scored results written to [bold]{output_csv}[/bold]")
 
     return scored
@@ -845,6 +944,11 @@ def _cli_entry(
         DEFAULT_EVAL_CSV,
         "--eval-csv",
         help="Host-side AP evaluation results CSV",
+    ),
+    memory_csv: Path = typer.Option(
+        DEFAULT_MEMORY_CSV,
+        "--memory-csv",
+        help="Generate-model memory results CSV",
     ),
     option_b: bool = typer.Option(
         False,
@@ -892,7 +996,14 @@ def _cli_entry(
         _err.print(f"[red]Error: CSV not found: {csv}[/red]")
         raise typer.Exit(2)
 
-    run_selection(csv, weights, option_b=option_b, output_csv=output, ap_csv=eval_csv)
+    run_selection(
+        csv,
+        weights,
+        option_b=option_b,
+        output_csv=output,
+        ap_csv=eval_csv,
+        memory_csv=memory_csv,
+    )
 
 
 def selection_main(argv: list[str] | None = None) -> int:
