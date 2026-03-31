@@ -37,7 +37,7 @@ def main(
     no_resume: bool = typer.Option(False, help="Start a fresh run instead of resuming from last checkpoint"),
     device: str | None = typer.Option(None, help="Ultralytics device (e.g. 0, 0,1 for multi-GPU, cpu); default is auto"),
     workers: int = typer.Option(16, min=1, help="Data loader workers; increase on high-core machines"),
-    cache: str = typer.Option("ram", help="Dataset cache mode: none, disk, or ram"),
+    cache: str = typer.Option("disk", help="Dataset cache mode: none, disk, or ram"),
 ):
     if size not in [192, 256, 288, 320]:
         typer.echo(f"Error: size must be one of [192, 256, 288, 320]", err=True)

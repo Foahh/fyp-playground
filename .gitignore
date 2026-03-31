@@ -20,3 +20,5 @@ results/model/tinyissimoyolo_v8_256/weights/best_saved_model/variables
 ai_runner.log
 yolo26n.pt
 *.log
+
+docs/superpowers/
