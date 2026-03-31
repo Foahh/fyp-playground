@@ -7,6 +7,7 @@ results/*
 !results/benchmark_nominal/
 !results/benchmark_overdrive/
 !results/benchmark_parsed.csv
+!results/evaluation_result.csv
 
 !results/model/
 results/model/*
