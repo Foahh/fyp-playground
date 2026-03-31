@@ -19,6 +19,7 @@ from bs4 import BeautifulSoup
 from src.benchmark.constants import CSV_COLUMNS_NO_POWER
 from src.benchmark.core.registry import load_model_registry
 from src.benchmark.paths import BASE_DIR, METRIC_PARSED_CSV_PATH, MODELZOO_DIR
+from src.common.paths import resolve_repo_relative_path
 
 
 def _norm_header(h: str) -> str:
@@ -67,7 +68,7 @@ def _href_path_key(href: str) -> str:
 
 def _registry_model_key(reg: dict) -> str:
     """Key aligned with _href_path_key for files under object_detection/<family>/."""
-    model_path = (BASE_DIR / reg["model"]).resolve()
+    model_path = resolve_repo_relative_path(reg["model"]).resolve()
     fam_dir = (MODELZOO_DIR / reg["family"]).resolve()
     try:
         rel = model_path.relative_to(fam_dir)
@@ -387,7 +388,7 @@ def _hyper_match(reg_hp: str, row_hp: str | None) -> bool:
 def _pick_metrics(
     reg: dict, family_metrics: dict[str, dict]
 ) -> dict[str, str]:
-    model_path = BASE_DIR / reg["model"]
+    model_path = resolve_repo_relative_path(reg["model"])
     basename = model_path.name
     lookup_key = _registry_model_key(reg)
     norm_base = _norm_model_basename(basename)

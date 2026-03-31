@@ -5,7 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..common.paths import get_datasets_dir, get_repo_root, get_stedgeai_path
+from ..common.paths import (
+    get_datasets_dir,
+    get_repo_root,
+    get_results_dir,
+    get_stedgeai_path,
+)
 
 _VALID_BENCHMARK_MODES = frozenset({"underdrive", "nominal", "overdrive"})
 
@@ -24,7 +29,7 @@ BASE_DIR = get_repo_root()
 DATASETS_DIR = get_datasets_dir()
 MODELZOO_DIR = BASE_DIR / "external" / "stm32ai-modelzoo" / "object_detection"
 SERVICES_DIR = BASE_DIR / "external" / "stm32ai-modelzoo-services" / "object_detection"
-RESULTS_DIR = BASE_DIR / "results"
+RESULTS_DIR = get_results_dir()
 
 BENCHMARK_PARSED_DIR = RESULTS_DIR
 

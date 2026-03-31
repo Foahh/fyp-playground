@@ -23,9 +23,9 @@ from pathlib import Path
 
 import typer
 
-ROOT = Path(__file__).resolve().parents[2]
+from src.common.paths import get_results_dir
 
-MODELS = ROOT / "results" / "model"
+MODELS = get_results_dir() / "model"
 
 
 def _resolve_checkpoint(img_size: int, override: Path | None) -> Path:
@@ -114,7 +114,10 @@ app = typer.Typer()
 @app.command()
 def main(
     size: int = typer.Option(..., help="Must match training resolution"),
-    checkpoint: Path | None = typer.Option(None, help="Path to .pt checkpoint (default: auto-detect best.pt from results/model/)"),
+    checkpoint: Path | None = typer.Option(
+        None,
+        help="Path to .pt checkpoint (default: best.pt under $RESULTS_DIR/model/ or <repo>/results/model/)",
+    ),
     no_eval: bool = typer.Option(False, help="Skip evaluation after quantization"),
 ):
     if size not in [192, 256, 288, 320]:

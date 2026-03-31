@@ -1,7 +1,7 @@
 """
 Train TinyissimoYOLO v8 on COCO Person (single class).
 
-Run from the repository root (outputs under results/model/):
+Run from the repository root (outputs under $RESULTS_DIR/model/ or results/model/):
     python src/ml/run_train_tinyissimo_coco_person.py --size 192
     python src/ml/run_train_tinyissimo_coco_person.py --size 192 --profile paper
     python src/ml/run_train_tinyissimo_coco_person.py --size 192 --profile powerful
@@ -18,12 +18,13 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 
+from src.common.paths import get_results_dir
 from src.dataset.dataset_common import materialize_coco_data_yaml
 from ultralytics import YOLO
 
 TINY = ROOT / "external" / "TinyissimoYOLO"
 MODEL_YAML = str(TINY / "ultralytics/cfg/models/tinyissimo/tinyissimo-v8.yaml")
-PROJECT = str(ROOT / "results" / "model")
+PROJECT = str(get_results_dir() / "model")
 
 
 def run_name_for(size: int, profile: str) -> str:

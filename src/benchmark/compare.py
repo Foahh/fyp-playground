@@ -43,11 +43,9 @@ from rich.rule import Rule
 from rich.table import Table
 
 from .constants import CSV_COLUMNS, CSV_COLUMNS_NO_POWER
-from .paths import BASE_DIR
+from .paths import RESULTS_DIR
 from .utils.logutil import configure_logging, typer_install_exception_hook
 
-
-RESULTS_DIR = BASE_DIR / "results"
 DEFAULT_PARSED_CSV = RESULTS_DIR / "benchmark_parsed.csv"
 DEFAULT_UNDERDRIVE_CSV = RESULTS_DIR / "benchmark_underdrive" / "benchmark_results.csv"
 DEFAULT_OVERDRIVE_CSV = RESULTS_DIR / "benchmark_overdrive" / "benchmark_results.csv"

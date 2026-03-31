@@ -3,8 +3,8 @@
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from ...common.paths import resolve_repo_relative_path
 from .registry import load_model_registry
-from ..paths import BASE_DIR
 
 
 @dataclass
@@ -34,8 +34,8 @@ def load_models() -> list[ModelEntry]:
     """Build ModelEntry list from the model registry."""
     entries: list[ModelEntry] = []
     for reg in load_model_registry():
-        model_path = BASE_DIR / reg["model"]
-        config_path = BASE_DIR / reg["config"]
+        model_path = resolve_repo_relative_path(reg["model"])
+        config_path = resolve_repo_relative_path(reg["config"])
 
         if not config_path.exists():
             print(f"[WARN] Config not found, skipping: {config_path}")

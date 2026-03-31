@@ -16,6 +16,31 @@ def get_datasets_dir() -> Path:
     return Path(os.environ.get("DATASETS_DIR", str(root / "datasets"))).expanduser()
 
 
+def get_results_dir() -> Path:
+    """Return the results root directory, respecting RESULTS_DIR env var."""
+    root = get_repo_root()
+    return Path(os.environ.get("RESULTS_DIR", str(root / "results"))).expanduser()
+
+
+def resolve_repo_relative_path(rel: str | Path) -> Path:
+    """Resolve paths from configs (e.g. model registry).
+
+    Relative paths under ``results/`` are rooted at ``get_results_dir()`` so outputs
+    can live on fast local storage (e.g. on HPC) while the repo stays on shared FS.
+    Other relative paths are rooted at the repository. Absolute paths are returned
+    expanded only.
+    """
+    p = Path(rel)
+    if p.is_absolute():
+        return p.expanduser()
+    norm = str(p).replace("\\", "/")
+    if norm == "results" or norm.startswith("results/"):
+        suffix = norm[8:] if norm.startswith("results/") else ""
+        base = get_results_dir()
+        return (base / suffix) if suffix else base
+    return get_repo_root() / p
+
+
 def get_stedgeai_path() -> str:
     """Return platform-specific stedgeai executable path."""
     base = os.environ.get("STEDGEAI_CORE_DIR", "")
