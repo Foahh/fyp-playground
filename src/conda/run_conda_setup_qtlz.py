@@ -15,7 +15,9 @@ from pathlib import Path
 PATCH_SCRIPT = Path(__file__).resolve().parent / "run_patch_ultralytics_per_channel_quant.py"
 
 from src.conda.conda_setup_common import (
+    conda_activate_hint,
     conda_run,
+    conda_env_spec_args,
     ensure_conda_env,
     main_guard,
     pip_install,
@@ -28,7 +30,7 @@ PYTHON_VERSION = os.environ.get("FYP_QTLZ_PYTHON", "3.12")
 def export_conda_env_yaml(env_name: str, out_path: Path) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     p = subprocess.run(
-        ["conda", "env", "export", "-n", env_name],
+        ["conda", "env", "export", *conda_env_spec_args(env_name)],
         check=True,
         capture_output=True,
         text=True,
@@ -56,7 +58,7 @@ def main() -> None:
     export_conda_env_yaml(QTLZ_ENV_NAME, root / "results" / "conda_envs" / f"{QTLZ_ENV_NAME}.yml")
 
     print("Done.")
-    print(f"- QTLZ env: conda activate {QTLZ_ENV_NAME}")
+    print(f"- QTLZ env: {conda_activate_hint(QTLZ_ENV_NAME)}")
     conda_run(
         QTLZ_ENV_NAME,
         "python",

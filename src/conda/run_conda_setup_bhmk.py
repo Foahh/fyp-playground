@@ -12,6 +12,7 @@ import sys
 from pathlib import Path
 
 from src.conda.conda_setup_common import (
+    conda_activate_hint,
     conda_prefix,
     conda_run,
     ensure_conda_env,
@@ -52,7 +53,7 @@ def main() -> None:
     pip_install(STZOO_ENV_NAME, "-r", str(benchmark_extra_req))
 
     print("Done.")
-    print(f"- Benchmark env: conda activate {STZOO_ENV_NAME}")
+    print(f"- Benchmark env: {conda_activate_hint(STZOO_ENV_NAME)}")
     conda_run(
         STZOO_ENV_NAME,
         "python",

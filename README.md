@@ -108,27 +108,15 @@ python project.py setup-env-bhmk
 python project.py setup-env-qtlz
 ```
 
-#### Install conda envs under `/local` (temporary / fast scratch)
+After that you can use `conda activate fyp-ml` / `fyp-bhmk` / `fyp-qtlz` as usual (conda will find them via `CONDA_ENVS_PATH`).
 
-If you want the *named* envs (e.g. `fyp-ml`) to be created under `/local` instead of your default conda envs directory, set `CONDA_ENVS_PATH` before running the setup commands. Optionally also set `CONDA_PKGS_DIRS` so downloaded packages/caches live under `/local` too.
+On HPC you may prefer **prefix-based** environments in a user-owned location (e.g. node-local storage under `/local`). Enable this by setting:
 
 ```sh
-mkdir -p "/local/$USER/conda/envs" "/local/$USER/conda/pkgs"
-
-CONDA_ENVS_PATH="/local/$USER/conda/envs" \
-CONDA_PKGS_DIRS="/local/$USER/conda/pkgs" \
-python project.py setup-env-ml
-
-CONDA_ENVS_PATH="/local/$USER/conda/envs" \
-CONDA_PKGS_DIRS="/local/$USER/conda/pkgs" \
-python project.py setup-env-bhmk
-
-CONDA_ENVS_PATH="/local/$USER/conda/envs" \
-CONDA_PKGS_DIRS="/local/$USER/conda/pkgs" \
-python project.py setup-env-qtlz
+export FYP_CONDA_PREFIX_BASE=/local/$USER/fyp-conda-envs
 ```
 
-After that you can use `conda activate fyp-ml` / `fyp-bhmk` / `fyp-qtlz` as usual (conda will find them via `CONDA_ENVS_PATH`).
+In prefix mode, activate with the full path, e.g. `conda activate /local/$USER/fyp-conda-envs/fyp-ml`.
 
 ### Prepare datasets
 

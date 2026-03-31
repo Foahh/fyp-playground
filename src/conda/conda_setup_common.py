@@ -23,11 +23,45 @@ def conda_cli_available() -> bool:
     """True if ``mamba`` or ``conda`` is on ``PATH``."""
     return which(_conda_exe()) is not None
 
+
+def conda_prefix_base() -> Path | None:
+    """Base directory for prefix-based envs (``FYP_CONDA_PREFIX_BASE``).
+
+    If unset, prefix-based envs are disabled and named envs (``-n``) are used.
+    """
+    raw = os.environ.get("FYP_CONDA_PREFIX_BASE")
+    if raw:
+        return Path(raw).expanduser()
+    return None
+
+
+def conda_env_prefix(env_name: str) -> Path | None:
+    base = conda_prefix_base()
+    if base is None:
+        return None
+    return base / env_name
+
+
+def conda_env_spec_args(env_name: str) -> list[str]:
+    """Return ``['-p', prefix]`` (preferred) or ``['-n', name]``."""
+    prefix = conda_env_prefix(env_name)
+    if prefix is not None:
+        return ["-p", str(prefix)]
+    return ["-n", env_name]
+
+
+def conda_activate_hint(env_name: str) -> str:
+    """Shell snippet to activate the target env (name or prefix)."""
+    prefix = conda_env_prefix(env_name)
+    return f"conda activate {prefix}" if prefix is not None else f"conda activate {env_name}"
+
+
 def _conda_run_cmd(env: str, *args: str) -> list[str]:
     exe = _conda_exe()
+    env_args = conda_env_spec_args(env)
     if exe == "conda":
-        return ["conda", "run", "-n", env, "--no-capture-output", *args]
-    return ["mamba", "run", "-n", env, *args]
+        return ["conda", "run", *env_args, "--no-capture-output", *args]
+    return ["mamba", "run", *env_args, *args]
 
 
 def conda_run_argv(env: str, argv: list[str]) -> list[str]:
@@ -98,8 +132,9 @@ def run(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
 
 def conda_env_exists(name: str) -> bool:
     try:
+        env_args = conda_env_spec_args(name)
         subprocess.run(
-            [_conda_exe(), "run", "-n", name, "python", "-c", "import sys"],
+            [_conda_exe(), "run", *env_args, "python", "-c", "import sys"],
             check=True,
             capture_output=True,
         )
@@ -115,7 +150,8 @@ def conda_create(
     channels: tuple[str, ...] = (),
     strict_channel_priority: bool = True,
 ) -> None:
-    cmd = [_conda_exe(), "create", "-n", name, f"python={python_spec}", "-y"]
+    env_args = conda_env_spec_args(name)
+    cmd = [_conda_exe(), "create", *env_args, f"python={python_spec}", "-y"]
     if channels:
         cmd.append("--override-channels")
         for c in channels:
@@ -131,7 +167,8 @@ def conda_install(
     channels: tuple[str, ...] = (),
     strict_channel_priority: bool = True,
 ) -> None:
-    cmd = [_conda_exe(), "install", "-n", env, "-y"]
+    env_args = conda_env_spec_args(env)
+    cmd = [_conda_exe(), "install", *env_args, "-y"]
     if channels:
         cmd.append("--override-channels")
         for c in channels:
@@ -147,12 +184,14 @@ def conda_run(env: str, *args: str) -> None:
 
 
 def conda_prefix(env: str) -> str:
+    prefix = conda_env_prefix(env)
+    if prefix is not None:
+        return str(prefix)
     p = subprocess.run(
         [
             _conda_exe(),
             "run",
-            "-n",
-            env,
+            *conda_env_spec_args(env),
             "python",
             "-c",
             "import os; print(os.environ['CONDA_PREFIX'])",
@@ -170,9 +209,14 @@ def pip_install(env: str, *pip_args: str) -> None:
 
 def ensure_conda_env(name: str, python_spec: str, label: str) -> None:
     if conda_env_exists(name):
-        print(f"Using existing conda env: {name}")
+        print(f"Using existing conda env: {name} ({conda_prefix(name)})")
     else:
-        print(f"Creating conda env: {name} ({label})")
+        prefix = conda_env_prefix(name)
+        if prefix is not None:
+            prefix.parent.mkdir(parents=True, exist_ok=True)
+            print(f"Creating conda env: {name} ({label}) at {prefix}")
+        else:
+            print(f"Creating conda env: {name} ({label})")
         # Create the base env with defaults; keep it minimal to avoid long solves.
         conda_create(name, python_spec)
 

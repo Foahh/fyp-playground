@@ -15,6 +15,7 @@ from pathlib import Path
 PATCH_SCRIPT = Path(__file__).resolve().parent / "run_patch_ultralytics_per_channel_quant.py"
 
 from src.conda.conda_setup_common import (
+    conda_activate_hint,
     conda_install,
     conda_run,
     ensure_conda_env,
@@ -57,7 +58,7 @@ def main() -> None:
     conda_run(YOLO_ENV_NAME, "python", str(PATCH_SCRIPT.resolve()))
 
     print("Done.")
-    print(f"- ML env: conda activate {YOLO_ENV_NAME}")
+    print(f"- ML env: {conda_activate_hint(YOLO_ENV_NAME)}")
     conda_run(
         YOLO_ENV_NAME,
         "python",
