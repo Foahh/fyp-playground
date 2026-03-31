@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Download and prepare finetune datasets for hand / hazardous-tool detection.
 
-Only tools that can cause hand injury (cutters, grinders, knives, saws, etc.)
-are kept.  All hazardous-tool labels are remapped to a single class 0 = "tool".
+Narrow hazard definition: sharp contact / cutting (incl. snips, hand planes),
+thermal burns (soldering iron), and staple guns — not crush-first tools (hammers,
+wrenches, clamps, etc.).  All kept tool labels are remapped to class 0 = "tool".
 
 Datasets
 --------
@@ -23,6 +24,7 @@ python src/dataset/run_download_finetune_dataset.py                      # all d
 python src/dataset/run_download_finetune_dataset.py --dataset ego2hands    # single dataset
 python src/dataset/run_download_finetune_dataset.py --skip-download        # convert only (pre-downloaded)
 python src/dataset/run_download_finetune_dataset.py --wget --no-check-certificate
+python src/dataset/run_download_finetune_dataset.py --clear   # replace existing fyp_merged/
 """
 
 from __future__ import annotations
@@ -30,6 +32,7 @@ from __future__ import annotations
 import json
 import os
 import random
+import shutil
 import subprocess
 import tarfile
 import xml.etree.ElementTree as ET
@@ -84,11 +87,13 @@ ZENODO_HAZARD_IDS: set[int] = {
     _ZENODO_ALL_CLASSES.index(n)
     for n in ("cutter", "drill", "grinder", "knife", "saw", "tacker")
 }
+ZENODO_HAZARD_NAMES: set[str] = {_ZENODO_ALL_CLASSES[i] for i in ZENODO_HAZARD_IDS}
 
 HAZARD_KEYWORDS: set[str] = {
     "axe", "blade", "chisel", "cleaver", "cutter", "drill",
-    "grinder", "hatchet", "knife", "machete", "plier", "saw",
-    "scissor", "scythe", "shear", "sickle", "tacker",
+    "grinder", "hatchet", "knife", "machete", "plier", "plane", "saw",
+    "scissor", "scythe", "shear", "sickle", "snip", "solder", "staple_gun",
+    "tacker",
 }
 
 VAL_RATIO = 0.2
@@ -358,18 +363,90 @@ def download_construction_tools(
             marker.touch()
 
 
-def _filter_zenodo_labels(label_path: Path) -> list[list[float]] | None:
-    """Read a Zenodo YOLO label file, keep only hazardous classes, remap to 0."""
+def _normalise_zenodo_class_name(raw_name: str) -> str:
+    """Normalise Zenodo class names (e.g. 'drill_test' -> 'drill')."""
+    name = raw_name.strip().lower()
+    for suffix in ("_train", "_test", "_val", "_valid"):
+        if name.endswith(suffix):
+            return name[: -len(suffix)]
+    return name
+
+
+def _safe_float(value: str) -> float | None:
+    try:
+        return float(value)
+    except ValueError:
+        return None
+
+
+def _xywh_to_yolo_box(
+    x: float, y: float, w: float, h: float, img_w: int, img_h: int
+) -> list[float] | None:
+    """Convert absolute XYWH (top-left anchored) to clipped YOLO XYWH."""
+    if w <= 0 or h <= 0 or img_w <= 0 or img_h <= 0:
+        return None
+
+    x1 = max(0.0, min(x, float(img_w)))
+    y1 = max(0.0, min(y, float(img_h)))
+    x2 = max(0.0, min(x + w, float(img_w)))
+    y2 = max(0.0, min(y + h, float(img_h)))
+    if x2 <= x1 or y2 <= y1:
+        return None
+
+    bw = (x2 - x1) / img_w
+    bh = (y2 - y1) / img_h
+    cx = ((x1 + x2) / 2.0) / img_w
+    cy = ((y1 + y2) / 2.0) / img_h
+    return [0.0, cx, cy, bw, bh]
+
+
+def _filter_zenodo_labels(
+    label_path: Path, *, img_size: tuple[int, int] | None = None
+) -> list[list[float]] | None:
+    """Read Zenodo labels, keep hazardous classes only, remapped to class 0.
+
+    Supports both:
+    - YOLO txt format: ``cls cx cy w h`` (already normalised), and
+    - Zenodo CSV-ish format: ``x,y,w,h,class`` or ``class,x,y,w,h``.
+    """
     boxes: list[list[float]] = []
     with label_path.open(encoding="utf-8") as f:
         for line in f:
-            parts = line.strip().split()
-            if len(parts) < 5:
+            stripped = line.strip()
+            if not stripped:
                 continue
-            cls_id = int(parts[0])
-            if cls_id not in ZENODO_HAZARD_IDS:
+
+            # YOLO-style labels: "cls cx cy w h"
+            parts = stripped.split()
+            if len(parts) >= 5:
+                try:
+                    cls_id = int(parts[0])
+                except ValueError:
+                    cls_id = -1
+                if cls_id in ZENODO_HAZARD_IDS:
+                    boxes.append([0.0] + [float(v) for v in parts[1:5]])
+                    continue
+
+            # Zenodo CSV-like labels: "x,y,w,h,class" or "class,x,y,w,h"
+            csv_parts = [p.strip() for p in stripped.split(",") if p.strip()]
+            if len(csv_parts) != 5 or img_size is None:
                 continue
-            boxes.append([0.0] + [float(v) for v in parts[1:5]])
+
+            if _safe_float(csv_parts[0]) is None:
+                cls_name = _normalise_zenodo_class_name(csv_parts[0])
+                coords = [_safe_float(v) for v in csv_parts[1:5]]
+            else:
+                cls_name = _normalise_zenodo_class_name(csv_parts[-1])
+                coords = [_safe_float(v) for v in csv_parts[0:4]]
+
+            if cls_name not in ZENODO_HAZARD_NAMES or any(v is None for v in coords):
+                continue
+
+            x, y, w, h = coords  # type: ignore[misc]
+            img_w, img_h = img_size
+            box = _xywh_to_yolo_box(x, y, w, h, img_w, img_h)
+            if box is not None:
+                boxes.append(box)
     return boxes if boxes else None
 
 
@@ -383,7 +460,8 @@ def convert_construction_tools() -> None:
         label_path = img_path.with_suffix(".txt")
         if not label_path.exists():
             continue
-        boxes = _filter_zenodo_labels(label_path)
+        with Image.open(img_path) as img:
+            boxes = _filter_zenodo_labels(label_path, img_size=img.size)
         if boxes is None:
             continue
         all_items.append((img_path, boxes))
@@ -743,6 +821,21 @@ def _remap_label(src: Path, dst: Path, cls_map: dict[int, int]) -> bool:
 TEST_RATIO = 0.1
 
 
+def _prepare_merged_dir(*, clear: bool) -> None:
+    """If ``fyp_merged`` exists, exit with an error unless *clear* is set; then remove it."""
+    if not MERGED_DIR.exists():
+        return
+    if not clear:
+        typer.echo(
+            f"Error: merged output already exists: {MERGED_DIR}\n"
+            "  Re-run with --clear to delete it and rebuild.",
+            err=True,
+        )
+        raise typer.Exit(1)
+    shutil.rmtree(MERGED_DIR)
+    print(f"  Removed existing {MERGED_DIR}")
+
+
 def _populate_split(
     split: str,
     items: list[tuple[Path, Path, str, dict[int, int]]],
@@ -818,6 +911,11 @@ def main(
     no_check_certificate: bool = typer.Option(False, help="Disable server certificate verification"),
     skip_download: bool = typer.Option(False, help="Skip download step; only run conversion on pre-downloaded data"),
     skip_merge: bool = typer.Option(False, help="Skip the final merge into fyp_merged/"),
+    clear: bool = typer.Option(
+        False,
+        "--clear",
+        help="Delete existing fyp_merged/ before merge (required if that folder already exists)",
+    ),
 ) -> int:
     if dataset not in ["ego2hands", "construction_tools", "metu_alet", "all"]:
         typer.echo(f"Error: dataset must be one of [ego2hands, construction_tools, metu_alet, all]", err=True)
@@ -849,6 +947,7 @@ def main(
 
     if not skip_merge:
         print("\n=== Merging into fyp_merged/ ===")
+        _prepare_merged_dir(clear=clear)
         merge_for_finetune()
 
     print("\nDone.")
