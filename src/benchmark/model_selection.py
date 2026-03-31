@@ -20,6 +20,8 @@ from pathlib import Path
 import pandas as pd
 import typer
 from rich.console import Console
+from rich.markup import escape
+from rich.padding import Padding
 from rich.rule import Rule
 from rich.table import Table
 
@@ -45,11 +47,10 @@ SELECTION_EXCLUDED_FAMILY_PREFIXES: tuple[str, ...] = ("ssdlite_",)
 # ── Default scoring weights ──────────────────────────────────────
 
 DEFAULT_WEIGHTS: dict[str, float] = {
-    "w_acc": 0.375,
-    "w_energy": 0.125,
-    "w_eff": 0.1875,
-    "w_lat": 0.0625,
-    "w_mem": 0.25,
+    "w_acc": 0.50,
+    "w_energy": 0.20,
+    "w_eff": 0.20,
+    "w_lat": 0.10,
 }
 
 WEIGHT_RATIONALE: dict[str, str] = {
@@ -68,10 +69,6 @@ WEIGHT_RATIONALE: dict[str, str] = {
     "w_lat": (
         "Beyond 15 FPS gate, additional latency margin is a minor "
         "differentiator."
-    ),
-    "w_mem": (
-        "Full score when activations fit NPU on-chip tiles only; "
-        "pressure beyond that scored lower; flag [ExtRAM] only past full on-chip."
     ),
 }
 
@@ -210,7 +207,7 @@ def add_derived(df: pd.DataFrame) -> pd.DataFrame:
     total_act = out["internal_ram_kib"] + out["external_ram_kib"]
     io_buf = out["input_buffer_kib"] + out["output_buffer_kib"]
     out["activations_without_io"] = total_act - io_buf
-    out["estimated_spill_kib"] = (
+    out["npu_spill_kib"] = (
         out["activations_without_io"] - NPU_RAM_ACTIVATION_KIB
     ).clip(lower=0)
 
@@ -246,28 +243,6 @@ def gate_constraints(
     return df[mask].copy(), df[~mask].copy()
 
 
-# ── Dataset deduplication ────────────────────────────────────────────────────
-
-_DEDUP_KEY = ["model_family", "hyperparameters", "format", "resolution"]
-
-
-def deduplicate_datasets(
-    df: pd.DataFrame,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Prefer COCO-Person over COCO-80. Returns (kept, superseded)."""
-    person_configs: set[tuple] = set()
-    for _, row in df[df["dataset"] == "COCO-Person"].iterrows():
-        person_configs.add(tuple(row[c] for c in _DEDUP_KEY))
-
-    superseded_mask = pd.Series(False, index=df.index)
-    for idx, row in df.iterrows():
-        if row["dataset"] == "COCO-80":
-            if tuple(row[c] for c in _DEDUP_KEY) in person_configs:
-                superseded_mask.at[idx] = True
-
-    return df[~superseded_mask].copy(), df[superseded_mask].copy()
-
-
 # ── Normalisation helpers ────────────────────────────────────────────────────
 
 
@@ -294,7 +269,7 @@ def score_candidates(
     """Compute composite scores. Returns df sorted descending by score."""
     out = df.copy()
 
-    # Accuracy — within-cohort normalisation (Issue 1)
+    # Accuracy — normalised within each dataset cohort
     out["s_acc"] = 0.0
     for cohort in out["dataset"].unique():
         mask = out["dataset"] == cohort
@@ -335,27 +310,12 @@ def score_candidates(
     # Latency margin — lower is better
     out["s_lat"] = _minmax_inv(out["inference_time_ms"])
 
-    # Memory: full score when activations fit NPU tiles only; beyond that, rank by
-    # estimated_spill_kib (pressure including cpuRAM2 / external).
-    on_chip = out["estimated_spill_kib"] <= 0
-    spillers = ~on_chip
-    if on_chip.all():
-        out["s_mem"] = 1.0
-    elif spillers.all():
-        out["s_mem"] = _minmax_inv(out["estimated_spill_kib"])
-    else:
-        out["s_mem"] = 0.0
-        out.loc[on_chip, "s_mem"] = 1.0
-        sub = _minmax_inv(out.loc[spillers, "estimated_spill_kib"])
-        out.loc[spillers, "s_mem"] = sub * (1.0 - 1e-9)
-
-    # Composite
+    # Composite (activation placement flags — see _memory_flags)
     out["score"] = (
         weights["w_acc"] * out["s_acc"]
         + weights["w_energy"] * out["s_energy"]
         + weights["w_eff"] * out["s_eff"]
         + weights["w_lat"] * out["s_lat"]
-        + weights["w_mem"] * out["s_mem"]
     )
 
     return out.sort_values("score", ascending=False).reset_index(drop=True)
@@ -375,16 +335,13 @@ def aggregate_families(scored: pd.DataFrame) -> pd.DataFrame:
     best_idx = scored.groupby(_FAMILY_KEY)["score"].idxmax()
     families = scored.loc[best_idx].copy()
 
-    for idx in families.index:
-        fam = families.loc[idx, "model_family"]
-        hyp = families.loc[idx, "hyperparameters"]
-        group = scored[
-            (scored["model_family"] == fam) & (scored["hyperparameters"] == hyp)
-        ]
-        families.loc[idx, "n_variants"] = len(group)
-        families.loc[idx, "res_min"] = group["resolution"].min()
-        families.loc[idx, "res_max"] = group["resolution"].max()
-        families.loc[idx, "ap_max"] = group["ap_50"].max()
+    agg = scored.groupby(_FAMILY_KEY).agg(
+        n_variants=("score", "size"),
+        res_min=("resolution", "min"),
+        res_max=("resolution", "max"),
+        ap_max=("ap_50", "max"),
+    )
+    families = families.set_index(_FAMILY_KEY).join(agg).reset_index()
 
     for col in ("n_variants", "res_min", "res_max"):
         families[col] = families[col].astype(int)
@@ -395,15 +352,22 @@ def aggregate_families(scored: pd.DataFrame) -> pd.DataFrame:
 # ── Flags helper ─────────────────────────────────────────────────────────────
 
 
+def _memory_flags(row: pd.Series) -> str:
+    """Placement tier: NPU-only (no tag), cpuRAM2 spill, or external RAM."""
+    act = row.get("activations_without_io", float("nan"))
+    spill = row.get("npu_spill_kib", float("nan"))
+    if pd.isna(act) or pd.isna(spill):
+        return ""
+    budget_npu_cpu = NPU_RAM_ACTIVATION_KIB + CPU_RAM_ACTIVATION_KIB
+    if act > budget_npu_cpu:
+        return "[ExtRAM]"
+    if spill > 0:
+        return "[cpuRAM]"
+    return ""
+
+
 def _flags(row: pd.Series) -> str:
-    parts: list[str] = []
-    if row.get("activations_without_io", 0) > (
-        NPU_RAM_ACTIVATION_KIB + CPU_RAM_ACTIVATION_KIB
-    ):
-        parts.append("[ExtRAM]")
-    if row["dataset"] == "COCO-80":
-        parts.append("[80only]")
-    return " ".join(parts)
+    return _memory_flags(row)
 
 
 # ── Report printing ──────────────────────────────────────────────────────────
@@ -415,8 +379,48 @@ def _f(v: float, fmt: str = ".1f") -> str:
     return f"{v:{fmt}}"
 
 
-def print_section0(df: pd.DataFrame) -> None:
+def _print_column_abbreviations_legend() -> None:
+    """Short column header glossary for tables printed in this report."""
     _console.print()
+    _console.print("  [bold]Column abbreviations[/bold]")
+    legend_width = min(92, max(72, (_console.width or 92) - 4))
+    legend = Table(
+        box=None,
+        show_header=True,
+        header_style="bold dim",
+        pad_edge=False,
+        expand=False,
+        width=legend_width,
+    )
+    legend.add_column("Abbr", style="cyan", no_wrap=True, width=14)
+    legend.add_column("Meaning", overflow="fold")
+    legend.add_row("AP", "Primary accuracy: AP@50 ([bold]ap_50[/bold]).")
+    legend.add_row("ms", "Inference time ([bold]inference_time_ms[/bold]).")
+    legend.add_row("mJ", "Energy per inference ([bold]pm_avg_inf_mJ[/bold]).")
+    legend.add_row(
+        "Res Range",
+        "Min–max input resolution (px) across variants in the family.",
+    )
+    legend.add_row("fmt", "Quantisation format (W4A8 excluded from the scoring pool).")
+    legend.add_row("res", "Input resolution in pixels.")
+    legend.add_row(
+        "act_no_io",
+        "Activation KiB without input/output buffers (Issues 4–5).",
+    )
+    legend.add_row(
+        "spill",
+        "Spill KiB past NPU activation budget ([bold]npu_spill_kib[/bold]).",
+    )
+    legend.add_row(
+        "Disposition",
+        "Scored or Excluded (gate failure reasons in parentheses).",
+    )
+    _console.print(Padding(legend, (0, 0, 0, 2)))
+    _console.print()
+
+
+def print_section0(df: pd.DataFrame) -> None:
+    _print_column_abbreviations_legend()
     _console.print(Rule("[bold]Section 0 — Assumptions & Substituted Values[/bold]"))
     _console.print()
 
@@ -436,54 +440,47 @@ def print_section1(
     all_df: pd.DataFrame,
     scored: pd.DataFrame,
     excluded: pd.DataFrame,
-    superseded: pd.DataFrame,
 ) -> None:
     _console.print(Rule("[bold]Section 1 — Data Cleaning & Anomaly Report[/bold]"))
     _console.print()
 
     issues = [
         (
-            "Issue 1 — Dataset Incomparability",
-            "COCO-Person AP used as primary. COCO-80 rows with Person counterparts "
-            "marked 'Superseded'. Accuracy normalised within each cohort separately.",
-        ),
-        (
-            "Issue 2 — Fine-Tuning & Safety-Critical Context",
+            "Issue 1 — Fine-Tuning & Safety-Critical Context",
             "Accuracy is the highest-weighted criterion — pre-trained AP signals "
             "feature-extraction capacity critical for fine-tuning to small-object "
             "tasks (hand/tool detection). Efficiency normalised within resolution "
             "tiers to avoid systematic low-resolution bias.",
         ),
         (
-            "Issue 3 — Family-Level Selection",
+            "Issue 2 — Family-Level Selection",
             "All passing variants scored independently, then aggregated per "
             "(model_family, hyperparameters). Each family represented by its "
             "best-scoring variant. Optional --min-size gate excludes resolutions "
             "too low for small-object detection before aggregation.",
         ),
         (
-            "Issue 4 — Quantisation Format Selection",
+            "Issue 3 — Quantisation Format Selection",
             "W4A8 variants are excluded from the scoring pool. Remaining formats "
             "(e.g. Int8) are ranked on the composite score.",
         ),
         (
-            "Issue 5 — HyperRAM Spillover",
-            "activations_without_io and estimated_spill_kib computed for every row; "
-            "estimated_spill_kib counts KiB past NPU_RAM_ACTIVATION_KIB (penalty starts "
-            "when cpuRAM2 is needed). [ExtRAM] when past NPU + CPU on-chip SRAM. "
-            "Memory score + implicit latency/energy cost.",
+            "Issue 4 — Buffer Placement Correction",
+            "activations_without_io = (internal + external) − (input_buf + output_buf). "
+            "Drives placement flags. Models with large input buffers benefit most "
+            "from firmware PSRAM placement.",
         ),
         (
-            "Issue 6 — Buffer Placement Correction",
-            "activations_without_io = (internal + external) − (input_buf + output_buf). "
-            "Used for memory scoring. Models with large input buffers benefit most "
-            "from firmware PSRAM placement.",
+            "Issue 5 — HyperRAM Spillover",
+            "activations_without_io and npu_spill_kib computed for every row;\n"
+            "    [cpuRAM] when npu_spill_kib > 0 (activations spill past NPU budget into cpuRAM2);\n"
+            f"    [extRAM] when activations exceed all internal RAM (> {NPU_RAM_ACTIVATION_KIB + CPU_RAM_ACTIVATION_KIB} KiB).",
         ),
     ]
     for title, desc in issues:
         _console.print(f"  [bold]{title}[/bold]")
-        _console.print(f"    {desc}")
-    _console.print()
+        _console.print(f"    {escape(desc)}")
+        _console.print()
 
     table = Table(
         title="Disposition Table",
@@ -500,27 +497,19 @@ def print_section1(
     table.add_column("Disposition", no_wrap=True)
 
     def _disp_row(row: pd.Series, disposition: str) -> None:
-        flags: list[str] = []
-        if row.get("activations_without_io", 0) > (
-            NPU_RAM_ACTIVATION_KIB + CPU_RAM_ACTIVATION_KIB
-        ):
-            flags.append("[ExtRAM]")
-        if disposition == "Superseded":
-            flags.append("[COCO-80]")
+        flag_str = _memory_flags(row)
         table.add_row(
             str(row["model_variant"]),
             str(row["format"]),
             str(int(row["resolution"])),
             _f(row["activations_without_io"]),
-            _f(row["estimated_spill_kib"]),
-            " ".join(flags),
+            _f(row["npu_spill_kib"]),
+            escape(flag_str) if flag_str else "",
             disposition,
         )
 
     for _, row in scored.iterrows():
         _disp_row(row, "Scored")
-    for _, row in superseded.iterrows():
-        _disp_row(row, "Superseded")
     for _, row in excluded.iterrows():
         reasons: list[str] = []
         if row["inference_time_ms"] > MAX_LATENCY_MS:
@@ -533,7 +522,7 @@ def print_section1(
     _console.print()
     _console.print(
         f"  Total rows: {len(all_df)} | Scored: {len(scored)} | "
-        f"Superseded: {len(superseded)} | Excluded: {len(excluded)}"
+        f"Excluded: {len(excluded)}"
     )
     _console.print()
 
@@ -541,7 +530,7 @@ def print_section1(
 def print_section2(weights: dict[str, float], option_label: str) -> None:
     _console.print(Rule("[bold]Section 2 — Criteria Framework Table[/bold]"))
     _console.print()
-    _console.print(f"  Scoring option: [bold]{option_label}[/bold]")
+    _console.print(f"  Scoring option: [bold]{escape(option_label)}[/bold]")
     _console.print()
 
     table = Table(show_header=True, header_style="bold", show_lines=False)
@@ -573,12 +562,6 @@ def print_section2(weights: dict[str, float], option_label: str) -> None:
             "norm_per_res_tier(geomean(AP/ms, AP/mJ))",
         ),
         ("w_lat", "Latency margin", "🟢 Secondary", "norm(1/inference_time_ms)"),
-        (
-            "w_mem",
-            "Activation memory",
-            "🟡 Primary",
-            "1.0 if ≤ NPU activation budget else norm(1/estimated_spill_kib)",
-        ),
     ]
     for key, name, tier, metric in criteria:
         table.add_row(name, tier, metric, f"{weights[key]:.2f}", WEIGHT_RATIONALE[key])
@@ -599,8 +582,7 @@ def print_section3(
     _console.print()
     _console.print(
         f"  [dim]score = {weights['w_acc']:.2f}·acc + {weights['w_energy']:.2f}·energy"
-        f" + {weights['w_eff']:.2f}·eff + {weights['w_lat']:.2f}·lat"
-        f" + {weights['w_mem']:.2f}·mem[/dim]"
+        f" + {weights['w_eff']:.2f}·eff + {weights['w_lat']:.2f}·lat[/dim]"
     )
     _console.print(
         "  [dim]Each family represented by its best-scoring variant.[/dim]"
@@ -623,7 +605,7 @@ def print_section3(
     table.add_column("ms", min_width=5, justify="right")
     table.add_column("mJ", min_width=5, justify="right")
     table.add_column("Score", style="bold cyan", min_width=6, justify="right")
-    table.add_column("#var", min_width=3, justify="right")
+    table.add_column("count", min_width=3, justify="right")
     table.add_column("Res Range", min_width=7, justify="center")
     table.add_column("Flags", no_wrap=True)
 
@@ -636,6 +618,7 @@ def print_section3(
         res_min = int(row["res_min"])
         res_max = int(row["res_max"])
         res_range = f"{res_min}–{res_max}" if res_min != res_max else str(res_min)
+        mem_flag = _flags(row)
         table.add_row(
             str(rank),
             family_label,
@@ -647,7 +630,7 @@ def print_section3(
             score_str,
             str(int(row["n_variants"])),
             res_range,
-            _flags(row),
+            escape(mem_flag) if mem_flag else "",
         )
 
     _console.print(table)
@@ -658,24 +641,25 @@ def print_section3(
     _console.print(Rule("[bold]Per-Family Variant Details[/bold]", style="dim"))
     _console.print()
 
-    for _, fam_row in families.iterrows():
-        fam = fam_row["model_family"]
-        hyp = fam_row["hyperparameters"]
-        hyp_label = f" ({hyp})" if hyp else ""
-        group = scored[
-            (scored["model_family"] == fam) & (scored["hyperparameters"] == hyp)
-        ].sort_values("score", ascending=False)
+    variant_groups = {
+        key: grp.sort_values("score", ascending=False)
+        for key, grp in scored.groupby(_FAMILY_KEY)
+    }
 
-        _console.print(f"  [bold]{fam}{hyp_label}[/bold]")
+    for _, fam_row in families.iterrows():
+        key = (fam_row["model_family"], fam_row["hyperparameters"])
+        hyp_label = f" ({key[1]})" if key[1] else ""
+        group = variant_groups[key]
+
+        _console.print(f"  [bold]{key[0]}{hyp_label}[/bold]")
 
         for i, (_, row) in enumerate(group.iterrows()):
             marker = "★" if i == 0 else " "
             flags = _flags(row)
-            flag_str = f"  {flags}" if flags else ""
+            flag_str = f"  {escape(flags)}" if flags else ""
             subs = (
                 f"acc={row['s_acc']:.2f} nrg={row['s_energy']:.2f} "
-                f"eff={row['s_eff']:.2f} lat={row['s_lat']:.2f} "
-                f"mem={row['s_mem']:.2f}"
+                f"eff={row['s_eff']:.2f} lat={row['s_lat']:.2f}"
             )
             _console.print(
                 f"    {marker} {int(row['resolution'])}×{int(row['resolution'])} "
@@ -725,7 +709,7 @@ def run_selection(
     gating and scoring.
     """
     w = weights or DEFAULT_WEIGHTS.copy()
-    option_label = "unified activation memory"
+    option_label = "multi-criteria composite (memory: [cpuRAM]/[extRAM] flags only)"
 
     df = load_benchmark(csv_path)
     df = merge_benchmark_with_memory(df, memory_csv)
@@ -765,17 +749,11 @@ def run_selection(
         option_label += f" | dataset={ds_label} ({before - len(df)} rows filtered)"
 
     passing, excluded = gate_constraints(df)
-
-    if dataset_filter is not None:
-        scoring_pool, superseded = passing, pd.DataFrame(columns=passing.columns)
-    else:
-        scoring_pool, superseded = deduplicate_datasets(passing)
-
-    scored = score_candidates(scoring_pool, w)
+    scored = score_candidates(passing, w)
     families = aggregate_families(scored)
 
     print_section0(df)
-    print_section1(df, scored, excluded, superseded)
+    print_section1(df, scored, excluded)
     print_section2(w, option_label)
     print_section3(families, scored, w)
 
@@ -792,14 +770,13 @@ def run_selection(
             "pm_avg_inf_mW",
             "pm_avg_inf_mJ",
             "activations_without_io",
-            "estimated_spill_kib",
+            "npu_spill_kib",
             "weights_flash_kib",
             "efficiency_geo",
             "s_acc",
             "s_energy",
             "s_eff",
             "s_lat",
-            "s_mem",
             "score",
             "n_variants",
             "res_min",
@@ -853,7 +830,6 @@ def _cli_entry(
     w_energy: float = typer.Option(DEFAULT_WEIGHTS["w_energy"], "--w-energy"),
     w_eff: float = typer.Option(DEFAULT_WEIGHTS["w_eff"], "--w-eff"),
     w_lat: float = typer.Option(DEFAULT_WEIGHTS["w_lat"], "--w-lat"),
-    w_mem: float = typer.Option(DEFAULT_WEIGHTS["w_mem"], "--w-mem"),
 ) -> None:
     """Score and rank benchmark candidates for STM32N6570-DK deployment."""
     if getattr(ctx, "resilient_parsing", False):
@@ -873,7 +849,6 @@ def _cli_entry(
         "w_energy": w_energy,
         "w_eff": w_eff,
         "w_lat": w_lat,
-        "w_mem": w_mem,
     }
 
     total = sum(weights.values())
