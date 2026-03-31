@@ -60,6 +60,19 @@ CSV_COLUMNS = [
     "pm_avg_idle_mJ",
 ]
 
+BENCHMARK_CSV_COLUMNS = [c for c in CSV_COLUMNS if c != "ap_50"]
+
+EVAL_CSV_COLUMNS = [
+    "host_time_iso",
+    "model_family",
+    "model_variant",
+    "hyperparameters",
+    "dataset",
+    "format",
+    "resolution",
+    "ap_50",
+]
+
 CSV_COLUMNS_NO_POWER = [
     c for c in CSV_COLUMNS
     if c not in (

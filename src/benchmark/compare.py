@@ -47,6 +47,7 @@ DEFAULT_PARSED_CSV = RESULTS_DIR / "benchmark_parsed.csv"
 DEFAULT_UNDERDRIVE_CSV = RESULTS_DIR / "benchmark_underdrive" / "benchmark_results.csv"
 DEFAULT_NOMINAL_CSV = RESULTS_DIR / "benchmark_nominal" / "benchmark_results.csv"
 DEFAULT_OVERDRIVE_CSV = RESULTS_DIR / "benchmark_overdrive" / "benchmark_results.csv"
+DEFAULT_EVALUATE_CSV = RESULTS_DIR / "evaluation_result.csv"
 
 IDENTITY_COLS = (
     "model_family",
@@ -114,7 +115,7 @@ PER_VARIANT_COLUMNS_BENCH_PAIR = (
 )
 
 
-_DATASOURCE_CHOICES = ("readme", "underdrive", "nominal", "overdrive")
+_DATASOURCE_CHOICES = ("readme", "underdrive", "nominal", "overdrive", "evaluate")
 
 
 def _ds_norm(s: str) -> str:
@@ -131,20 +132,10 @@ def _require_file_exists(path: Path, *, label: str) -> None:
         raise typer.Exit(2)
 
 
-def _bench_path_for_ds(
-    ds: str,
-    *,
-    nominal: Path,
-    underdrive: Path,
-    overdrive: Path,
-) -> Path:
+def _bench_path_for_ds(ds: str, ds_paths: dict[str, Path]) -> Path:
     dsn = _ds_norm(ds)
-    if dsn == "nominal":
-        return nominal
-    if dsn == "underdrive":
-        return underdrive
-    if dsn == "overdrive":
-        return overdrive
+    if dsn in ds_paths:
+        return ds_paths[dsn]
     raise ValueError(f"not a benchmark datasource: {ds!r}")
 
 
@@ -757,6 +748,11 @@ def compare_entry(
         "--overdrive",
         help=f"Overdrive benchmark_results.csv (default: {DEFAULT_OVERDRIVE_CSV})",
     ),
+    evaluate: Path = typer.Option(
+        DEFAULT_EVALUATE_CSV,
+        "--evaluate",
+        help=f"Evaluation result CSV (default: {DEFAULT_EVALUATE_CSV})",
+    ),
     delta_pct: float | None = typer.Option(
         None,
         "--delta-pct",
@@ -793,13 +789,15 @@ def compare_entry(
     configure_logging()
     typer_install_exception_hook()
 
+    ds_paths = dict(nominal=nominal, underdrive=underdrive, overdrive=overdrive, evaluate=evaluate)
+
     result: ComparisonResult | None = None
     before_filter: int | None = None
 
     if l == "readme" or r == "readme":
         _require_file_exists(readme, label="--readme")
         if l == "readme":
-            bench_path = _bench_path_for_ds(r, nominal=nominal, underdrive=underdrive, overdrive=overdrive)
+            bench_path = _bench_path_for_ds(r, ds_paths)
             _require_file_exists(bench_path, label=r)
             result = compare_readme_to_bench(
                 readme,
@@ -810,7 +808,7 @@ def compare_entry(
                 headline=f"{l} vs {r} (delta = {r} − {l})",
             )
         else:
-            bench_path = _bench_path_for_ds(l, nominal=nominal, underdrive=underdrive, overdrive=overdrive)
+            bench_path = _bench_path_for_ds(l, ds_paths)
             _require_file_exists(bench_path, label=l)
             result = compare_readme_to_bench(
                 readme,
@@ -821,8 +819,8 @@ def compare_entry(
                 headline=f"{l} vs {r} (delta = {r} − {l})",
             )
     else:
-        left_path = _bench_path_for_ds(l, nominal=nominal, underdrive=underdrive, overdrive=overdrive)
-        right_path = _bench_path_for_ds(r, nominal=nominal, underdrive=underdrive, overdrive=overdrive)
+        left_path = _bench_path_for_ds(l, ds_paths)
+        right_path = _bench_path_for_ds(r, ds_paths)
         _require_file_exists(left_path, label=l)
         _require_file_exists(right_path, label=r)
         result = compare_bench_to_bench(l, left_path, r, right_path)

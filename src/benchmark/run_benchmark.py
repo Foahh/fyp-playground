@@ -281,7 +281,6 @@ def _run_benchmark_loop(
                 k for k, v in {
                     "inference_time_ms": metrics.get("inference_time_ms"),
                     "inf_per_sec": metrics.get("inf_per_sec"),
-                    "ap_50": metrics.get("ap_50"),
                     "pm_avg_inf_mW": res.pm_avg_inf_mW,
                 }.items() if not v
             ]
@@ -306,7 +305,6 @@ def _run_benchmark_loop(
                 "output_buffer_kib": metrics.get("output_buffer_kib", ""),
                 "inference_time_ms": metrics.get("inference_time_ms", ""),
                 "inf_per_sec": metrics.get("inf_per_sec", ""),
-                "ap_50": metrics.get("ap_50", ""),
                 "pm_avg_inf_mW": (
                     f"{res.pm_avg_inf_mW:.3f}"
                     if res.pm_avg_inf_mW is not None
@@ -350,7 +348,6 @@ def _run_benchmark_loop(
                 i,
                 total,
                 entry.variant,
-                ap_50=metrics.get("ap_50"),
                 inference_ms=metrics.get("inference_time_ms"),
                 pm_inf_mW=res.pm_avg_inf_mW,
                 pm_delta_mW=res.pm_avg_delta_mW,

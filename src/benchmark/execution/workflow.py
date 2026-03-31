@@ -1,4 +1,4 @@
-"""N6 on-target workflow orchestration: generate, load, validate, evaluate."""
+"""N6 on-target workflow orchestration: generate, load, validate."""
 
 import json
 import logging
@@ -7,7 +7,6 @@ import re
 import subprocess
 import sys
 import time
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -15,8 +14,7 @@ from typing import Optional
 from tenacity import Retrying, stop_after_attempt, wait_fixed
 
 from ..constants import SSD_FAMILIES
-from ..paths import BenchmarkPaths, N6_WORKDIR, SERVICES_DIR, STEDGEAI_PATH
-from ..core.config import build_eval_config
+from ..paths import BenchmarkPaths, N6_WORKDIR, STEDGEAI_PATH
 from ..core.models import ModelEntry
 from ..utils.logutil import get_logger
 from .power_serial import (
@@ -353,57 +351,9 @@ def _step_validate(
         return "\n".join(output_lines), f"Error during multi-inference: {e}", 1
 
 
-def _step_evaluate(entry: ModelEntry, benchmark_log: Path) -> tuple[str, str, int]:
-    """Step 4: Run model zoo evaluator (host-side) for AP metrics."""
-    build_eval_config(entry)
-
-    cmd = [
-        sys.executable,
-        "stm32ai_main.py",
-        "--config-path",
-        ".",
-        "--config-name",
-        "_benchmark_temp_config",
-        # Match stedgeai --quiet: no Hydra banners / default job logging on stderr.
-        "hydra/job_logging=disabled",
-        "hydra/hydra_logging=disabled",
-    ]
-
-    env = os.environ.copy()
-    env["HYDRA_FULL_ERROR"] = "1"
-    env["TQDM_DISABLE"] = "1"
-    # Force TensorFlow host evaluation onto CPU to avoid CUDA runtime instability (I am using 5060...).
-    env["CUDA_VISIBLE_DEVICES"] = "-1"
-
-    get_logger("workflow").info(
-        "Evaluate step started",
-        step="evaluate",
-        variant=entry.variant,
-        fmt=entry.fmt,
-    )
-    t0 = time.monotonic()
-    out, err, rc = _run_streaming(
-        cmd,
-        cwd=str(SERVICES_DIR),
-        timeout=3600,
-        env=env,
-        log_header=f"\n=== EVALUATE | {entry.variant} | {entry.fmt} ===",
-        benchmark_log=benchmark_log,
-    )
-    elapsed = time.monotonic() - t0
-    get_logger("workflow").info(
-        "Evaluate step completed",
-        step="evaluate",
-        variant=entry.variant,
-        rc=rc,
-        elapsed_s=f"{elapsed:.3f}",
-    )
-    return out, err, rc
-
-
 @dataclass
 class EvalResult:
-    """Collects stdout/stderr from all workflow steps."""
+    """Collects stdout/stderr from all on-target workflow steps."""
 
     generate_out: str = ""
     generate_err: str = ""
@@ -414,9 +364,6 @@ class EvalResult:
     validate_out: str = ""
     validate_err: str = ""
     validate_rc: int = 0
-    evaluate_out: str = ""
-    evaluate_err: str = ""
-    evaluate_rc: int = 0
     pm_avg_inf_mW: Optional[float] = None
     pm_avg_idle_mW: Optional[float] = None
     pm_avg_delta_mW: Optional[float] = None
@@ -428,13 +375,13 @@ class EvalResult:
     @property
     def combined_stdout(self) -> str:
         return "\n".join(
-            [self.generate_out, self.load_out, self.validate_out, self.evaluate_out]
+            [self.generate_out, self.load_out, self.validate_out]
         )
 
     @property
     def combined_stderr(self) -> str:
         return "\n".join(
-            [self.generate_err, self.load_err, self.validate_err, self.evaluate_err]
+            [self.generate_err, self.load_err, self.validate_err]
         )
 
     @property
@@ -445,8 +392,6 @@ class EvalResult:
             return f"load (rc={self.load_rc})"
         if self.validate_rc != 0:
             return f"validate (rc={self.validate_rc})"
-        if self.evaluate_rc != 0:
-            return f"evaluate (rc={self.evaluate_rc})"
         return None
 
 
@@ -486,93 +431,65 @@ def run_benchmark(
 
         time.sleep(1)
 
-        # Steps 3–4: Validate on device (power) and host-side evaluation — independent I/O, run concurrently.
+        # Step 3: Validate on device (power measurement).
         validate_t0 = time.monotonic()
         begin_validate_capture()
-        executor = ThreadPoolExecutor(max_workers=2)
-        fut_evaluate = None
         validate_lines: list = []
-        validate_window_closed = False
         try:
-            fut_validate = executor.submit(
-                _step_validate, entry, validation_count, benchmark_log
+            res.validate_out, res.validate_err, res.validate_rc = _step_validate(
+                entry, validation_count, benchmark_log
             )
-            fut_evaluate = executor.submit(_step_evaluate, entry, benchmark_log)
-            try:
-                res.validate_out, res.validate_err, res.validate_rc = fut_validate.result()
-                get_logger("workflow").info("Validation complete", variant=entry.variant, rc=res.validate_rc)
-            finally:
-                validate_dt = time.monotonic() - validate_t0
-                validate_lines = end_validate_capture()
-                validate_window_closed = True
-            validate_header = (
-                f"\n=== VALIDATE | {entry.variant} | {entry.fmt} ===\n"
-                f"elapsed time (VALIDATE, wall): {validate_dt:.3f}s\n"
-                f"validate rc: {res.validate_rc}\n"
-                f"power samples captured (validate window): {len(validate_lines)}\n"
-            )
-            _append_stdout_log(validate_header, benchmark_log)
-            if res.validate_out:
-                _append_stdout_log(res.validate_out, benchmark_log)
-            if res.validate_err:
-                _append_stdout_log(res.validate_err, benchmark_log)
+            get_logger("workflow").info("Validation complete", variant=entry.variant, rc=res.validate_rc)
+        finally:
+            validate_dt = time.monotonic() - validate_t0
+            validate_lines = end_validate_capture()
 
-            # Parse and log validate metrics
-            val_metrics = parse_metrics(res.validate_out, res.validate_err)
+        validate_header = (
+            f"\n=== VALIDATE | {entry.variant} | {entry.fmt} ===\n"
+            f"elapsed time (VALIDATE, wall): {validate_dt:.3f}s\n"
+            f"validate rc: {res.validate_rc}\n"
+            f"power samples captured (validate window): {len(validate_lines)}\n"
+        )
+        _append_stdout_log(validate_header, benchmark_log)
+        if res.validate_out:
+            _append_stdout_log(res.validate_out, benchmark_log)
+        if res.validate_err:
+            _append_stdout_log(res.validate_err, benchmark_log)
+
+        val_metrics = parse_metrics(res.validate_out, res.validate_err)
+        get_logger("workflow").info(
+            "Validate metrics extracted",
+            step="validate",
+            variant=entry.variant,
+            inference_time_ms=val_metrics.get("inference_time_ms", ""),
+            inf_per_sec=val_metrics.get("inf_per_sec", ""),
+        )
+
+        if validate_lines:
+            metrics = compute_power_metrics(validate_lines, validation_count)
+            res.pm_avg_inf_mW = metrics["pm_avg_inf_mW"]
+            res.pm_avg_idle_mW = metrics["pm_avg_idle_mW"]
+            res.pm_avg_delta_mW = metrics["pm_avg_delta_mW"]
+            res.pm_avg_inf_ms = metrics["pm_avg_inf_ms"]
+            res.pm_avg_idle_ms = metrics["pm_avg_idle_ms"]
+            res.pm_avg_inf_mJ = metrics["pm_avg_inf_mJ"]
+            res.pm_avg_idle_mJ = metrics["pm_avg_idle_mJ"]
             get_logger("workflow").info(
-                "Validate metrics extracted",
+                "Power metrics computed",
                 step="validate",
                 variant=entry.variant,
-                inference_time_ms=val_metrics.get("inference_time_ms", ""),
-                inf_per_sec=val_metrics.get("inf_per_sec", ""),
+                pm_avg_inf_mW=f"{res.pm_avg_inf_mW:.3f}" if res.pm_avg_inf_mW else "",
+                pm_avg_idle_mW=f"{res.pm_avg_idle_mW:.3f}" if res.pm_avg_idle_mW else "",
+                pm_avg_delta_mW=f"{res.pm_avg_delta_mW:.3f}" if res.pm_avg_delta_mW else "",
+                pm_avg_inf_ms=f"{res.pm_avg_inf_ms:.3f}" if res.pm_avg_inf_ms else "",
+                pm_avg_idle_ms=f"{res.pm_avg_idle_ms:.3f}" if res.pm_avg_idle_ms else "",
+                pm_avg_inf_mJ=f"{res.pm_avg_inf_mJ:.3f}" if res.pm_avg_inf_mJ else "",
+                pm_avg_idle_mJ=f"{res.pm_avg_idle_mJ:.3f}" if res.pm_avg_idle_mJ else "",
             )
-
-            if validate_lines:
-                metrics = compute_power_metrics(validate_lines, validation_count)
-                res.pm_avg_inf_mW = metrics["pm_avg_inf_mW"]
-                res.pm_avg_idle_mW = metrics["pm_avg_idle_mW"]
-                res.pm_avg_delta_mW = metrics["pm_avg_delta_mW"]
-                res.pm_avg_inf_ms = metrics["pm_avg_inf_ms"]
-                res.pm_avg_idle_ms = metrics["pm_avg_idle_ms"]
-                res.pm_avg_inf_mJ = metrics["pm_avg_inf_mJ"]
-                res.pm_avg_idle_mJ = metrics["pm_avg_idle_mJ"]
-                get_logger("workflow").info(
-                    "Power metrics computed",
-                    step="validate",
-                    variant=entry.variant,
-                    pm_avg_inf_mW=f"{res.pm_avg_inf_mW:.3f}" if res.pm_avg_inf_mW else "",
-                    pm_avg_idle_mW=f"{res.pm_avg_idle_mW:.3f}" if res.pm_avg_idle_mW else "",
-                    pm_avg_delta_mW=f"{res.pm_avg_delta_mW:.3f}" if res.pm_avg_delta_mW else "",
-                    pm_avg_inf_ms=f"{res.pm_avg_inf_ms:.3f}" if res.pm_avg_inf_ms else "",
-                    pm_avg_idle_ms=f"{res.pm_avg_idle_ms:.3f}" if res.pm_avg_idle_ms else "",
-                    pm_avg_inf_mJ=f"{res.pm_avg_inf_mJ:.3f}" if res.pm_avg_inf_mJ else "",
-                    pm_avg_idle_mJ=f"{res.pm_avg_idle_mJ:.3f}" if res.pm_avg_idle_mJ else "",
-                )
-            elif is_power_session_active():
-                get_logger("workflow").warning("Power active but no samples captured", variant=entry.variant)
-            if res.validate_rc != 0:
-                get_logger("workflow").warning("Validation failed", variant=entry.variant, rc=res.validate_rc)
-
-            if fut_evaluate is not None:
-                try:
-                    res.evaluate_out, res.evaluate_err, res.evaluate_rc = fut_evaluate.result()
-                except subprocess.TimeoutExpired:
-                    res.evaluate_err = "TIMEOUT: host evaluation exceeded 1 hour"
-                    res.evaluate_rc = -1
-                get_logger("workflow").info("Evaluation complete", variant=entry.variant, rc=res.evaluate_rc)
-
-                # Parse and log evaluate metrics
-                eval_metrics = parse_metrics(res.evaluate_out, res.evaluate_err)
-                get_logger("workflow").info(
-                    "Evaluate metrics extracted",
-                    step="evaluate",
-                    variant=entry.variant,
-                    ap_50=eval_metrics.get("ap_50", ""),
-                )
-        finally:
-            if not validate_window_closed:
-                end_validate_capture()
-            executor.shutdown(wait=True)
+        elif is_power_session_active():
+            get_logger("workflow").warning("Power active but no samples captured", variant=entry.variant)
+        if res.validate_rc != 0:
+            get_logger("workflow").warning("Validation failed", variant=entry.variant, rc=res.validate_rc)
 
     except subprocess.TimeoutExpired as e:
         step = "on-target"

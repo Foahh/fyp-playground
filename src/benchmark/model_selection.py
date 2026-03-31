@@ -25,6 +25,8 @@ from rich.table import Table
 from .paths import RESULTS_DIR
 from .utils.logutil import configure_logging, typer_install_exception_hook
 
+DEFAULT_EVAL_CSV = RESULTS_DIR / "evaluation_result.csv"
+
 # ── Hardware constants (STM32N6570-DK) ──────────────────────────────────────
 
 ON_CHIP_ACTIVATION_KIB = 2304  # 512 (cpuRAM2) + 4×448 (npuRAM3–6)
@@ -117,12 +119,61 @@ _NUMERIC_COLS = [
 ]
 
 
-def load_benchmark(path: Path) -> pd.DataFrame:
+_EVAL_JOIN_KEY = [
+    "model_family",
+    "model_variant",
+    "hyperparameters",
+    "dataset",
+    "format",
+    "resolution",
+]
+
+
+def _load_csv_with_numeric(path: Path, numeric_cols: list[str]) -> pd.DataFrame:
+    """Load CSV and convert specified columns to numeric."""
     df = pd.read_csv(path, dtype=str, keep_default_na=False, na_filter=False)
-    for col in _NUMERIC_COLS:
+    for col in numeric_cols:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
     return df
+
+
+def load_benchmark(path: Path) -> pd.DataFrame:
+    return _load_csv_with_numeric(path, _NUMERIC_COLS)
+
+
+def load_ap_results(path: Path) -> pd.DataFrame:
+    """Load the host-side AP evaluation CSV."""
+    return _load_csv_with_numeric(path, ["ap_50", "resolution"])
+
+
+def merge_benchmark_with_ap(
+    bench: pd.DataFrame,
+    ap_csv: Path,
+) -> pd.DataFrame:
+    """Join ap_50 from the host-side AP CSV into the benchmark DataFrame."""
+    if not ap_csv.is_file():
+        _console.print(
+            f"[yellow]Warning: AP results CSV not found: {ap_csv} — "
+            "ap_50 will be NaN for all rows.[/yellow]"
+        )
+        bench["ap_50"] = float("nan")
+        return bench
+
+    ev = load_ap_results(ap_csv)
+    ev_dedup = ev.drop_duplicates(subset=_EVAL_JOIN_KEY, keep="last")
+    merged = bench.merge(
+        ev_dedup[_EVAL_JOIN_KEY + ["ap_50"]],
+        on=_EVAL_JOIN_KEY,
+        how="left",
+    )
+    n_missing = merged["ap_50"].isna().sum()
+    if n_missing:
+        _console.print(
+            f"[yellow]Warning: {n_missing} benchmark row(s) have no matching "
+            f"AP result — ap_50 will be NaN.[/yellow]"
+        )
+    return merged
 
 
 # ── Derived metrics ──────────────────────────────────────────────────────────
@@ -717,12 +768,14 @@ def run_selection(
     *,
     option_b: bool = False,
     output_csv: Path | None = None,
+    ap_csv: Path = DEFAULT_EVAL_CSV,
 ) -> pd.DataFrame:
     """Run the full model selection pipeline and print the report."""
     w = weights or DEFAULT_WEIGHTS.copy()
     option_label = "B (split memory: head + spill)" if option_b else "A (unified memory)"
 
     df = load_benchmark(csv_path)
+    df = merge_benchmark_with_ap(df, ap_csv)
     df = add_derived(df)
 
     passing, excluded = gate_constraints(df)
@@ -788,6 +841,11 @@ def _cli_entry(
         "--csv",
         help="Benchmark results CSV",
     ),
+    eval_csv: Path = typer.Option(
+        DEFAULT_EVAL_CSV,
+        "--eval-csv",
+        help="Host-side AP evaluation results CSV",
+    ),
     option_b: bool = typer.Option(
         False,
         "--option-b",
@@ -834,7 +892,7 @@ def _cli_entry(
         _err.print(f"[red]Error: CSV not found: {csv}[/red]")
         raise typer.Exit(2)
 
-    run_selection(csv, weights, option_b=option_b, output_csv=output)
+    run_selection(csv, weights, option_b=option_b, output_csv=output, ap_csv=eval_csv)
 
 
 def selection_main(argv: list[str] | None = None) -> int:

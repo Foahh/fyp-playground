@@ -20,6 +20,7 @@ LOCAL_COMMANDS: dict[str, str] = {
     "download-coco": "src/dataset/run_download_coco_dataset.py",
     "download-finetune": "src/dataset/run_download_finetune_dataset.py",
     "benchmark": "src/benchmark/run_benchmark.py",
+    "evaluate": "src/benchmark/run_evaluate.py",
     "compare": "src/benchmark/run_compare.py",
     "select-model": "src/benchmark/run_model_selection.py",
     "verify-model": "src/benchmark/run_check_model_dtypes.py",
