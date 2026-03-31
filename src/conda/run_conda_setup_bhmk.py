@@ -20,7 +20,7 @@ from src.conda.conda_setup_common import (
     repo_root,
 )
 
-STZOO_ENV_NAME = os.environ.get("ST_STZOO_ENV", "fyp-bhmk")
+STZOO_ENV_NAME = os.environ.get("FYP_STZOO_ENV", "fyp-bhmk")
 PYTHON_VERSION = "3.12.9"
 
 

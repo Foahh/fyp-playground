@@ -17,6 +17,7 @@ LOCAL_COMMANDS: dict[str, str] = {
     "compare-runs": "src/benchmark/run_compare.py",
     "verify-model-dtypes": "src/benchmark/run_check_model_dtypes.py",
     "parse-modelzoo-readme": "src/benchmark/run_parse_modelzoo_readme.py",
+    "setup-env-qtlz": "src/conda/run_conda_setup_qtlz.py",
     "setup-env-ml": "src/conda/run_conda_setup_ml.py",
     "setup-env-bhmk": "src/conda/run_conda_setup_bhmk.py",
     "train": "src/ml/run_train_tinyissimo_coco_person.py",

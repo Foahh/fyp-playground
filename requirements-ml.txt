@@ -1,11 +1,2 @@
 pycocotools>=2.0.11
 typer>=0.24.1
-
-ultralytics[export]>=8.4.32
-
-tf_keras<=2.19.0
-sng4onnx>=1.0.1
-onnx_graphsurgeon>=0.3.26
-ai-edge-litert>=1.2.0
-onnx2tf>=1.26.3,<1.29.0
-onnxruntime

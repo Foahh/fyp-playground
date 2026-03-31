@@ -85,25 +85,28 @@ Log out and back in after changing groups.
 
 ### Conda environments
 
-Two Conda environments are used by default:
+Three Conda environments are used by default:
 
 | Purpose | Default env | Setup |
 |---|---|---|
-| Dataset prep, TinyissimoYOLO training, INT8 quantization | `fyp-ml` (`ST_YOLO_ENV`) | `python project.py setup-conda-ml` |
-| Benchmarking, README comparison, Model Zoo finetuning | `fyp-bhmk` (`ST_STZOO_ENV`) | `python project.py setup-conda-bhmk` |
+| Dataset prep, TinyissimoYOLO training | `fyp-ml` (`FYP_YOLO_ENV`) | `python project.py setup-conda-ml` |
+| Ultralytics export / INT8 TFLite quantization (`src/ml/run_quantize.py`) | `fyp-qtlz` (`FYP_QTLZ_ENV`) | `python src/conda/run_conda_setup_qtlz.py` |
+| Benchmarking, README comparison, Model Zoo finetuning | `fyp-bhmk` (`FYP_STZOO_ENV`) | `python project.py setup-conda-bhmk` |
 
 Command mapping:
 
 | Command | Env |
 |---|---|
-| `download-coco`, `download-finetune`, `train`, `quantize` | `fyp-ml` |
+| `download-coco`, `download-finetune`, `train` | `fyp-ml` |
+| `quantize` | `fyp-qtlz` |
 | `benchmark`, `compare-runs`, `prepare-finetune-dataset`, `finetune`, `verify-model-dtypes`, `parse-modelzoo-readme` | `fyp-bhmk` |
 | `setup-conda-ml`, `setup-conda-bhmk` | base or any env with `conda` |
 
-Create both environments:
+Create environments:
 
 ```sh
 python project.py setup-conda-ml
+python src/conda/run_conda_setup_qtlz.py
 python project.py setup-conda-bhmk
 ```
 
@@ -173,12 +176,12 @@ results/model/tinyissimoyolo_v8_<size>/weights/best.pt
 
 ## 3. Quantize
 
-Quantize a trained checkpoint to **INT8 TFLite** in `fyp-ml`.
+Quantize a trained checkpoint to **INT8 TFLite** in `fyp-qtlz` (this runs `src/ml/run_quantize.py`).
 
-Activate `fyp-ml`:
+Activate `fyp-qtlz`:
 
 ```sh
-conda activate fyp-ml
+conda activate fyp-qtlz
 ```
 
 Main command:
