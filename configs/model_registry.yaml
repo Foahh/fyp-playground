@@ -472,7 +472,7 @@
   dataset: COCO-Person
   fmt: Int8
   resolution: 256
-  output_data_type: float3
+  output_data_type: float32
 
 - config: configs/tinyissimoyolo_v8_192_config.yaml
   model: results/model/tinyissimoyolo_v8_192/weights/best_saved_model/best_full_integer_quant.tflite
@@ -482,6 +482,17 @@
   dataset: COCO-Person
   fmt: Int8
   resolution: 192
+  input_data_type: int8
+  output_data_type: int8
+
+- config: configs/tinyissimoyolo_v8_256_config.yaml
+  model: results/model/tinyissimoyolo_v8_256/weights/best_saved_model/best_full_integer_quant.tflite
+  family: tinyissimoyolo_v8
+  variant: tinyissimoyolo_v8_256
+  hyperparameters: ""
+  dataset: COCO-Person
+  fmt: Int8
+  resolution: 256
   input_data_type: int8
   output_data_type: int8
 

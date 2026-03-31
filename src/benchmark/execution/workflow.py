@@ -9,14 +9,13 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
 from tenacity import Retrying, stop_after_attempt, wait_fixed
 
 from ..constants import SSD_FAMILIES
-from ..paths import BENCHMARK_LOG, N6_WORKDIR, SERVICES_DIR, STEDGEAI_PATH
+from ..paths import BenchmarkPaths, N6_WORKDIR, SERVICES_DIR, STEDGEAI_PATH
 from ..core.config import build_eval_config
 from ..core.models import ModelEntry
 from ..utils.logutil import get_logger
@@ -28,9 +27,10 @@ from .power_serial import (
 )
 
 
-def _append_stdout_log(text: str) -> None:
+def _append_stdout_log(text: str, benchmark_log: Path) -> None:
     """Append plain text to benchmark.log."""
-    with open(BENCHMARK_LOG, "a", encoding="utf-8") as fd:
+    benchmark_log.parent.mkdir(parents=True, exist_ok=True)
+    with open(benchmark_log, "a", encoding="utf-8") as fd:
         fd.write(text)
         if not text.endswith("\n"):
             fd.write("\n")
@@ -41,14 +41,14 @@ def _get_n6_scripts_dir() -> Path:
     return Path(os.environ["STEDGEAI_CORE_DIR"]) / "scripts" / "N6_scripts"
 
 
-@lru_cache(maxsize=1)
-def get_stedgeai_version() -> str:
+def get_stedgeai_version(benchmark_log: Path) -> str:
     """Return normalized stedgeai version string, or ``unknown`` on failure."""
     def _probe_version() -> tuple[str, str, int]:
         return _run_streaming(
             [STEDGEAI_PATH, "--version"],
             cwd=str(N6_WORKDIR),
             timeout=20,
+            benchmark_log=benchmark_log,
         )
 
     try:
@@ -109,9 +109,15 @@ def _write_n6_loader_config() -> Path:
 
 
 def _run_streaming(
-    cmd: list, cwd: str, timeout: int, env=None, log_header: str = ""
+    cmd: list,
+    cwd: str,
+    timeout: int,
+    env=None,
+    log_header: str = "",
+    *,
+    benchmark_log: Path,
 ) -> tuple[str, str, int]:
-    """Run a subprocess; capture stdout/stderr and append to BENCHMARK_LOG."""
+    """Run a subprocess; capture stdout/stderr and append to benchmark.log."""
     try:
         result = subprocess.run(
             cmd,
@@ -127,7 +133,8 @@ def _run_streaming(
         stderr = e.stderr.decode() if e.stderr else ""
         rc = -1
         # Re-raise after logging
-        with open(BENCHMARK_LOG, "a", encoding="utf-8") as f:
+        benchmark_log.parent.mkdir(parents=True, exist_ok=True)
+        with open(benchmark_log, "a", encoding="utf-8") as f:
             if log_header:
                 f.write(log_header + "\n")
             f.write(stdout)
@@ -135,7 +142,8 @@ def _run_streaming(
         raise
 
     # Append to log file
-    with open(BENCHMARK_LOG, "a", encoding="utf-8") as f:
+    benchmark_log.parent.mkdir(parents=True, exist_ok=True)
+    with open(benchmark_log, "a", encoding="utf-8") as f:
         if log_header:
             f.write(log_header + "\n")
         f.write(stdout)
@@ -144,7 +152,7 @@ def _run_streaming(
     return stdout, stderr, rc
 
 
-def _step_generate(entry: ModelEntry) -> tuple[str, str, int]:
+def _step_generate(entry: ModelEntry, benchmark_log: Path) -> tuple[str, str, int]:
     """Step 1: stedgeai generate — produce C files + memory initializers."""
     model_path = entry.model_path
     if not model_path.startswith(("http://", "https://")):
@@ -191,6 +199,7 @@ def _step_generate(entry: ModelEntry) -> tuple[str, str, int]:
         cwd=str(N6_WORKDIR),
         timeout=600,
         log_header=f"\n=== GENERATE | {entry.variant} | {entry.fmt} ===",
+        benchmark_log=benchmark_log,
     )
     elapsed = time.monotonic() - t0
     get_logger("workflow").info(
@@ -203,7 +212,7 @@ def _step_generate(entry: ModelEntry) -> tuple[str, str, int]:
     return out, err, rc
 
 
-def _step_load(entry: ModelEntry) -> tuple[str, str, int]:
+def _step_load(entry: ModelEntry, benchmark_log: Path) -> tuple[str, str, int]:
     """Step 2: n6_loader.py — build, flash, and start the test app."""
     n6_dir = _get_n6_scripts_dir()
     loader = n6_dir / "n6_loader.py"
@@ -229,6 +238,7 @@ def _step_load(entry: ModelEntry) -> tuple[str, str, int]:
         cwd=str(n6_dir),
         timeout=600,
         log_header=f"\n=== LOAD | {entry.variant} | {entry.fmt} ===",
+        benchmark_log=benchmark_log,
     )
     elapsed = time.monotonic() - t0
     get_logger("workflow").info(
@@ -241,7 +251,9 @@ def _step_load(entry: ModelEntry) -> tuple[str, str, int]:
     return out, err, rc
 
 
-def _step_validate(entry: ModelEntry, n_runs: int = 10) -> tuple[str, str, int]:
+def _step_validate(
+    entry: ModelEntry, n_runs: int, benchmark_log: Path
+) -> tuple[str, str, int]:
     """Step 3: Use ai_runner to run multiple inferences for accurate power measurement."""
 
     get_logger("workflow").info(
@@ -265,7 +277,8 @@ def _step_validate(entry: ModelEntry, n_runs: int = 10) -> tuple[str, str, int]:
 
     output_lines = []
     _append_stdout_log(
-        f"\n--- VALIDATE start | {entry.variant} | {entry.fmt} | n_runs={n_runs} ---"
+        f"\n--- VALIDATE start | {entry.variant} | {entry.fmt} | n_runs={n_runs} ---",
+        benchmark_log,
     )
     try:
         output_lines.append(f"Running {n_runs} inferences using ai_runner...")
@@ -274,7 +287,7 @@ def _step_validate(entry: ModelEntry, n_runs: int = 10) -> tuple[str, str, int]:
 
         if not runner.is_connected:
             err = runner.get_error()
-            _append_stdout_log(f"Connect failed: {err}")
+            _append_stdout_log(f"Connect failed: {err}", benchmark_log)
             return "", f"Failed to connect to device: {err}", 1
 
         # Generate random input (batch_size=1)
@@ -311,7 +324,8 @@ def _step_validate(entry: ModelEntry, n_runs: int = 10) -> tuple[str, str, int]:
             output_lines.append(f"Completed {len(durations)} inferences")
             output_lines.append(f"Inference time: avg={avg_ms:.3f}ms, min={min_ms:.3f}ms, max={max_ms:.3f}ms")
             _append_stdout_log(
-                f"VALIDATE_SUMMARY n={len(durations)} avg_ms={avg_ms:.6f} min_ms={min_ms:.6f} max_ms={max_ms:.6f}"
+                f"VALIDATE_SUMMARY n={len(durations)} avg_ms={avg_ms:.6f} min_ms={min_ms:.6f} max_ms={max_ms:.6f}",
+                benchmark_log,
             )
 
         elapsed = time.monotonic() - t0
@@ -328,7 +342,7 @@ def _step_validate(entry: ModelEntry, n_runs: int = 10) -> tuple[str, str, int]:
 
     except Exception as e:
         elapsed = time.monotonic() - t0
-        _append_stdout_log(f"Validate exception: {e}")
+        _append_stdout_log(f"Validate exception: {e}", benchmark_log)
         get_logger("workflow").error(
             "Validate step failed",
             step="validate",
@@ -339,7 +353,7 @@ def _step_validate(entry: ModelEntry, n_runs: int = 10) -> tuple[str, str, int]:
         return "\n".join(output_lines), f"Error during multi-inference: {e}", 1
 
 
-def _step_evaluate(entry: ModelEntry) -> tuple[str, str, int]:
+def _step_evaluate(entry: ModelEntry, benchmark_log: Path) -> tuple[str, str, int]:
     """Step 4: Run model zoo evaluator (host-side) for AP metrics."""
     build_eval_config(entry)
 
@@ -374,6 +388,7 @@ def _step_evaluate(entry: ModelEntry) -> tuple[str, str, int]:
         timeout=3600,
         env=env,
         log_header=f"\n=== EVALUATE | {entry.variant} | {entry.fmt} ===",
+        benchmark_log=benchmark_log,
     )
     elapsed = time.monotonic() - t0
     get_logger("workflow").info(
@@ -435,13 +450,18 @@ class EvalResult:
         return None
 
 
-def run_benchmark(entry: ModelEntry, validation_count: int) -> EvalResult:
+def run_benchmark(
+    entry: ModelEntry, validation_count: int, paths: BenchmarkPaths
+) -> EvalResult:
     """Run the full doc-based 4-step benchmark workflow."""
     res = EvalResult()
+    benchmark_log = paths.benchmark_log
 
     try:
         # Step 1: Generate
-        res.generate_out, res.generate_err, res.generate_rc = _step_generate(entry)
+        res.generate_out, res.generate_err, res.generate_rc = _step_generate(
+            entry, benchmark_log
+        )
         if res.generate_rc != 0:
             return res
 
@@ -460,7 +480,7 @@ def run_benchmark(entry: ModelEntry, validation_count: int) -> EvalResult:
         )
 
         # Step 2: Build & Flash
-        res.load_out, res.load_err, res.load_rc = _step_load(entry)
+        res.load_out, res.load_err, res.load_rc = _step_load(entry, benchmark_log)
         if res.load_rc != 0:
             return res
 
@@ -474,8 +494,10 @@ def run_benchmark(entry: ModelEntry, validation_count: int) -> EvalResult:
         validate_lines: list = []
         validate_window_closed = False
         try:
-            fut_validate = executor.submit(_step_validate, entry, validation_count)
-            fut_evaluate = executor.submit(_step_evaluate, entry)
+            fut_validate = executor.submit(
+                _step_validate, entry, validation_count, benchmark_log
+            )
+            fut_evaluate = executor.submit(_step_evaluate, entry, benchmark_log)
             try:
                 res.validate_out, res.validate_err, res.validate_rc = fut_validate.result()
                 get_logger("workflow").info("Validation complete", variant=entry.variant, rc=res.validate_rc)
@@ -489,11 +511,11 @@ def run_benchmark(entry: ModelEntry, validation_count: int) -> EvalResult:
                 f"validate rc: {res.validate_rc}\n"
                 f"power samples captured (validate window): {len(validate_lines)}\n"
             )
-            _append_stdout_log(validate_header)
+            _append_stdout_log(validate_header, benchmark_log)
             if res.validate_out:
-                _append_stdout_log(res.validate_out)
+                _append_stdout_log(res.validate_out, benchmark_log)
             if res.validate_err:
-                _append_stdout_log(res.validate_err)
+                _append_stdout_log(res.validate_err, benchmark_log)
 
             # Parse and log validate metrics
             val_metrics = parse_metrics(res.validate_out, res.validate_err)

@@ -12,8 +12,6 @@ from typing import Any, Optional
 
 from tenacity import Retrying, stop_after_attempt, wait_fixed
 
-from ..paths import POWER_MEASURE_CSV_PATH
-
 
 def _log(level: str, msg: str, **kwargs) -> None:
     try:
@@ -197,7 +195,7 @@ class PowerMeasureSession:
         self._validate_lock = threading.Lock()
         self._capture_validate = False
 
-    def start(self, port: Optional[str], baud: int) -> bool:
+    def start(self, port: Optional[str], baud: int, power_csv_path: Path) -> bool:
         if not _HAS_PROTOBUF:
             _log("warning", "Power disabled: protobuf not found")
             return False
@@ -250,7 +248,8 @@ class PowerMeasureSession:
             self._ser = None
             return False
 
-        path = POWER_MEASURE_CSV_PATH
+        path = power_csv_path
+        path.parent.mkdir(parents=True, exist_ok=True)
         write_header = not path.exists() or path.stat().st_size == 0
         self._csv_fd = open(path, "a", encoding="utf-8", newline="")
         if write_header:
@@ -371,7 +370,7 @@ class PowerMeasureSession:
 _session: Optional[PowerMeasureSession] = None
 
 
-def start_power_session(port: Optional[str], baud: int) -> bool:
+def start_power_session(port: Optional[str], baud: int, power_csv_path: Path) -> bool:
     """
     If port is provided, start a background thread that logs every INA228
     sample to results/benchmark_*/power_measure.csv with host_time_iso (UTC).
@@ -382,7 +381,7 @@ def start_power_session(port: Optional[str], baud: int) -> bool:
     if not port:
         port = _auto_detect_esp32c6()
     sess = PowerMeasureSession()
-    if not sess.start(port, baud):
+    if not sess.start(port, baud, power_csv_path):
         return False
     _session = sess
     return True

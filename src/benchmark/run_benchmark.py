@@ -12,7 +12,8 @@ import time
 
 import typer
 
-from .paths import CSV_PATH, N6_WORKDIR, POWER_MEASURE_CSV_PATH
+from .constants import BENCHMARK_CLOCK_MHZ
+from .paths import BenchmarkPaths, N6_WORKDIR, benchmark_paths_for_mode
 from .utils.logutil import (
     configure_logging,
     typer_install_exception_hook,
@@ -45,7 +46,7 @@ APP_CONFIG_PATH = (
     / "app_config.h"
 )
 
-_VALID_MODES = frozenset({"underdrive", "nominal", "overdrive", "override"})
+_VALID_MODES = frozenset({"underdrive", "nominal", "overdrive"})
 
 
 def _ensure_no_ovd_clk400_commented(text: str) -> str:
@@ -83,8 +84,7 @@ def _apply_benchmark_mode(mode: str) -> None:
         raise ValueError(
             f"Invalid benchmark mode {mode!r}; expected one of {sorted(_VALID_MODES)}"
         )
-    normalized = "overdrive" if m == "override" else m
-    use_overdrive = "1" if normalized == "overdrive" else "0"
+    use_overdrive = "1" if m == "overdrive" else "0"
     if not APP_CONFIG_PATH.exists():
         raise FileNotFoundError(f"app_config.h not found: {APP_CONFIG_PATH}")
 
@@ -95,9 +95,9 @@ def _apply_benchmark_mode(mode: str) -> None:
         raise RuntimeError(
             f"Failed to patch USE_OVERDRIVE in {APP_CONFIG_PATH}: define not found"
         )
-    if normalized == "nominal":
+    if m == "nominal":
         updated = _ensure_no_ovd_clk400_commented(updated)
-    elif normalized == "underdrive":
+    elif m == "underdrive":
         updated = _ensure_no_ovd_clk400_active(updated)
 
     if updated != text:
@@ -138,13 +138,12 @@ def run_benchmark(
     mode: str = typer.Option(
         "all",
         "--mode",
-        help="underdrive | nominal | overdrive | override | all (patch app_config.h)",
+        help="underdrive | nominal | overdrive | all",
     ),
 ) -> None:
     if getattr(ctx, "resilient_parsing", False):
         return
 
-    configure_logging()
     typer_install_exception_hook()
 
     N6_WORKDIR.mkdir(parents=True, exist_ok=True)
@@ -161,12 +160,16 @@ def _run_all_modes(
     power_baud: int,
     validation_count: int,
 ) -> None:
-    """Run benchmark in underdrive mode, pause, then overdrive mode."""
-    _run_single_mode("underdrive", filter_substr, power_serial, power_baud, validation_count)
-    get_logger("benchmark").info("Pausing for 5.0 seconds between modes...")
-    time.sleep(5.0)
-    _run_single_mode("overdrive", filter_substr, power_serial, power_baud, validation_count)
+    """Run benchmark in underdrive mode, pause, nominal mode, pause, then overdrive mode."""
 
+    get_logger("benchmark").info("Running benchmark in underdrive mode...")
+    _run_single_mode("underdrive", filter_substr, power_serial, power_baud, validation_count)
+
+    get_logger("benchmark").info("Running benchmark in nominal mode...")
+    _run_single_mode("nominal", filter_substr, power_serial, power_baud, validation_count)
+
+    get_logger("benchmark").info("Running benchmark in overdrive mode...")
+    _run_single_mode("overdrive", filter_substr, power_serial, power_baud, validation_count)
 
 def _run_single_mode(
     mode: str,
@@ -176,10 +179,23 @@ def _run_single_mode(
     validation_count: int,
 ) -> None:
     """Run benchmark for a single mode."""
+    paths = benchmark_paths_for_mode(mode)
+    configure_logging(audit_log_path=paths.benchmark_log)
+    m = mode.strip().lower()
+    cpu_mhz, npu_mhz = BENCHMARK_CLOCK_MHZ[m]
+    get_logger("benchmark").info(
+        "Benchmark run mode",
+        mode=m,
+        cpu_mhz=cpu_mhz,
+        npu_mhz=npu_mhz,
+        audit_log=str(paths.benchmark_log),
+    )
     _apply_benchmark_mode(mode)
 
-    power_running = start_power_session(power_serial, power_baud)
-    stedgeai_version = get_stedgeai_version()
+    power_running = start_power_session(
+        power_serial, power_baud, paths.power_measure_csv_path
+    )
+    stedgeai_version = get_stedgeai_version(paths.benchmark_log)
 
     entries = load_models()
     entries.sort(key=lambda e: (e.family, e.variant, e.fmt))
@@ -187,16 +203,14 @@ def _run_single_mode(
     if filter_substr:
         entries = [e for e in entries if filter_substr in e.variant]
 
-    completed = load_completed()
+    completed = load_completed(paths)
     total = len(entries)
 
-    m = mode.strip().lower()
-    mode_out = "overdrive" if m == "override" else mode
     log_benchmark_start(
         total=total,
         completed=len(completed),
         filter=filter_substr or None,
-        mode=mode_out,
+        mode=mode,
         validation_count=validation_count,
         stedgeai_version=stedgeai_version,
         power_active=power_running,
@@ -211,6 +225,8 @@ def _run_single_mode(
             power_running,
             validation_count,
             stedgeai_version,
+            paths,
+            mode,
         )
     finally:
         stop_power_session()
@@ -223,7 +239,11 @@ def _run_benchmark_loop(
     power_running: bool,
     validation_count: int,
     stedgeai_version: str,
+    paths: BenchmarkPaths,
+    mode: str,
 ):
+    m = mode.strip().lower()
+    cpu_mhz, npu_mhz = BENCHMARK_CLOCK_MHZ[m]
     for i, entry in enumerate(entries, 1):
         key = (entry.variant, entry.fmt)
         tag = f"[{i}/{total}]"
@@ -243,7 +263,7 @@ def _run_benchmark_loop(
         )
 
         try:
-            res = workflow.run_benchmark(entry, validation_count)
+            res = workflow.run_benchmark(entry, validation_count, paths)
 
             if res.failed_step:
                 log_model_fail(
@@ -271,6 +291,8 @@ def _run_benchmark_loop(
                     datetime.timezone.utc
                 ).isoformat(),
                 "stedgeai_version": stedgeai_version,
+                "cpu_mhz": str(cpu_mhz),
+                "npu_mhz": str(npu_mhz),
                 "model_family": entry.family,
                 "model_variant": entry.variant,
                 "hyperparameters": entry.hyperparameters,
@@ -322,7 +344,7 @@ def _run_benchmark_loop(
                 ),
             }
 
-            append_result(row)
+            append_result(row, paths)
 
             log_model_done(
                 i,
@@ -340,8 +362,8 @@ def _run_benchmark_loop(
 
     get_logger("benchmark").info(
         "Benchmark complete",
-        results_csv=str(CSV_PATH),
-        power_csv=str(POWER_MEASURE_CSV_PATH) if power_running else None,
+        results_csv=str(paths.csv_path),
+        power_csv=str(paths.power_measure_csv_path) if power_running else None,
     )
 
 

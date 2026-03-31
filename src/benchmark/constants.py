@@ -25,9 +25,18 @@ SSD_FAMILIES = {
     "ssdlite_mobilenetv3small_pt",
 }
 
+# CPU / NPU clocks for STM32N6570-DK benchmark modes (app_config.h clock tree).
+BENCHMARK_CLOCK_MHZ: dict[str, tuple[int, int]] = {
+    "underdrive": (400, 400),
+    "nominal": (600, 800),
+    "overdrive": (800, 1000),
+}
+
 CSV_COLUMNS = [
     "host_time_iso",
     "stedgeai_version",
+    "cpu_mhz",
+    "npu_mhz",
     "model_family",
     "model_variant",
     "hyperparameters",

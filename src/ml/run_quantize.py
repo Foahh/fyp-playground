@@ -51,9 +51,9 @@ def _quantize(img_size: int, pt_path: Path) -> Path:
     """Export quantized INT8 TFLite via Ultralytics; return path Ultralytics wrote."""
     from ultralytics import YOLO
 
-    from dataset.dataset_common import materialize_coco_data_yaml
+    from src.dataset.dataset_common import materialize_coco_data_yaml
 
-    data_yaml = materialize_coco_data_yaml()
+    data_yaml = materialize_coco_data_yaml(require_person=True)
 
     print(f"Loading checkpoint {pt_path} ...")
     model = YOLO(str(pt_path))
@@ -86,9 +86,9 @@ def _eval_tflite_path(exported_float_io: Path) -> Path:
 def _evaluate(tflite_path: Path, img_size: int) -> None:
     """Run Ultralytics evaluation on the quantized TFLite model."""
     from ultralytics import YOLO
-    from dataset.dataset_common import materialize_coco_data_yaml
+    from src.dataset.dataset_common import materialize_coco_data_yaml
 
-    data_yaml = materialize_coco_data_yaml()
+    data_yaml = materialize_coco_data_yaml(require_person=True)
     # Keep val runs beside the TFLite (no separate quantized/ tree).
     val_project = tflite_path.parent
 

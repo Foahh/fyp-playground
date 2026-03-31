@@ -464,6 +464,8 @@ def build_metric_rows() -> list[dict[str, str]]:
             {
                 "host_time_iso": "",
                 "stedgeai_version": mets["stedgeai_version"],
+                "cpu_mhz": "",
+                "npu_mhz": "",
                 "model_family": reg["family"],
                 "model_variant": reg["variant"],
                 "hyperparameters": reg.get("hyperparameters", "") or "",

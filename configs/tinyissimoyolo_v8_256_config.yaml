@@ -1,0 +1,35 @@
+general:
+  num_threads_tflite: 8
+
+operation_mode: evaluation
+
+model:
+  model_type: yolov8n
+  model_path: results/model/tinyissimoyolo_v8_256/weights/best_saved_model/best_full_integer_quant.tflite
+
+dataset:
+  dataset_name: coco
+  format: tfs
+  class_names: [person]
+  test_path: ./datasets/coco_2017_person/test
+
+preprocessing:
+  rescaling: { scale: 1/255, offset: 0 }
+  resizing:
+    aspect_ratio: fit
+    interpolation: nearest
+  color_mode: rgb
+
+postprocessing:
+  confidence_thresh: 0.001
+  NMS_thresh: 0.5
+  IoU_eval_thresh: 0.5
+  plot_metrics: false
+  max_detection_boxes: 100
+
+mlflow:
+  uri: ./tf/src/experiments_outputs/mlruns
+
+hydra:
+  run:
+    dir: ./tf/src/experiments_outputs/${now:%Y_%m_%d_%H_%M_%S}

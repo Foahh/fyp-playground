@@ -1,30 +1,23 @@
-"""Benchmark-specific path constants."""
+"""Benchmark-specific path constants and resolved paths per mode."""
 
-import sys
+from __future__ import annotations
+
+from dataclasses import dataclass
 from pathlib import Path
 
 from ..common.paths import get_datasets_dir, get_repo_root, get_stedgeai_path
 
+_VALID_BENCHMARK_MODES = frozenset({"underdrive", "nominal", "overdrive"})
 
-def _detect_benchmark_mode_from_argv() -> str:
-    """Detect benchmark mode from CLI args."""
-    mode = "underdrive"
-    argv = sys.argv[1:]
-    for i, token in enumerate(argv):
-        if token == "--mode" and i + 1 < len(argv):
-            mode = argv[i + 1].strip().lower()
-            break
-        if token.startswith("--mode="):
-            mode = token.split("=", 1)[1].strip().lower()
-            break
 
-    if mode in ("override", "overdrive"):
-        return "overdrive"
+def _benchmark_results_subdir(mode: str) -> str:
+    if mode == "overdrive":
+        return "benchmark_overdrive"
     if mode == "nominal":
-        return "nominal"
+        return "benchmark_nominal"
     if mode == "underdrive":
-        return "underdrive"
-    return "underdrive"
+        return "benchmark_underdrive"
+    raise ValueError(f"Invalid benchmark mode {mode!r}; expected one of {sorted(_VALID_BENCHMARK_MODES)}")
 
 
 BASE_DIR = get_repo_root()
@@ -33,21 +26,7 @@ MODELZOO_DIR = BASE_DIR / "external" / "stm32ai-modelzoo" / "object_detection"
 SERVICES_DIR = BASE_DIR / "external" / "stm32ai-modelzoo-services" / "object_detection"
 RESULTS_DIR = BASE_DIR / "results"
 
-BENCHMARK_MODE = _detect_benchmark_mode_from_argv()
-def _benchmark_results_subdir(mode: str) -> str:
-    if mode == "overdrive":
-        return "benchmark_overdrive"
-    if mode == "nominal":
-        return "benchmark_nominal"
-    return "benchmark_underdrive"
-
-
-BENCHMARK_DIR = RESULTS_DIR / _benchmark_results_subdir(BENCHMARK_MODE)
 BENCHMARK_PARSED_DIR = RESULTS_DIR
-
-CSV_PATH = BENCHMARK_DIR / "benchmark_results.csv"
-BENCHMARK_LOG = BENCHMARK_DIR / "benchmark.log"
-POWER_MEASURE_CSV_PATH = BENCHMARK_DIR / "power_measure.csv"
 
 STEDGEAI_PATH = get_stedgeai_path()
 
@@ -64,3 +43,29 @@ COCO_80_ANNOTATIONS = str(
 COCO_IMAGES = str(DATASETS_DIR / "coco" / "images" / "val2017")
 
 METRIC_PARSED_CSV_PATH = BENCHMARK_PARSED_DIR / "benchmark_parsed.csv"
+
+
+@dataclass(frozen=True)
+class BenchmarkPaths:
+    """Resolved paths for one benchmark mode (underdrive / nominal / overdrive)."""
+
+    benchmark_dir: Path
+    csv_path: Path
+    benchmark_log: Path
+    power_measure_csv_path: Path
+
+
+def benchmark_paths_for_mode(mode: str) -> BenchmarkPaths:
+    """Return paths for a single benchmark mode."""
+    m = mode.strip().lower()
+    if m not in _VALID_BENCHMARK_MODES:
+        raise ValueError(
+            f"Invalid benchmark mode {mode!r}; expected one of {sorted(_VALID_BENCHMARK_MODES)}"
+        )
+    bd = RESULTS_DIR / _benchmark_results_subdir(m)
+    return BenchmarkPaths(
+        benchmark_dir=bd,
+        csv_path=bd / "benchmark_results.csv",
+        benchmark_log=bd / "benchmark.log",
+        power_measure_csv_path=bd / "power_measure.csv",
+    )

@@ -3,16 +3,17 @@
 import csv
 
 from ..constants import CSV_COLUMNS
-from ..paths import CSV_PATH
+from ..paths import BenchmarkPaths
 from ..utils.logutil import configure_logging, get_logger
 
 
-def load_completed() -> set[tuple[str, str]]:
+def load_completed(paths: BenchmarkPaths) -> set[tuple[str, str]]:
     """Read CSV and return set of (variant, format) keys already done."""
+    csv_path = paths.csv_path
     completed = set()
-    if not CSV_PATH.exists():
+    if not csv_path.exists():
         return completed
-    with open(CSV_PATH, "r", newline="", encoding="utf-8") as f:
+    with open(csv_path, "r", newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
             key = (row.get("model_variant", ""), row.get("format", ""))
@@ -20,10 +21,12 @@ def load_completed() -> set[tuple[str, str]]:
     return completed
 
 
-def append_result(row: dict):
+def append_result(row: dict, paths: BenchmarkPaths):
     """Append one row to CSV, creating file + header if needed."""
-    write_header = not CSV_PATH.exists() or CSV_PATH.stat().st_size == 0
-    with open(CSV_PATH, "a", newline="", encoding="utf-8") as f:
+    csv_path = paths.csv_path
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+    write_header = not csv_path.exists() or csv_path.stat().st_size == 0
+    with open(csv_path, "a", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=CSV_COLUMNS)
         if write_header:
             writer.writeheader()

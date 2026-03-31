@@ -73,10 +73,14 @@ KEY_MERGE = (
     "_res",
 )
 
+_COMPARE_METADATA_COLS = frozenset(
+    ("host_time_iso", "stedgeai_version", "cpu_mhz", "npu_mhz")
+)
+
 METRIC_COLS = tuple(
     c
     for c in CSV_COLUMNS_NO_POWER
-    if c not in IDENTITY_COLS and c not in ("host_time_iso", "stedgeai_version")
+    if c not in IDENTITY_COLS and c not in _COMPARE_METADATA_COLS
 )
 
 _BENCH_PAIR_OMIT_POWER = frozenset(
@@ -91,7 +95,7 @@ METRIC_COLS_BENCH_PAIR = tuple(
     c
     for c in CSV_COLUMNS
     if c not in IDENTITY_COLS
-    and c not in ("host_time_iso", "stedgeai_version")
+    and c not in _COMPARE_METADATA_COLS
     and c not in _BENCH_PAIR_OMIT_POWER
 )
 
