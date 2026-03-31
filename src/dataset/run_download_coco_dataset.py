@@ -217,8 +217,7 @@ def generate_tfs_dataset(
 
         src_img = val_images_dir / img_info["file_name"]
         dst_img = out_dir / img_info["file_name"]
-        if not dst_img.exists():
-            os.symlink(src_img.resolve(), dst_img)
+        _safe_symlink(src_img, dst_img)
 
         stem = Path(img_info["file_name"]).stem
         tfs_path = out_dir / (stem + ".tfs")
@@ -241,7 +240,8 @@ def _all_coco_category_names() -> list[str]:
 def _safe_symlink(src: Path, dst: Path) -> None:
     if dst.exists() or dst.is_symlink():
         return
-    os.symlink(src.resolve(), dst)
+    rel = os.path.relpath(src.resolve(), start=dst.parent.resolve())
+    os.symlink(rel, dst)
 
 
 def _write_person_yolo_split(

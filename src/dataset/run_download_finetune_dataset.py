@@ -177,7 +177,8 @@ def _extract_zip(zip_path: Path, extract_to: Path) -> None:
 def _safe_symlink(src: Path, dst: Path) -> None:
     if dst.exists() or dst.is_symlink():
         return
-    os.symlink(src.resolve(), dst)
+    rel = os.path.relpath(src.resolve(), start=dst.parent.resolve())
+    os.symlink(rel, dst)
 
 
 def _train_val_split(
@@ -713,7 +714,8 @@ def _ensure_jpg(src: Path, dst: Path) -> None:
         return
     real_src = src.resolve() if src.is_symlink() else src
     if real_src.suffix.lower() in (".jpg", ".jpeg"):
-        os.symlink(real_src, dst)
+        rel = os.path.relpath(real_src.resolve(), start=dst.parent.resolve())
+        os.symlink(rel, dst)
     else:
         Image.open(real_src).convert("RGB").save(dst, "JPEG", quality=95)
 
