@@ -511,9 +511,9 @@ def _parsed_metrics_empty(row: dict[str, str]) -> bool:
     return not any((row.get(k) or "").strip() for k in _PARSED_METRIC_KEYS)
 
 
-def write_metric_parsed_csv(path: Path | None = None) -> tuple[Path, int]:
+def write_metric_parsed_csv() -> tuple[Path, int]:
     METRIC_PARSED_CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
-    out = path or METRIC_PARSED_CSV_PATH
+    out = METRIC_PARSED_CSV_PATH
     built = build_metric_rows()
     rows: list[dict[str, str]] = []
     for r in built:
