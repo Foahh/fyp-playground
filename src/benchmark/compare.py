@@ -24,6 +24,10 @@ Output is grouped by ``(model_variant, format)`` with plain-text tables (no pass
 Use ``--delta-pct PCT`` to hide metric rows whose numeric ``|delta_pct|`` is below PCT. Rows
 without a numeric ``delta_pct`` (e.g. baseline zero) stay listed; matching ``stedgeai_version``
 rows are omitted.
+
+Use ``--delta METRIC:THRESH`` (repeatable) to keep only listed metrics whose numeric ``|Δ|`` is
+at least ``THRESH`` (raw delta, not percent). Rows without a numeric ``Δ`` stay listed; empty
+``stedgeai_version`` match rows are omitted (same as ``--delta-pct``).
 """
 
 from __future__ import annotations
@@ -298,6 +302,70 @@ def _parse_delta_pct_value(pct_str: str) -> float | None:
         return v
     except ValueError:
         return None
+
+
+def _parse_delta_abs_value(delta_str: str) -> float | None:
+    s = (delta_str or "").strip()
+    if not s or s == "—" or s == "≠":
+        return None
+    try:
+        v = float(s)
+        if v != v:
+            return None
+        return v
+    except ValueError:
+        return None
+
+
+def _parse_delta_cli_items(
+    items: list[str],
+) -> tuple[list[tuple[str, float]], dict[str, float]] | str:
+    """Returns (ordered display pairs, metric_casefold → min |Δ| threshold) or an error message."""
+    ordered: list[tuple[str, float]] = []
+    thresh_by_metric: dict[str, float] = {}
+    for raw in items:
+        s = (raw or "").strip()
+        if not s:
+            continue
+        if ":" not in s:
+            return f"invalid --delta {raw!r}; expected METRIC:NUMBER"
+        name, num_s = s.rsplit(":", 1)
+        name = name.strip()
+        num_s = num_s.strip()
+        if not name:
+            return f"invalid --delta {raw!r}; metric name before ':' is empty"
+        if not num_s:
+            return f"invalid --delta {raw!r}; threshold after ':' is empty"
+        try:
+            thr = float(num_s)
+        except ValueError:
+            return f"invalid --delta threshold in {raw!r}; expected a number"
+        if thr < 0:
+            return f"invalid --delta {raw!r}; threshold must be >= 0"
+        key = name.casefold()
+        ordered.append((name, thr))
+        thresh_by_metric[key] = max(thresh_by_metric.get(key, 0.0), thr)
+    return ordered, thresh_by_metric
+
+
+def filter_rows_by_delta_spec(
+    rows: list[dict[str, str]],
+    thresh_by_metric: dict[str, float],
+) -> list[dict[str, str]]:
+    if not thresh_by_metric:
+        return rows
+    out: list[dict[str, str]] = []
+    for r in rows:
+        m = (r.get("metric") or "").strip().casefold()
+        if m not in thresh_by_metric:
+            continue
+        if r.get("metric") == "stedgeai_version" and not (r.get("delta") or "").strip():
+            continue
+        thr = thresh_by_metric[m]
+        v = _parse_delta_abs_value(r.get("delta", ""))
+        if v is None or abs(v) >= thr:
+            out.append(r)
+    return out
 
 
 def filter_rows_by_abs_delta_pct(
@@ -625,9 +693,16 @@ def print_comparison_report(
     *,
     delta_rows_before_filter: int | None = None,
     delta_pct: float | None = None,
+    delta_abs_before: int | None = None,
+    delta_abs_desc: str | None = None,
 ) -> None:
     console = Console()
     console.print(result.headline)
+    if delta_abs_desc is not None and delta_abs_before is not None:
+        console.print(
+            f"(filtered: {delta_abs_desc} — "
+            f"{len(result.delta_rows)} of {delta_abs_before} row(s))"
+        )
     if delta_pct is not None and delta_rows_before_filter is not None:
         console.print(
             f"(filtered: |Δ%| ≥ {delta_pct:g}% — "
@@ -761,6 +836,14 @@ def compare_entry(
             "matching stedgeai_version rows omitted."
         ),
     ),
+    delta_metric: list[str] = typer.Option(
+        [],
+        "--delta",
+        help=(
+            "Keep only these metric(s) with numeric |Δ| ≥ THRESH; format METRIC:THRESH (raw delta). "
+            "Repeat for multiple. Rows without numeric Δ stay; empty stedgeai_version rows omitted."
+        ),
+    ),
     metric: list[str] = typer.Option(
         [],
         "--metric",
@@ -793,6 +876,20 @@ def compare_entry(
 
     result: ComparisonResult | None = None
     before_filter: int | None = None
+    before_delta_abs: int | None = None
+    delta_abs_desc: str | None = None
+    thresh_by_metric: dict[str, float] = {}
+
+    if delta_metric:
+        parsed = _parse_delta_cli_items(delta_metric)
+        if isinstance(parsed, str):
+            _err_console.print(f"[red]error: {parsed}[/red]")
+            raise typer.Exit(2)
+        ordered_spec, thresh_by_metric = parsed
+        if not thresh_by_metric:
+            _err_console.print("[red]error: --delta requires at least one METRIC:NUMBER[/red]")
+            raise typer.Exit(2)
+        delta_abs_desc = "; ".join(f"{n} |Δ| ≥ {t:g}" for n, t in ordered_spec)
 
     if l == "readme" or r == "readme":
         _require_file_exists(readme, label="--readme")
@@ -828,6 +925,9 @@ def compare_entry(
     assert result is not None
     if metric:
         result.delta_rows = filter_rows_by_metric(result.delta_rows, metric)
+    if thresh_by_metric:
+        before_delta_abs = len(result.delta_rows)
+        result.delta_rows = filter_rows_by_delta_spec(result.delta_rows, thresh_by_metric)
     if delta_pct is not None:
         if delta_pct < 0:
             _err_console.print("[red]error: --delta-pct must be >= 0[/red]")
@@ -839,6 +939,8 @@ def compare_entry(
         result,
         delta_rows_before_filter=before_filter,
         delta_pct=delta_pct,
+        delta_abs_before=before_delta_abs,
+        delta_abs_desc=delta_abs_desc,
     )
 
 

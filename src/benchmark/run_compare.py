@@ -2,6 +2,7 @@
 
 From repo root:
   python src/benchmark/run_compare.py [compare flags]
+  python src/benchmark/run_compare.py --delta METRIC:NUMBER ...
   python project.py compare-runs [flags]
 """
 
