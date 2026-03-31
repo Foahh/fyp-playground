@@ -325,6 +325,16 @@ def filter_rows_by_abs_delta_pct(
     return out
 
 
+def filter_rows_by_metric(
+    rows: list[dict[str, str]],
+    metrics: list[str],
+) -> list[dict[str, str]]:
+    want = {(m or "").strip().casefold() for m in metrics if (m or "").strip()}
+    if not want:
+        return rows
+    return [r for r in rows if (r.get("metric") or "").strip().casefold() in want]
+
+
 def load_csv_df(path: Path) -> pd.DataFrame:
     df = pd.read_csv(path, dtype=str, keep_default_na=False, na_filter=False)
     if df.shape[1] == 0 or df.columns[0] == "":
@@ -755,6 +765,11 @@ def compare_entry(
             "matching stedgeai_version rows omitted."
         ),
     ),
+    metric: list[str] = typer.Option(
+        [],
+        "--metric",
+        help="Only include these metric(s). Repeat flag to include multiple (case-insensitive exact match).",
+    ),
 ) -> None:
     """Compare any two datasources (delta = right − left)."""
     if getattr(ctx, "resilient_parsing", False):
@@ -813,6 +828,8 @@ def compare_entry(
         result = compare_bench_to_bench(l, left_path, r, right_path)
 
     assert result is not None
+    if metric:
+        result.delta_rows = filter_rows_by_metric(result.delta_rows, metric)
     if delta_pct is not None:
         if delta_pct < 0:
             _err_console.print("[red]error: --delta-pct must be >= 0[/red]")

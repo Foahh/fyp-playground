@@ -104,10 +104,11 @@ _QTLZ_COMMANDS = frozenset({"quantize"})
 _BHMK_COMMANDS = frozenset(
     {
         "benchmark",
-        "compare-runs",
+        "compare",
+        "select-model",
         "prepare-finetune-dataset",
-        "verify-model-dtypes",
-        "parse-modelzoo-readme",
+        "verify-model",
+        "parse-modelzoo",
         "finetune",
     }
 )

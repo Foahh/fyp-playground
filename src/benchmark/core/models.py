@@ -12,7 +12,7 @@ class ModelEntry:
     family: str
     variant: str
     hyperparameters: str
-    dataset: str        # "COCO-Person", "COCO-80", or "ST-Person"
+    dataset: str        # "COCO-Person", "COCO-80"
     num_classes: int
     fmt: str            # "Int8" or "W4A8"
     resolution: int

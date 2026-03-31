@@ -49,12 +49,14 @@ def build_eval_config(entry: ModelEntry) -> Path:
         },
     }
 
-    if entry.dataset in ("COCO-Person", "ST-Person"):
+    if entry.dataset == "COCO-Person":
         tfs_test = COCO_PERSON_TFS_TEST
         coco_annotations = COCO_PERSON_ANNOTATIONS
-    else:
+    elif entry.dataset == "COCO-80":
         tfs_test = COCO_80_TFS_TEST
         coco_annotations = COCO_80_ANNOTATIONS
+    else:
+        raise ValueError(f"Invalid dataset: {entry.dataset}")
 
     ds_format = base.get("dataset", {}).get("format", "tfs")
     if ds_format == "coco":
