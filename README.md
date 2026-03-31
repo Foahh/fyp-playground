@@ -35,15 +35,13 @@ Use `project.py` as the main entry point for most tasks.
 ```sh
 git submodule update --init --recursive
 
-python project.py setup-conda-ml
-python project.py setup-conda-bhmk
+python project.py setup-env-ml
+python project.py setup-env-bhmk
 
-conda activate fyp-ml
 python project.py download-coco
 python project.py train --size 192
 python project.py quantize --size 192
 
-conda activate fyp-bhmk
 python project.py benchmark
 ```
 
@@ -89,9 +87,9 @@ Three Conda environments are used by default:
 
 | Purpose | Default env | Setup |
 |---|---|---|
-| Dataset prep, TinyissimoYOLO training | `fyp-ml` (`FYP_YOLO_ENV`) | `python project.py setup-conda-ml` |
-| Ultralytics export / INT8 TFLite quantization (`src/ml/run_quantize.py`) | `fyp-qtlz` (`FYP_QTLZ_ENV`) | `python src/conda/run_conda_setup_qtlz.py` |
-| Benchmarking, README comparison, Model Zoo finetuning | `fyp-bhmk` (`FYP_STZOO_ENV`) | `python project.py setup-conda-bhmk` |
+| Dataset prep, TinyissimoYOLO training | `fyp-ml` (`FYP_YOLO_ENV`) | `python project.py setup-env-ml` |
+| Ultralytics export / INT8 TFLite quantization (`src/ml/run_quantize.py`) | `fyp-qtlz` (`FYP_QTLZ_ENV`) | `python project.py setup-env-qtlz` |
+| Benchmarking, README comparison, Model Zoo finetuning | `fyp-bhmk` (`FYP_STZOO_ENV`) | `python project.py setup-env-bhmk` |
 
 Command mapping:
 
@@ -100,23 +98,39 @@ Command mapping:
 | `download-coco`, `download-finetune`, `train` | `fyp-ml` |
 | `quantize` | `fyp-qtlz` |
 | `benchmark`, `compare-runs`, `prepare-finetune-dataset`, `finetune`, `verify-model-dtypes`, `parse-modelzoo-readme` | `fyp-bhmk` |
-| `setup-conda-ml`, `setup-conda-bhmk` | base or any env with `conda` |
+| `setup-env-ml`, `setup-env-qtlz`, `setup-env-bhmk` | base or any env with `conda` |
 
 Create environments:
 
 ```sh
-python project.py setup-conda-ml
-python src/conda/run_conda_setup_qtlz.py
-python project.py setup-conda-bhmk
+python project.py setup-env-ml
+python project.py setup-env-bhmk
+python project.py setup-env-qtlz
 ```
 
-### Prepare datasets
+#### Install conda envs under `/local` (temporary / fast scratch)
 
-Activate `fyp-ml`:
+If you want the *named* envs (e.g. `fyp-ml`) to be created under `/local` instead of your default conda envs directory, set `CONDA_ENVS_PATH` before running the setup commands. Optionally also set `CONDA_PKGS_DIRS` so downloaded packages/caches live under `/local` too.
 
 ```sh
-conda activate fyp-ml
+mkdir -p "/local/$USER/conda/envs" "/local/$USER/conda/pkgs"
+
+CONDA_ENVS_PATH="/local/$USER/conda/envs" \
+CONDA_PKGS_DIRS="/local/$USER/conda/pkgs" \
+python project.py setup-env-ml
+
+CONDA_ENVS_PATH="/local/$USER/conda/envs" \
+CONDA_PKGS_DIRS="/local/$USER/conda/pkgs" \
+python project.py setup-env-bhmk
+
+CONDA_ENVS_PATH="/local/$USER/conda/envs" \
+CONDA_PKGS_DIRS="/local/$USER/conda/pkgs" \
+python project.py setup-env-qtlz
 ```
+
+After that you can use `conda activate fyp-ml` / `fyp-bhmk` / `fyp-qtlz` as usual (conda will find them via `CONDA_ENVS_PATH`).
+
+### Prepare datasets
 
 Default dataset location is `./datasets`:
 
@@ -137,13 +151,7 @@ DATASETS_DIR=~/datasets python project.py download-coco
 
 Train TinyissimoYOLO in `fyp-ml`.
 
-Activate `fyp-ml`:
-
-```sh
-conda activate fyp-ml
-```
-
-`setup-conda-ml` already installs PyTorch from the CUDA 12.8 wheel index. To reinstall manually:
+`setup-env-ml` already installs PyTorch from the CUDA 12.8 wheel index. To reinstall manually:
 
 ```sh
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
@@ -177,12 +185,6 @@ results/model/tinyissimoyolo_v8_<size>/weights/best.pt
 ## 3. Quantize
 
 Quantize a trained checkpoint to **INT8 TFLite** in `fyp-qtlz` (this runs `src/ml/run_quantize.py`).
-
-Activate `fyp-qtlz`:
-
-```sh
-conda activate fyp-qtlz
-```
 
 Main command:
 
@@ -246,12 +248,6 @@ For setup details, see:
 
 - [docs/stm32n6_getting_started.md](docs/stm32n6_getting_started.md)
 - [external/stm32ai-modelzoo-services/README.md](external/stm32ai-modelzoo-services/README.md#before-you-start)
-
-Activate `fyp-bhmk`:
-
-```sh
-conda activate fyp-bhmk
-```
 
 Benchmark examples:
 
@@ -328,12 +324,6 @@ Configs:
 
 - `configs/finetune_dataset.yaml` — dataset conversion and TFS preparation
 - `configs/finetune.yaml` — training and chained quantization/export modes
-
-Activate `fyp-bhmk`:
-
-```sh
-conda activate fyp-bhmk
-```
 
 ### Prepare finetune dataset
 
