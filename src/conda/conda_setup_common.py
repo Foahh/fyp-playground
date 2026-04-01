@@ -110,6 +110,7 @@ _BHMK_COMMANDS = frozenset(
         "select-model",
         "prepare-finetune-dataset",
         "verify-model",
+        "verify-idle-power",
         "parse-modelzoo",
         "finetune",
     }

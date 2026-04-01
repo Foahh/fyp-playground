@@ -192,6 +192,7 @@ class PowerMeasureSession:
     _HANDSHAKE_REQUEST = b"PM_PING\n"
     _HANDSHAKE_ACK_PREFIX = "PM_ACK"
     _HANDSHAKE_TIMEOUT_S = 2.0
+    _RESET_REQUEST = b"PM_RESET\n"
 
     def __init__(self) -> None:
         self._stop = threading.Event()
@@ -203,6 +204,7 @@ class PowerMeasureSession:
         self._validate_samples: list[dict] = []
         self._validate_lock = threading.Lock()
         self._capture_validate = False
+        self._io_lock = threading.Lock()
 
     def start(self, port: Optional[str], baud: int, power_csv_path: Path) -> bool:
         if not _HAS_PROTOBUF:
@@ -274,9 +276,10 @@ class PowerMeasureSession:
     def _perform_handshake(self) -> bool:
         assert self._ser is not None
         try:
-            self._ser.reset_input_buffer()
-            self._ser.write(self._HANDSHAKE_REQUEST)
-            self._ser.flush()
+            with self._io_lock:
+                self._ser.reset_input_buffer()
+                self._ser.write(self._HANDSHAKE_REQUEST)
+                self._ser.flush()
         except Exception as e:
             _log("error", "Handshake write failed", error=str(e))
             return False
@@ -284,7 +287,8 @@ class PowerMeasureSession:
         deadline = time.monotonic() + self._HANDSHAKE_TIMEOUT_S
         while time.monotonic() < deadline:
             try:
-                line = self._ser.readline()
+                with self._io_lock:
+                    line = self._ser.readline()
             except Exception as e:
                 _log("error", "Handshake read failed", error=str(e))
                 return False
@@ -295,7 +299,8 @@ class PowerMeasureSession:
                 continue
             if text.startswith(self._HANDSHAKE_ACK_PREFIX):
                 _log("info", "Power monitor connected", ack=text)
-                self._ser.reset_input_buffer()
+                with self._io_lock:
+                    self._ser.reset_input_buffer()
                 return True
         return False
 
@@ -338,13 +343,15 @@ class PowerMeasureSession:
         assert self._ser is not None
         while not self._stop.is_set():
             try:
-                len_bytes = self._ser.read(4)
+                with self._io_lock:
+                    len_bytes = self._ser.read(4)
                 if len(len_bytes) != 4:
                     continue
                 msg_len = struct.unpack("<I", len_bytes)[0]
                 if msg_len == 0 or msg_len > 1024:
                     continue
-                msg_bytes = self._ser.read(msg_len)
+                with self._io_lock:
+                    msg_bytes = self._ser.read(msg_len)
                 if len(msg_bytes) != msg_len:
                     continue
 
@@ -373,7 +380,23 @@ class PowerMeasureSession:
                 _log("error", "Power reader error", error=str(e))
                 continue
 
+    def reset_accumulators(self) -> None:
+        """Reset power monitor accumulators right before a capture window.
+
+        This command MUST NOT produce ASCII output in protobuf streaming mode,
+        otherwise the framed protobuf reader will desynchronize.
+        """
+        if self._ser is None:
+            return
+        try:
+            with self._io_lock:
+                self._ser.write(self._RESET_REQUEST)
+                self._ser.flush()
+        except Exception as e:
+            _log("warning", "Failed to reset accumulators", error=str(e))
+
     def begin_validate_window(self) -> None:
+        self.reset_accumulators()
         with self._validate_lock:
             self._validate_samples.clear()
             self._capture_validate = True
@@ -425,6 +448,13 @@ def end_validate_capture() -> list[dict]:
     if _session is None:
         return []
     return _session.end_validate_window()
+
+
+def reset_power_accumulators() -> None:
+    """Send PM_RESET to clear the INA228 energy accumulator mid-session."""
+    global _session
+    if _session is not None:
+        _session.reset_accumulators()
 
 
 def is_power_session_active() -> bool:

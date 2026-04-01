@@ -21,6 +21,7 @@ from .power_serial import (
     compute_power_metrics,
     end_validate_capture,
     is_power_session_active,
+    reset_power_accumulators,
 )
 
 
@@ -262,6 +263,9 @@ def _step_validate(
         # Run inference n_runs times
         durations = []
         for i in range(n_runs):
+            reset_power_accumulators()
+            time.sleep(0.05)
+
             _, profile = runner.invoke(inputs, mode=AiRunner.Mode.IO_ONLY, disable_pb=True)
 
             if profile['c_durations']:
@@ -269,9 +273,6 @@ def _step_validate(
                 durations.append(d_ms)
             else:
                 d_ms = None
-
-            # Sleep 50ms between runs for power measurement denoising
-            time.sleep(0.05)
             get_logger("workflow").info(
                 "Inference run completed",
                 step="validate",

@@ -433,6 +433,17 @@
   input_data_type: int8
   output_data_type: int8
 
+- config: configs/tinyissimoyolo_v8_288_config.yaml
+  model: results/model/tinyissimoyolo_v8_288/weights/best_saved_model/best_full_integer_quant.tflite
+  family: tinyissimoyolo_v8
+  variant: tinyissimoyolo_v8_288
+  hyperparameters: ""
+  dataset: COCO-Person
+  fmt: Int8
+  resolution: 288
+  input_data_type: int8
+  output_data_type: int8
+
 - config: configs/yolo26_config.yaml
   model: external/ultralytics/examples/YOLOv8-STEdgeAI/stedgeai_models/object_detection/yolo26/yolo26_256_qdq_int8_od_coco-person-st.onnx
   family: yolo26
