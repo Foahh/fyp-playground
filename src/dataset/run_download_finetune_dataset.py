@@ -86,15 +86,14 @@ _ZENODO_ALL_CLASSES = [
 
 ZENODO_HAZARD_IDS: set[int] = {
     _ZENODO_ALL_CLASSES.index(n)
-    for n in ("cutter", "drill", "grinder", "knife", "saw", "tacker")
+    for n in ("cutter", "knife", "saw")
 }
 ZENODO_HAZARD_NAMES: set[str] = {_ZENODO_ALL_CLASSES[i] for i in ZENODO_HAZARD_IDS}
 
 HAZARD_KEYWORDS: set[str] = {
-    "axe", "blade", "chisel", "cleaver", "cutter", "drill",
-    "grinder", "hatchet", "knife", "machete", "plier", "plane", "saw",
-    "scissor", "scythe", "shear", "sickle", "snip", "solder", "staple_gun",
-    "tacker",
+    "axe", "blade", "chisel", "cleaver", "cutter",
+    "hatchet", "knife", "machete", "plier", "plane", "saw",
+    "scissor", "scythe", "shear", "sickle", "snip", "solder",
 }
 
 VAL_RATIO = 0.2
