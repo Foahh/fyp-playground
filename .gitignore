@@ -11,20 +11,26 @@ results/*
 !results/generate_result.csv
 
 !results/model/
-results/model/*
+results/model/**
+!results/model/**/
+!results/model/**/*.yaml
+!results/model/**/*.yml
+!results/model/**/*.pt
+!results/model/**/*.onnx
+!results/model/**/*.tflite
+!results/model/**/*.pb
+results/model/**/variables/**
 
-!results/model/tinyissimoyolo_v8_192/
-results/model/tinyissimoyolo_v8_192/weights/best_saved_model/variables
+**/val_float/**
+**/val_int8/**
+**/assets/**
+**/out/**
 
-!results/model/tinyissimoyolo_v8_256/
-results/model/tinyissimoyolo_v8_256/weights/best_saved_model/variables
-
-!results/model/tinyissimoyolo_v8_288/
-results/model/tinyissimoyolo_v8_288/weights/best_saved_model/variables
-
-val_float
-val_int8
-assets
+results/model/**/*.png
+results/model/**/*.jpg
+results/model/**/*.jpeg
+results/model/**/*.json
+results/model/**/*.csv
 
 *.npy
 ai_runner.log
