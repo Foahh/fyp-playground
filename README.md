@@ -45,7 +45,7 @@ All workflows are exposed as the first argument to [`project.py`](project.py). E
 | `evaluate` | `fyp-bhmk` | Host-side AP evaluation via Model Zoo → `results/evaluation_result.csv` |
 | `parse-modelzoo` | `fyp-bhmk` | Parse Model Zoo README tables → `results/benchmark_parsed.csv` |
 | `compare` | `fyp-bhmk` | Compare two metric sources (README vs bench CSVs, etc.) |
-| `verify-model` | `fyp-bhmk` | Print I/O tensor dtypes for each registered model (TFLite / ONNX QDQ) |
+| `verify-model-config` | `fyp-bhmk` | Print I/O tensor dtypes for each registered model (TFLite / ONNX QDQ) |
 | `select-model` | `fyp-bhmk` | Score and rank candidates from benchmark + optional AP CSV |
 | `prepare-finetune-dataset` | `fyp-bhmk` | Prepare STM32 Model Zoo finetune dataset pipeline |
 | `finetune` | `fyp-bhmk` | Run Model Zoo finetune / chain modes from YAML |
@@ -119,7 +119,7 @@ Command mapping:
 |---|---|
 | `download-coco`, `download-finetune`, `train` | `fyp-ml` |
 | `quantize` | `fyp-qtlz` |
-| `benchmark`, `evaluate`, `compare`, `select-model`, `verify-model`, `parse-modelzoo`, `prepare-finetune-dataset`, `finetune` | `fyp-bhmk` |
+| `benchmark`, `evaluate`, `compare`, `select-model`, `verify-model-config`, `parse-modelzoo`, `prepare-finetune-dataset`, `finetune` | `fyp-bhmk` |
 | `setup-env-ml`, `setup-env-qtlz`, `setup-env-bhmk` | base or any env with `conda` |
 
 Create environments:
@@ -340,12 +340,12 @@ Full help:
 python project.py compare -- --help
 ```
 
-### Verify model I/O dtypes (`verify-model`)
+### Verify model I/O dtypes (`verify-model-config`)
 
 Prints input/output tensor dtypes from each model in the registry (TFLite FlatBuffers; ONNX QDQ reported as quant types).
 
 ```sh
-python project.py verify-model
+python project.py verify-model-config
 ```
 
 ### Model selection / ranking (`select-model`)

@@ -25,7 +25,7 @@ LOCAL_COMMANDS: dict[str, str] = {
     "eval-quantize": "src/benchmark/run_eval_quantize.py",
     "compare": "src/benchmark/run_compare.py",
     "select-model": "src/benchmark/run_model_selection.py",
-    "verify-model": "src/benchmark/run_check_model_dtypes.py",
+    "verify-model-config": "src/benchmark/run_check_model_dtypes.py",
     "verify-idle-power": "src/benchmark/run_verify_idle_power.py",
     "parse-modelzoo": "src/benchmark/run_parse_modelzoo_readme.py",
     "setup-env-qtlz": "src/conda/run_conda_setup_qtlz.py",
