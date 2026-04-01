@@ -1,25 +1,24 @@
 """
 Quantize a trained TinyissimoYOLO checkpoint to INT8 TFLite via Ultralytics
-PTQ export, then optionally evaluate the quantized model.
+PTQ export only (evaluation is handled separately via STM32 Model Zoo services).
 
-Requires the ``fyp-ml`` conda env (ultralytics + tensorflow).
+Requires the ``fyp-qtlz`` conda env (ultralytics + tensorflow).
 
 Usage:
-    conda activate fyp-ml
+    conda activate fyp-qtlz
     python src/ml/run_quantize.py --size 192
-    python src/ml/run_quantize.py --size 192 --no-eval
     python src/ml/run_quantize.py --size 192 --checkpoint /path/to/best.pt
 
 Ultralytics writes several TFLite variants under ``best_saved_model/``. Export returns
-``best_int8.tflite`` (float I/O); evaluation uses ``best_full_integer_quant.tflite`` when
-present so metrics match ST Edge AI / NPU deployment (int8 I/O). Both paths are printed
-at the end.
+``best_int8.tflite`` (float I/O). For deployment / STM32 Model Zoo evaluation you typically
+want ``*_full_integer_quant.tflite`` (int8 I/O); if it exists, this script prints it.
 """
 
 from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Iterable
 
 import typer
 
@@ -72,6 +71,39 @@ def _quantize(img_size: int, pt_path: Path) -> Path:
     return exported
 
 
+def _newest(paths: Iterable[Path]) -> Path | None:
+    ps = [p for p in paths if p.is_file()]
+    if not ps:
+        return None
+    return max(ps, key=lambda p: p.stat().st_mtime)
+
+
+def _find_existing_tflite(model_root: Path) -> Path | None:
+    """
+    Find an existing quantized TFLite export under the model's results directory.
+
+    Preference order:
+    1) *_full_integer_quant.tflite (int8 I/O; ST Edge AI–aligned)
+    2) *_int8.tflite
+    3) any *.tflite (fallback)
+
+    If multiple candidates exist, choose the newest by mtime.
+    """
+    if not model_root.is_dir():
+        return None
+
+    full_int = _newest(model_root.rglob("*_full_integer_quant.tflite"))
+    if full_int is not None:
+        return full_int
+
+    int8 = _newest(model_root.rglob("*_int8.tflite"))
+    if int8 is not None:
+        return int8
+
+    any_tflite = _newest(model_root.rglob("*.tflite"))
+    return any_tflite
+
+
 def _eval_tflite_path(exported_float_io: Path) -> Path:
     """Prefer full integer I/O TFLite (same graph as ST Edge AI) next to the export artifact."""
     parent = exported_float_io.parent
@@ -81,31 +113,6 @@ def _eval_tflite_path(exported_float_io: Path) -> Path:
         if full_int.is_file():
             return full_int
     return exported_float_io
-
-
-def _evaluate(tflite_path: Path, img_size: int) -> None:
-    """Run Ultralytics evaluation on the quantized TFLite model."""
-    from ultralytics import YOLO
-    from src.dataset.dataset_common import materialize_coco_data_yaml
-
-    data_yaml = materialize_coco_data_yaml(require_person=True)
-    # Keep val runs beside the TFLite (no separate quantized/ tree).
-    val_project = tflite_path.parent
-
-    print(f"Evaluating quantized model with Ultralytics (imgsz={img_size}) ...")
-    model = YOLO(str(tflite_path))
-    metrics = model.val(
-        data=str(data_yaml),
-        imgsz=img_size,
-        split="val",
-        project=str(val_project),
-        name="val_int8",
-        exist_ok=True,
-        verbose=True,
-    )
-    print("Evaluation complete.")
-    if hasattr(metrics, "results_dict"):
-        print("Metrics:", metrics.results_dict)
 
 
 app = typer.Typer()
@@ -118,7 +125,7 @@ def main(
         None,
         help="Path to .pt checkpoint (default: best.pt under $FYP_RESULTS_DIR/model/ or <repo>/results/model/)",
     ),
-    no_eval: bool = typer.Option(False, help="Skip evaluation after quantization"),
+    force_quantize: bool = typer.Option(False, help="Re-export INT8 TFLite even if an existing export is found"),
 ):
     if size not in [192, 256, 288, 320]:
         typer.echo(f"Error: size must be one of [192, 256, 288, 320]", err=True)
@@ -126,26 +133,28 @@ def main(
 
     pt_path = _resolve_checkpoint(size, checkpoint)
 
-    exported = _quantize(size, pt_path)
-    eval_path = _eval_tflite_path(exported)
+    model_root = MODELS / f"tinyissimoyolo_v8_{size}"
 
-    if not no_eval:
-        _evaluate(eval_path, size)
+    exported: Path | None = None
+    existing = None if force_quantize else _find_existing_tflite(model_root)
+    if existing is not None:
+        exported = existing
+        print(f"Found existing TFLite; skipping export:\n  {exported}")
+    else:
+        exported = _quantize(size, pt_path)
 
     print()
     print("Export return path (often float I/O):")
     print(f"  {exported}")
+    eval_path = _eval_tflite_path(exported)
     if eval_path != exported:
-        print("Evaluation model (int8 I/O, ST Edge AI–aligned):")
+        print("Preferred evaluation / deployment model (int8 I/O, ST Edge AI–aligned):")
         print(f"  {eval_path}")
     elif exported.name.endswith("_int8.tflite"):
         print(
-            "Warning: *_full_integer_quant.tflite not found next to export; "
-            "evaluated float-I/O model instead."
+            "Warning: *_full_integer_quant.tflite not found next to export artifact; "
+            "you may want to locate the int8 I/O model for STM32 Model Zoo evaluation."
         )
-    if not no_eval:
-        print("Ultralytics val output (metrics, plots):")
-        print(f"  {eval_path.parent / 'val_int8'}")
     print("Done.")
 
 

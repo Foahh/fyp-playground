@@ -22,6 +22,10 @@ results/model/tinyissimoyolo_v8_256/weights/best_saved_model/variables
 !results/model/tinyissimoyolo_v8_288/
 results/model/tinyissimoyolo_v8_288/weights/best_saved_model/variables
 
+val_float
+val_int8
+assets
+
 *.npy
 ai_runner.log
 yolo26n.pt

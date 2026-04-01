@@ -106,6 +106,7 @@ _BHMK_COMMANDS = frozenset(
         "benchmark",
         "generate-model",
         "evaluate",
+        "eval-quantize",
         "compare",
         "select-model",
         "prepare-finetune-dataset",
