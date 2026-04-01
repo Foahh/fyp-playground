@@ -11,11 +11,15 @@ results/*
 
 !results/model/
 results/model/*
+
 !results/model/tinyissimoyolo_v8_192/
 results/model/tinyissimoyolo_v8_192/weights/best_saved_model/variables
 
 !results/model/tinyissimoyolo_v8_256/
 results/model/tinyissimoyolo_v8_256/weights/best_saved_model/variables
+
+!results/model/tinyissimoyolo_v8_288/
+results/model/tinyissimoyolo_v8_288/weights/best_saved_model/variables
 
 *.npy
 ai_runner.log
