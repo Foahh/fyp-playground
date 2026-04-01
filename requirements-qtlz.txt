@@ -6,3 +6,6 @@ onnx_graphsurgeon>=0.3.26
 ai-edge-litert>=1.2.0
 onnx2tf>=1.26.3,<1.29.0
 onnxruntime
+
+typer>=0.24.1
+pyyaml>=6.0.2

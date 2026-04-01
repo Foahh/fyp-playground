@@ -16,6 +16,7 @@ PATCH_SCRIPT = Path(__file__).resolve().parent / "run_patch_ultralytics_per_chan
 
 from src.conda.conda_setup_common import (
     conda_activate_hint,
+    conda_install,
     conda_run,
     conda_env_spec_args,
     ensure_conda_env,
@@ -49,6 +50,7 @@ def main() -> None:
         sys.exit(1)
 
     ensure_conda_env(QTLZ_ENV_NAME, PYTHON_VERSION, f"Python {PYTHON_VERSION}")
+    conda_install(QTLZ_ENV_NAME, "ultralytics", channels=("conda-forge",))
 
     pip_install(QTLZ_ENV_NAME, "-r", str(req))
 
