@@ -1,7 +1,1 @@
 "timestamp_utc","variant","format","model_path","ap_50","elapsed_s"
-"2026-04-01T11:21:39.959116+00:00","tinyissimoyolo_v8_192","Float","model/tinyissimoyolo_v8_192/weights/best.onnx","52.5","31.4"
-"2026-04-01T11:22:05.398068+00:00","tinyissimoyolo_v8_192","Int8","model/tinyissimoyolo_v8_192/weights/best_saved_model/best_full_integer_quant.tflite","50.5","25.4"
-"2026-04-01T11:22:37.686567+00:00","tinyissimoyolo_v8_256","Float","model/tinyissimoyolo_v8_256/weights/best.onnx","57.8","32.3"
-"2026-04-01T11:23:05.181882+00:00","tinyissimoyolo_v8_256","Int8","model/tinyissimoyolo_v8_256/weights/best_saved_model/best_full_integer_quant.tflite","52.6","27.5"
-"2026-04-01T11:23:43.405927+00:00","tinyissimoyolo_v8_288","Float","model/tinyissimoyolo_v8_288/weights/best.onnx","59.7","38.2"
-"2026-04-01T11:24:12.593895+00:00","tinyissimoyolo_v8_288","Int8","model/tinyissimoyolo_v8_288/weights/best_saved_model/best_full_integer_quant.tflite","54.2","29.2"
