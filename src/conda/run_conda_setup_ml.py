@@ -40,15 +40,6 @@ def main() -> None:
 
     ensure_conda_env(YOLO_ENV_NAME, PYTHON_VERSION, f"Python {PYTHON_VERSION}")
 
-    print(f"Installing PyTorch wheels into '{YOLO_ENV_NAME}' from {PYTORCH_WHL_INDEX} ...")
-    pip_install(
-        YOLO_ENV_NAME,
-        "torch",
-        "torchvision",
-        "--index-url",
-        PYTORCH_WHL_INDEX,
-    )
-
     print(f"Installing Ultralytics into '{YOLO_ENV_NAME}' from conda-forge ...")
     conda_install(YOLO_ENV_NAME, "ultralytics", channels=("conda-forge",))
 

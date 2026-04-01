@@ -52,6 +52,7 @@ def main() -> None:
     ensure_conda_env(QTLZ_ENV_NAME, PYTHON_VERSION, f"Python {PYTHON_VERSION}")
     conda_install(QTLZ_ENV_NAME, "ultralytics", channels=("conda-forge",))
 
+    print(f"Installing requirements from {req} into '{QTLZ_ENV_NAME}' ...")
     pip_install(QTLZ_ENV_NAME, "-r", str(req))
 
     print(f"Patching Ultralytics onnx2tf quant → per-channel in '{QTLZ_ENV_NAME}' ...")

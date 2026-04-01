@@ -46,6 +46,7 @@ from PIL import Image
 from ..common.paths import get_datasets_dir
 
 DATASETS_DIR = get_datasets_dir()
+ZIPS_DIR_DEFAULT = DATASETS_DIR / "_zips"
 
 # ── Raw (downloaded) and output (YOLO) directories ──────────────────────────
 EGO2HANDS_RAW = DATASETS_DIR / "ego2hands_raw"
@@ -280,7 +281,9 @@ def download_ego2hands(*, use_wget: bool = False, **dl_kwargs: object) -> None:
         _extract_tars(EGO2HANDS_RAW)
         return
 
-    zip_path = EGO2HANDS_RAW / "ego2hands_eval.zip"
+    zips_dir: Path = Path(dl_kwargs.pop("zips_dir", ZIPS_DIR_DEFAULT))
+    zips_dir.mkdir(parents=True, exist_ok=True)
+    zip_path = zips_dir / "ego2hands_eval.zip"
     if zip_path.exists() and zipfile.is_zipfile(zip_path):
         _extract_zip(zip_path, EGO2HANDS_RAW)
         _extract_tars(EGO2HANDS_RAW)
@@ -344,19 +347,35 @@ def convert_ego2hands() -> None:
 #  Construction Tools (Zenodo)  —  hazardous subset of 12-class YOLO labels
 # ═══════════════════════════════════════════════════════════════════════════════
 
+def _looks_extracted_construction_tools(raw_dir: Path) -> bool:
+    """Heuristic: if raw_dir already contains images and labels, treat it as extracted."""
+    if not raw_dir.exists():
+        return False
+    has_images = any(p.suffix.lower() in (".jpg", ".jpeg", ".png", ".bmp") for p in raw_dir.rglob("*"))
+    has_labels = any(p.suffix.lower() == ".txt" for p in raw_dir.rglob("*"))
+    return has_images and has_labels
+
+
 def download_construction_tools(
     *, use_wget: bool = False, **dl_kwargs: object
 ) -> None:
     """Download construction-tool images + YOLO labels from Zenodo (4 zips, ~110 GB)."""
     raw_dir = CONSTRUCTION_TOOLS_RAW
+    zips_dir: Path = Path(dl_kwargs.pop("zips_dir", ZIPS_DIR_DEFAULT))
+    zips_dir.mkdir(parents=True, exist_ok=True)
+
+    if _looks_extracted_construction_tools(raw_dir):
+        print(f"  Construction Tools raw data already present under {raw_dir}, skipping download.")
+        return
+
     for url, filename in ZENODO_DOWNLOADS:
-        zip_path = raw_dir / filename
+        zip_path = zips_dir / filename
         marker = raw_dir / f".{filename}.extracted"
         if marker.exists():
             print(f"  {filename} already extracted")
             continue
 
-        _resumable_download(url, raw_dir, filename, use_wget=use_wget, **dl_kwargs)
+        _resumable_download(url, zips_dir, filename, use_wget=use_wget, **dl_kwargs)
 
         if zip_path.exists() and zipfile.is_zipfile(zip_path):
             _extract_zip(zip_path, raw_dir)
@@ -507,18 +526,20 @@ def download_metu_alet(*, use_wget: bool = False, **dl_kwargs: object) -> None:
     Falls back to manual-download instructions when the automated attempt fails.
     """
     raw_dir = METU_ALET_RAW
+    zips_dir: Path = Path(dl_kwargs.pop("zips_dir", ZIPS_DIR_DEFAULT))
+    zips_dir.mkdir(parents=True, exist_ok=True)
     if any(raw_dir.rglob("*.xml")) or any(raw_dir.rglob("*.json")):
         print("  METU-ALET data already present")
         return
 
-    zip_path = raw_dir / "metu_alet.zip"
+    zip_path = zips_dir / "metu_alet.zip"
     if zip_path.exists() and zipfile.is_zipfile(zip_path):
         _extract_zip(zip_path, raw_dir)
         return
 
     try:
         _resumable_download(
-            METU_ALET_SHAREPOINT_URL, raw_dir, "metu_alet.zip",
+            METU_ALET_SHAREPOINT_URL, zips_dir, "metu_alet.zip",
             use_wget=use_wget, **dl_kwargs,
         )
     except subprocess.CalledProcessError:
@@ -911,6 +932,7 @@ def main(
     no_check_certificate: bool = typer.Option(False, help="Disable server certificate verification"),
     skip_download: bool = typer.Option(False, help="Skip download step; only run conversion on pre-downloaded data"),
     skip_merge: bool = typer.Option(False, help="Skip the final merge into fyp_merged/"),
+    zips_dir: Path = typer.Option(ZIPS_DIR_DEFAULT, help="Directory to store downloaded zip files (can be deleted later)"),
     clear: bool = typer.Option(
         False,
         "--clear",
@@ -925,6 +947,7 @@ def main(
         use_wget=wget,
         ca_certificate=ca_certificate,
         check_certificate=not no_check_certificate,
+        zips_dir=zips_dir,
     )
 
     if dataset in ("ego2hands", "all"):

@@ -1,13 +1,14 @@
-"""Compare float (.pt) vs quantized INT8 (.tflite) AP using the STM32 Model Zoo
-services host evaluator.  Results go to ``<results>/model/<variant>/float_int8_ap_comparison.csv``
-(not the shared ``results/evaluation_result.csv``).  Legacy
-``quant_eval/ap_comparison.csv`` is copied there once if present and the new file
-does not exist yet.
+"""Compare float (ONNX exported from `.pt`) vs quantized INT8 (.tflite) AP using
+the STM32 Model Zoo services host evaluator.
+
+Results are appended to a shared CSV:
+  ``<FYP_RESULTS_DIR>/model/ap_comparison.csv``
 
 Usage:
+  python project.py eval-quantize
   python project.py eval-quantize -- --size 192
   python project.py eval-quantize -- --size 192 --force
-  python project.py eval-quantize -- --size 288 --no-float
+  python project.py eval-quantize -- --no-float
 """
 
 from __future__ import annotations
@@ -15,7 +16,6 @@ from __future__ import annotations
 import csv
 import datetime
 import os
-import shutil
 import subprocess
 import sys
 import time
@@ -35,11 +35,13 @@ from src.conda.conda_setup_common import (
 from src.common.paths import get_results_dir
 
 MODELS = get_results_dir() / "model"
+RESULTS_DIR = get_results_dir()
 VARIANT_PREFIX = "tinyissimoyolo_v8"
 FAMILY = "tinyissimoyolo_v8"
 DATASET_NAME = "COCO-Person"
-# Under ``results/model/<variant>/`` (same level as training ``results.csv``).
-COMPARISON_CSV_NAME = "float_int8_ap_comparison.csv"
+# Single shared CSV under ``results/model/`` (no variant subdir).
+COMPARISON_CSV_NAME = "ap_comparison.csv"
+SUPPORTED_SIZES = (192, 256, 288, 320)
 
 CSV_HEADER = [
     "timestamp_utc",
@@ -189,26 +191,36 @@ def _run_zoo_evaluator(entry: ModelEntry) -> tuple[str, str, int]:
         return stdout, stderr, -1
 
 
-def _comparison_csv_paths(size: int) -> tuple[Path, Path]:
-    """Return (new_csv_under_variant, legacy_quant_eval_csv)."""
-    variant_dir = MODELS / f"{VARIANT_PREFIX}_{size}"
-    return variant_dir / COMPARISON_CSV_NAME, variant_dir / "quant_eval" / "ap_comparison.csv"
+def _comparison_csv_path() -> Path:
+    return MODELS / COMPARISON_CSV_NAME
 
 
-def _ensure_comparison_csv(size: int, *, force: bool) -> Path:
-    """Resolve CSV path; one-time copy from legacy ``quant_eval/ap_comparison.csv``."""
-    csv_path, legacy = _comparison_csv_paths(size)
-    if not force and not csv_path.is_file() and legacy.is_file():
-        csv_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(legacy, csv_path)
-    return csv_path
+def _load_completed_keys(csv_path: Path) -> set[tuple[str, str]]:
+    """Return set of (variant, format) keys already present in the shared CSV."""
+    completed: set[tuple[str, str]] = set()
+    if not csv_path.is_file():
+        return completed
+    with csv_path.open("r", newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for r in reader:
+            completed.add((r.get("variant", ""), r.get("format", "")))
+    return completed
+
+
+def _to_results_relative(path_str: str) -> str:
+    """Return a `FYP_RESULTS_DIR`-relative posix path when possible."""
+    p = Path(path_str)
+    try:
+        return p.resolve().relative_to(RESULTS_DIR.resolve()).as_posix()
+    except ValueError:
+        return p.as_posix()
 
 
 def _append_csv(csv_path: Path, row: dict) -> None:
     csv_path.parent.mkdir(parents=True, exist_ok=True)
     write_header = not csv_path.is_file()
-    with csv_path.open("a", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=CSV_HEADER)
+    with csv_path.open("a", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=CSV_HEADER, quoting=csv.QUOTE_ALL)
         if write_header:
             w.writeheader()
         w.writerow(row)
@@ -240,7 +252,7 @@ def _run_and_record(
         "timestamp_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "variant": entry.variant,
         "format": entry.fmt,
-        "model_path": entry.model_path,
+        "model_path": _to_results_relative(entry.model_path),
         "ap_50": ap_50,
         "elapsed_s": f"{elapsed:.1f}",
     }
@@ -255,83 +267,91 @@ app = typer.Typer(add_completion=False, help=__doc__)
 
 @app.command()
 def main(
-    size: int = typer.Option(..., help="Image resolution (must match training), e.g. 192, 256, 288"),
+    size: int | None = typer.Option(
+        None,
+        help="Image resolution (must match training), e.g. 192, 256, 288. If omitted, evaluate all supported sizes.",
+    ),
     no_float: bool = typer.Option(False, help="Skip float (.pt) model"),
     no_int8: bool = typer.Option(False, help="Skip INT8 (.tflite) model"),
     force: bool = typer.Option(False, "--force", "-f", help="Re-run even if results already exist in the CSV"),
 ) -> None:
-    if size not in [192, 256, 288, 320]:
-        typer.echo("Error: size must be one of [192, 256, 288, 320]", err=True)
+    if size is not None and size not in SUPPORTED_SIZES:
+        typer.echo(f"Error: size must be one of {list(SUPPORTED_SIZES)}", err=True)
         raise typer.Exit(1)
 
-    config_path = _config_path_for_size(size)
-    if not config_path.is_file():
-        typer.echo(f"Error: config not found at {config_path}", err=True)
-        raise typer.Exit(1)
+    sizes = [size] if size is not None else list(SUPPORTED_SIZES)
+    csv_path = _comparison_csv_path()
+    completed = set() if force else _load_completed_keys(csv_path)
 
-    csv_path = _ensure_comparison_csv(size, force=force)
+    any_rows: list[dict] = []
+    for s in sizes:
+        config_path = _config_path_for_size(s)
+        if not config_path.is_file():
+            typer.echo(f"Warning: config not found at {config_path}, skipping size {s}", err=True)
+            continue
 
-    existing_fmts: set[str] = set()
-    if not force and csv_path.is_file():
-        with csv_path.open(newline="") as f:
-            for r in csv.DictReader(f):
-                existing_fmts.add(r.get("format", ""))
+        variant = f"{VARIANT_PREFIX}_{s}"
 
-    results: list[dict | None] = []
-
-    if not no_float:
-        pt = _find_float_model(size)
-        if pt is None:
-            typer.echo(f"Warning: no float .pt checkpoint for size {size}, skipping", err=True)
-        elif "Float" in existing_fmts:
-            print("Float already present in CSV (use --force to re-run)")
-        else:
-            # STM32AI Model Zoo services does not provide a YOLOv8 torch wrapper for
-            # object_detection; evaluate float via ONNX evaluator instead.
-            onnx = _find_float_onnx_model(size) or _export_float_pt_to_onnx(pt, size=size)
-            if onnx is None:
-                typer.echo(
-                    "Warning: could not find/export float ONNX; skipping float eval. "
-                    "Tip: ensure the quantization env exists (project.py setup-env-qtlz).",
-                    err=True,
-                )
-                pt = None
+        if not no_float:
+            key = (variant, "Float")
+            if key in completed:
+                print(f"{variant}: Float already present in CSV (use --force to re-run)")
             else:
-                pt = onnx
-            entry = _make_entry(
-                size,
-                pt,
-                config_path,
-                fmt="Float",
-                framework="tf",
-                input_data_type="float32",
-                output_data_type="float32",
-            )
-            results.append(_run_and_record("Float .pt", entry, csv_path))
+                pt = _find_float_model(s)
+                if pt is None:
+                    typer.echo(f"Warning: no float .pt checkpoint for size {s}, skipping", err=True)
+                else:
+                    # STM32AI services does not provide a YOLOv8 torch wrapper for object_detection;
+                    # evaluate float via ONNX evaluator instead.
+                    onnx = _find_float_onnx_model(s) or _export_float_pt_to_onnx(pt, size=s)
+                    if onnx is None:
+                        typer.echo(
+                            f"Warning: could not find/export float ONNX for size {s}; skipping float eval. "
+                            "Tip: ensure the quantization env exists (project.py setup-env-qtlz).",
+                            err=True,
+                        )
+                    else:
+                        entry = _make_entry(
+                            s,
+                            onnx,
+                            config_path,
+                            fmt="Float",
+                            framework="tf",
+                            input_data_type="float32",
+                            output_data_type="float32",
+                        )
+                        r = _run_and_record(f"Float (size={s})", entry, csv_path)
+                        if r:
+                            any_rows.append(r)
+                            completed.add(key)
 
-    if not no_int8:
-        tflite = _find_int8_model(size)
-        if tflite is None:
-            typer.echo(f"Warning: no INT8 .tflite for size {size}, skipping", err=True)
-        elif "Int8" in existing_fmts:
-            print("Int8 already present in CSV (use --force to re-run)")
-        else:
-            entry = _make_entry(
-                size,
-                tflite,
-                config_path,
-                fmt="Int8",
-                framework="tf",
-                input_data_type="int8",
-                output_data_type="int8",
-            )
-            results.append(_run_and_record("INT8 TFLite", entry, csv_path))
+        if not no_int8:
+            key = (variant, "Int8")
+            if key in completed:
+                print(f"{variant}: Int8 already present in CSV (use --force to re-run)")
+            else:
+                tflite = _find_int8_model(s)
+                if tflite is None:
+                    typer.echo(f"Warning: no INT8 .tflite for size {s}, skipping", err=True)
+                else:
+                    entry = _make_entry(
+                        s,
+                        tflite,
+                        config_path,
+                        fmt="Int8",
+                        framework="tf",
+                        input_data_type="int8",
+                        output_data_type="int8",
+                    )
+                    r = _run_and_record(f"INT8 (size={s})", entry, csv_path)
+                    if r:
+                        any_rows.append(r)
+                        completed.add(key)
 
     print(f"\n{'='*60}")
     print(f"  Results: {csv_path}")
-    for r in results:
-        if r:
-            print(f"  {r['format']:>6}  AP@50 = {r['ap_50'] or 'N/A'}")
+    for r in any_rows:
+        print(f"  {r['variant']}  {r['format']:>5}  AP@50 = {r['ap_50'] or 'N/A'}")
     print(f"{'='*60}")
 
 

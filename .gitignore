@@ -32,6 +32,8 @@ results/model/**/*.jpeg
 results/model/**/*.json
 results/model/**/*.csv
 
+!results/model/ap_comparison.csv
+
 *.npy
 ai_runner.log
 yolo26n.pt

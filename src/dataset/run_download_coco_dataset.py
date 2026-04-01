@@ -12,13 +12,12 @@ import subprocess
 import zipfile
 from pathlib import Path
 
-import tensorflow as tf
 import typer
-from pycocotools.coco import COCO
 
 from ..common.paths import get_datasets_dir
 
 DATASETS_DIR = get_datasets_dir()
+ZIPS_DIR_DEFAULT = DATASETS_DIR / "_zips"
 DEST = DATASETS_DIR / "coco"
 PERSON_YOLO_DIR = DATASETS_DIR / "coco_2017_person"
 
@@ -103,6 +102,7 @@ def download_coco(
     use_wget: bool = False,
     ca_certificate: str | None = None,
     check_certificate: bool = True,
+    zips_dir: Path = ZIPS_DIR_DEFAULT,
 ):
     ann_dir = DEST / "annotations"
     train_img_dir = DEST / "images" / "train2017"
@@ -119,6 +119,7 @@ def download_coco(
         print(f"COCO data already present under {DEST}, skipping download.")
         return
 
+    zips_dir.mkdir(parents=True, exist_ok=True)
     for url, dest_dir in COCO_DOWNLOADS:
         name = url.rsplit("/", 1)[-1]
 
@@ -133,7 +134,7 @@ def download_coco(
             continue
 
         zip_path = _resumable_download(
-            url, dest_dir,
+            url, zips_dir,
             use_wget=use_wget,
             ca_certificate=ca_certificate,
             check_certificate=check_certificate,
@@ -148,6 +149,8 @@ def _resolve_coco_root() -> Path:
 
 def generate_person_annotations():
     """Filter COCO val2017 annotations to person-only using pycocotools."""
+    from pycocotools.coco import COCO
+
     coco_root = _resolve_coco_root()
     ann_val_path = coco_root / "annotations" / "instances_val2017.json"
     out_path = coco_root / "annotations" / "instances_val2017_person.json"
@@ -182,6 +185,9 @@ def _coco_bbox_to_yolo(bbox, img_w, img_h):
 def generate_tfs_dataset(
     category_names: list[str], out_dir: Path, max_detections: int = 100
 ):
+    import tensorflow as tf
+    from pycocotools.coco import COCO
+
     coco_root = _resolve_coco_root()
     ann_val_path = coco_root / "annotations" / "instances_val2017.json"
     val_images_dir = coco_root / "images" / "val2017"
@@ -231,6 +237,8 @@ def generate_tfs_dataset(
 
 def _all_coco_category_names() -> list[str]:
     """Load all 80 COCO category names from the annotation file."""
+    from pycocotools.coco import COCO
+
     coco_root = _resolve_coco_root()
     ann_val_path = coco_root / "annotations" / "instances_val2017.json"
     coco = COCO(str(ann_val_path))
@@ -321,11 +329,13 @@ def main(
     wget: bool = typer.Option(False, help="Use wget instead of aria2c for downloads (single-connection)"),
     ca_certificate: str | None = typer.Option(None, help="Path to CA certificate bundle (forwarded to aria2c/wget)"),
     no_check_certificate: bool = typer.Option(False, help="Disable server certificate verification (forwarded to aria2c/wget)"),
+    zips_dir: Path = typer.Option(ZIPS_DIR_DEFAULT, help="Directory to store downloaded zip files (can be deleted later)"),
 ):
     download_coco(
         use_wget=wget,
         ca_certificate=ca_certificate,
         check_certificate=not no_check_certificate,
+        zips_dir=zips_dir,
     )
     generate_person_yolo_dataset()
     generate_person_annotations()
