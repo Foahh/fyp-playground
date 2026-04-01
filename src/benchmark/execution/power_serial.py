@@ -205,6 +205,8 @@ class PowerMeasureSession:
         self._validate_lock = threading.Lock()
         self._capture_validate = False
         self._io_lock = threading.Lock()
+        self._reset_pending = threading.Event()
+        self._reset_done = threading.Event()
 
     def start(self, port: Optional[str], baud: int, power_csv_path: Path) -> bool:
         if not _HAS_PROTOBUF:
@@ -222,7 +224,7 @@ class PowerMeasureSession:
             return False
 
         def _open_serial() -> Any:
-            ser = serial.Serial(port, baud, timeout=0.25)
+            ser = serial.Serial(port, baud, timeout=0.25, write_timeout=2.0)
             ser.reset_input_buffer()
             return ser
 
@@ -343,6 +345,17 @@ class PowerMeasureSession:
         assert self._ser is not None
         while not self._stop.is_set():
             try:
+                if self._reset_pending.is_set():
+                    try:
+                        with self._io_lock:
+                            self._ser.write(self._RESET_REQUEST)
+                            self._ser.flush()
+                    except Exception as e:
+                        _log("warning", "Failed to reset accumulators (reader)", error=str(e))
+                    finally:
+                        self._reset_pending.clear()
+                        self._reset_done.set()
+                    continue
                 with self._io_lock:
                     len_bytes = self._ser.read(4)
                 if len(len_bytes) != 4:
@@ -388,11 +401,19 @@ class PowerMeasureSession:
         """
         if self._ser is None:
             return
+        _cooperative = self._thread is not None and self._thread.is_alive()
         try:
-            with self._io_lock:
-                self._ser.write(self._RESET_REQUEST)
-                self._ser.flush()
+            if _cooperative:
+                self._reset_done.clear()
+                self._reset_pending.set()
+                if not self._reset_done.wait(timeout=10.0):
+                    _log("warning", "PM_RESET timed out waiting for reader thread", timeout_s=10.0)
+            else:
+                with self._io_lock:
+                    self._ser.write(self._RESET_REQUEST)
+                    self._ser.flush()
         except Exception as e:
+            self._reset_pending.clear()
             _log("warning", "Failed to reset accumulators", error=str(e))
 
     def begin_validate_window(self) -> None:

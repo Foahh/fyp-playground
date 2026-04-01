@@ -221,7 +221,11 @@ def _step_load(entry: ModelEntry, benchmark_log: Path) -> tuple[str, str, int]:
 def _step_validate(
     entry: ModelEntry, n_runs: int, benchmark_log: Path
 ) -> tuple[str, str, int]:
-    """Step 3: Use ai_runner to run multiple inferences for accurate power measurement."""
+    """Step 3: Use ai_runner to run multiple inferences for accurate power measurement.
+
+    Important: we use PERF_ONLY to avoid transferring output tensor payloads over UART.
+    This benchmark only needs target-side inference time and power, not the outputs.
+    """
 
     get_logger("workflow").info(
         "Validate step started",
@@ -266,7 +270,11 @@ def _step_validate(
             reset_power_accumulators()
             time.sleep(0.05)
 
-            _, profile = runner.invoke(inputs, mode=AiRunner.Mode.IO_ONLY, disable_pb=True)
+            _, profile = runner.invoke(
+                inputs,
+                mode=(AiRunner.Mode.IO_ONLY | AiRunner.Mode.PERF_ONLY),
+                disable_pb=True,
+            )
 
             if profile['c_durations']:
                 d_ms = profile['c_durations'][0]
