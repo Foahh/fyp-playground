@@ -22,7 +22,7 @@ Usage:
 
 from __future__ import annotations
 
-import sys
+import shutil
 from pathlib import Path
 from typing import Iterable
 
@@ -66,6 +66,20 @@ def _resolve_checkpoint(img_size: int, override: Path | None) -> Path:
 # ---------------------------------------------------------------------------
 
 
+def _remove_stale_ultralytics_exports(pt_path: Path) -> None:
+    """Remove Ultralytics artifacts next to the checkpoint (SavedModel dir, ONNX)."""
+    parent = pt_path.parent
+    stem = pt_path.stem
+    saved_model = parent / f"{stem}_saved_model"
+    onnx_path = parent / f"{stem}.onnx"
+    if saved_model.is_dir():
+        shutil.rmtree(saved_model)
+        print(f"Removed stale SavedModel: {saved_model}")
+    if onnx_path.is_file():
+        onnx_path.unlink()
+        print(f"Removed stale ONNX: {onnx_path}")
+
+
 def _find_saved_model(pt_path: Path) -> Path | None:
     """Locate a SavedModel directory from a previous Ultralytics export."""
     candidate = pt_path.parent / f"{pt_path.stem}_saved_model"
@@ -81,14 +95,14 @@ def _export_saved_model(img_size: int, pt_path: Path) -> Path:
     """
     from ultralytics import YOLO
 
-    from src.dataset.dataset_common import materialize_coco_data_yaml
+    from src.dataset.dataset_common import materialize_coco_person_data_yaml
 
-    data_yaml = materialize_coco_data_yaml(require_person=True)
+    data_yaml = materialize_coco_person_data_yaml()
 
     print(f"Loading checkpoint {pt_path} ...")
     model = YOLO(str(pt_path))
 
-    print(f"[Step 1] Exporting SavedModel via Ultralytics (imgsz={img_size}) ...")
+    print(f"[Step 1] Exporting SavedModel via Ultralytics...")
     model.export(
         format="tflite",
         int8=True,
@@ -267,7 +281,7 @@ def main(
         help="Model input type: uint8 (STM32N6 camera), int8, or float",
     ),
     output_type: str = typer.Option(
-        "float",
+        "int8",
         help="Model output type: float or int8",
     ),
     quant_type: str = typer.Option(
@@ -284,11 +298,7 @@ def main(
     ),
     force: bool = typer.Option(
         False,
-        help="Re-quantize even if a matching TFLite already exists",
-    ),
-    force_export: bool = typer.Option(
-        False,
-        help="Re-export SavedModel via Ultralytics even if one exists",
+        help="Re-export SavedModel and re-quantize from scratch",
     ),
 ):
     if size not in VALID_SIZES:
@@ -318,8 +328,11 @@ def main(
             print("Use --force to re-quantize.")
             return
 
+    if force:
+        _remove_stale_ultralytics_exports(pt_path)
+
     # --- Step 1: SavedModel ------------------------------------------------
-    saved_model_dir = None if force_export else _find_saved_model(pt_path)
+    saved_model_dir = None if force else _find_saved_model(pt_path)
     if saved_model_dir is not None:
         print(f"Reusing existing SavedModel:\n  {saved_model_dir}")
     else:

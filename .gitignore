@@ -19,7 +19,6 @@ results/model/**
 !results/model/**/*.onnx
 !results/model/**/*.tflite
 !results/model/**/*.pb
-results/model/**/variables/**
 
 **/val_float/**
 **/val_int8/**
@@ -34,9 +33,17 @@ results/model/**/*.csv
 
 !results/model/ap_comparison.csv
 
+# still training
+tinyissimoyolo_v8_320
+
+best_saved_model
+best.onnx
+
 *.npy
 ai_runner.log
 yolo26n.pt
 *.log
 
 docs/superpowers/
+
+outputs

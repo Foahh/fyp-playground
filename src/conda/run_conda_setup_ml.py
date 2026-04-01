@@ -10,9 +10,6 @@ from __future__ import annotations
 
 import os
 import sys
-from pathlib import Path
-
-PATCH_SCRIPT = Path(__file__).resolve().parent / "run_patch_ultralytics_per_channel_quant.py"
 
 from src.conda.conda_setup_common import (
     conda_activate_hint,
@@ -44,9 +41,6 @@ def main() -> None:
     conda_install(YOLO_ENV_NAME, "ultralytics", channels=("conda-forge",))
 
     pip_install(YOLO_ENV_NAME, "-r", str(yolo_req))
-
-    print(f"Patching Ultralytics onnx2tf quant → per-channel in '{YOLO_ENV_NAME}' ...")
-    conda_run(YOLO_ENV_NAME, "python", str(PATCH_SCRIPT.resolve()))
 
     print("Done.")
     print(f"- ML env: {conda_activate_hint(YOLO_ENV_NAME)}")

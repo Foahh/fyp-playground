@@ -22,7 +22,6 @@ LOCAL_COMMANDS: dict[str, str] = {
     "benchmark": "src/benchmark/run_benchmark.py",
     "generate-model": "src/benchmark/run_generate_model.py",
     "evaluate": "src/benchmark/run_evaluate.py",
-    "eval-quantize": "src/benchmark/run_eval_quantize.py",
     "compare": "src/benchmark/run_compare.py",
     "select-model": "src/benchmark/run_model_selection.py",
     "verify-model-config": "src/benchmark/run_check_model_dtypes.py",

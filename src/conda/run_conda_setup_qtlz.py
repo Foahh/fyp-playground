@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Create the ``fyp-qtlz`` conda env for Ultralytics export / INT8 TFLite quantization.
 
-Installs repo-root ``requirements-qtlz.txt`` and applies the Ultralytics onnx2tf
-per-channel quantization patch.
+Installs repo-root ``requirements-qtlz.txt``.
 """
 
 from __future__ import annotations
@@ -11,8 +10,6 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-
-PATCH_SCRIPT = Path(__file__).resolve().parent / "run_patch_ultralytics_per_channel_quant.py"
 
 from src.conda.conda_setup_common import (
     conda_activate_hint,
@@ -54,9 +51,6 @@ def main() -> None:
 
     print(f"Installing requirements from {req} into '{QTLZ_ENV_NAME}' ...")
     pip_install(QTLZ_ENV_NAME, "-r", str(req))
-
-    print(f"Patching Ultralytics onnx2tf quant → per-channel in '{QTLZ_ENV_NAME}' ...")
-    conda_run(QTLZ_ENV_NAME, "python", str(PATCH_SCRIPT.resolve()))
 
     export_conda_env_yaml(QTLZ_ENV_NAME, root / "results" / "conda_envs" / f"{QTLZ_ENV_NAME}.yml")
 
