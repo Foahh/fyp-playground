@@ -8,26 +8,13 @@ dataset:
   dataset_path: ./datasets/fyp_merged/train
 
 pascal_voc_format:
-  images_path: ./datasets/fyp_sources/voc/train/images
-  xml_files_path: ./datasets/fyp_sources/voc/train/xml
-  export_dir: ./datasets/fyp_merged/train
-
-coco_format:
-  images_path: ./datasets/fyp_sources/coco/train/images
-  json_annotations_file_path: ./datasets/fyp_sources/coco/train/annotations.json
-  export_dir: ./datasets/fyp_merged/train
-
-kitti_format:
-  images_path: ./datasets/fyp_sources/kitti/train/images
-  annotations_dir: ./datasets/fyp_sources/kitti/train/labels
-  export_dir: ./datasets/fyp_merged/train
+  images_path: ./datasets/_unused_st_converter/images
+  xml_files_path: ./datasets/_unused_st_converter/xml
+  export_dir: ./datasets/_unused_st_converter/export
 
 settings:
-  # If null, dataset_create_tfs computes max detections from training set.
-  max_detections: 40
-  # false keeps background images; true drops images with no labels.
+  max_detections: 100
   exclude_unlabeled_images: false
-  # Used by dataset_analysis.py when enabled.
   max_percentage_filtered: 1
 
 hydra:

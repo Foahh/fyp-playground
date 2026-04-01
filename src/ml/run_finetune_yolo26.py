@@ -1,0 +1,124 @@
+"""
+Finetune YOLO26 (Ultralytics) on ``datasets/fyp_merged`` (hand + tool).
+
+Loads ``--model`` (default ``yolo26n.pt`` from the Ultralytics hub, or a local ``.pt``).
+Requires an Ultralytics build that defines YOLO26 (newer than some vendored trees).
+
+Run from the repository root:
+    python src/ml/run_finetune_yolo26.py
+    python src/ml/run_finetune_yolo26.py --model yolo26n.pt
+    python src/ml/run_finetune_yolo26.py --model /path/to/best.pt
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+import typer
+import yaml
+
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+
+from src.common.paths import get_results_dir
+from src.dataset.dataset_common import materialize_fyp_merged_data_yaml
+
+PROJECT = get_results_dir() / "model"
+
+FINETUNE_EPOCHS = 300
+FINETUNE_LR0 = 0.0005
+FINETUNE_BATCH = 32
+FINETUNE_NBS = 64
+FINETUNE_IMGSZ = 320
+
+
+def run_name_for(size: int) -> str:
+    return f"yolo26_{size}"
+
+
+app = typer.Typer()
+
+
+@app.command()
+def main(
+    model: str = typer.Option("yolo26n.pt", help="Ultralytics hub name or path to a .pt checkpoint"),
+    device: str | None = typer.Option(None, help="Ultralytics device (e.g. 0, cpu); default is auto"),
+    workers: int | None = typer.Option(None, help="Data loader workers; omit for Ultralytics default"),
+    cache: str | None = typer.Option(None, help="Dataset cache mode (none, disk, ram); omit for default"),
+):
+    run_name = run_name_for(FINETUNE_IMGSZ)
+    local_run_dir = PROJECT / run_name
+    weights_dir = local_run_dir / "weights"
+
+    from ultralytics import YOLO
+
+    raw = model.strip()
+    cand = Path(raw).expanduser()
+    model_path = str(cand.resolve()) if cand.is_file() else raw
+
+    print(f"Loading {model_path!r} ...")
+    yolo = YOLO(model_path)
+
+    data_yaml = materialize_fyp_merged_data_yaml()
+    with open(data_yaml, encoding="utf-8") as f:
+        data_cfg = yaml.safe_load(f)
+    print(f"Using dataset YAML: {data_yaml}")
+    print(f"Dataset root: {data_cfg.get('path')}")
+
+    cache_norm: str | None = None
+    if cache is not None:
+        cache_norm = cache.strip().lower()
+        if cache_norm not in {"none", "disk", "ram"}:
+            typer.echo("Error: cache must be one of [none, disk, ram]", err=True)
+            raise typer.Exit(1)
+
+    train_kw: dict = {
+        "data": data_yaml,
+        "imgsz": FINETUNE_IMGSZ,
+        "epochs": FINETUNE_EPOCHS,
+        "optimizer": "AdamW",
+        "batch": FINETUNE_BATCH,
+        "nbs": FINETUNE_NBS,
+        "lr0": FINETUNE_LR0,
+        "lrf": 0.01,
+        "weight_decay": 0.0005,
+        "warmup_epochs": 3.0,
+        "warmup_bias_lr": 0.01,
+        "warmup_momentum": 0.8,
+        "cos_lr": True,
+        "amp": True,
+        "label_smoothing": 0.05,
+        "hsv_h": 0.015,
+        "hsv_s": 0.5,
+        "hsv_v": 0.3,
+        "fliplr": 0.5,
+        "translate": 0.1,
+        "scale": 0.4,
+        "mosaic": 1.0,
+        "mixup": 0.15,
+        "close_mosaic": 15,
+        "deterministic": False,
+        "project": str(PROJECT),
+        "name": run_name,
+        "exist_ok": True,
+        "patience": 50,
+        "resume": True,
+    }
+    if device:
+        train_kw["device"] = device
+    if workers is not None:
+        train_kw["workers"] = workers
+    if cache_norm is not None:
+        train_kw["cache"] = False if cache_norm == "none" else cache_norm
+
+    try:
+        yolo.train(**train_kw)
+    except KeyboardInterrupt:
+        print("Interrupted.")
+
+    print(f"Finetune done. Weights under {weights_dir}")
+
+
+if __name__ == "__main__":
+    app()

@@ -1,0 +1,105 @@
+operation_mode: chain_tqe
+
+# ---- General ----------------------------------------------------------------
+general:
+  project_name: fyp_merged_hand_tool
+  saved_models_dir: ./configs/outputs/saved_models
+  logger: tensorboard
+  global_seed: 127
+
+model:
+  framework: torch
+  model_type: st_yolod
+  model_name: st_yolodv2milli_actrelu_pt
+  pretrained: True
+  pretrained_dataset: coco
+  pretrained_input_shape: [3, 640, 640]
+  input_shape: [3, 256, 256]
+  num_classes: 2
+
+dataset:
+  format: coco
+  dataset_name: coco
+  class_names: [hand, tool]
+  seed: 127
+  num_workers: 4
+  multiscale_range: 2
+  training_path: " "
+  train_images_path: ./datasets/fyp_merged/train
+  train_annotations_path: ./datasets/fyp_merged/annotations/instances_train.json
+  val_images_path: ./datasets/fyp_merged/val
+  val_annotations_path: ./datasets/fyp_merged/annotations/instances_val.json
+  test_images_path: ./datasets/fyp_merged/val
+  test_annotations_path: ./datasets/fyp_merged/annotations/instances_val.json
+  quantization_split: 1
+  quantization_path: ./datasets/fyp_merged/val
+  mosaic_prob: 1.0
+  mixup_prob: 1.0
+  hsv_prob: 1.0
+  flip_prob: 0.5
+  degrees: 5.0
+  translate: 0.1
+  mosaic_scale: (0.5, 1.5)
+  enable_mixup: True
+  mixup_scale: (0.5, 1.5)
+  shear: 2.0
+
+training:
+  trainer_name: yolod
+  batch_size: 64
+  warmup_epochs: 3
+  epochs: 200
+  scheduler: yoloxwarmcos
+  no_aug_epochs: 15
+  ema: True
+  print_interval: 1
+  eval_interval: 1
+  save_history_ckpt: True
+  optimizer:
+    SGD:
+      learning_rate: 0.001
+      momentum: 0.9
+      warmup_lr: 0.0
+      min_lr_ratio: 0.05
+      weight_decay: 5.0e-4
+  resume_training_from: ''
+  start_epoch: 0
+  fp16: True
+
+# ---- Preprocessing ----------------------------------------------------------
+preprocessing:
+  rescaling:
+    scale: 1
+    offset: 0
+  mean: [127, 127, 127]
+  std: 128.0
+  resizing:
+    aspect_ratio: fit
+    interpolation: nearest
+  color_mode: rgb
+
+# ---- Postprocessing ---------------------------------------------------------
+postprocessing:
+  confidence_thresh: 0.001
+  NMS_thresh: 0.5
+  IoU_eval_thresh: 0.5
+  plot_metrics: true
+  max_detection_boxes: 100
+
+# ---- Quantization -----------------------------------------------------------
+quantization:
+  quantizer: onnx_quantizer
+  target_opset: 17
+  granularity: per_channel
+  quantization_type: PTQ
+  quantization_input_type: float
+  quantization_output_type: float
+  export_dir: ./configs/outputs/quantized_models
+
+# ---- Experiment tracking ----------------------------------------------------
+mlflow:
+  uri: ./configs/outputs/mlruns
+
+hydra:
+  run:
+    dir: ./configs/outputs/experiments/${now:%Y_%m_%d_%H_%M_%S}

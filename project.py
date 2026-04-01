@@ -34,7 +34,10 @@ LOCAL_COMMANDS: dict[str, str] = {
     "train": "src/ml/run_train_tinyissimo_coco_person.py",
     "quantize": "src/ml/run_quantize.py",
     "prepare-finetune-dataset": "src/ml/run_prepare_finetune_dataset.py",
-    "finetune": "src/ml/run_finetune.py",
+    "finetune": "src/ml/run_finetune_st.py",
+    "finetune-st": "src/ml/run_finetune_st.py",
+    "finetune-tinyissimoyolo": "src/ml/run_finetune_tinyissimoyolo.py",
+    "finetune-yolo26": "src/ml/run_finetune_yolo26.py",
 }
 
 

@@ -96,6 +96,8 @@ _ML_COMMANDS = frozenset(
         "download-coco",
         "download-finetune",
         "train",
+        "finetune-tinyissimoyolo",
+        "finetune-yolo26",
     }
 )
 
@@ -109,11 +111,12 @@ _BHMK_COMMANDS = frozenset(
         "compare",
         "select-model",
         "prepare-finetune-dataset",
+        "finetune",
+        "finetune-st",
         "verify-model-config",
         "verify-idle-power",
         "estimate-battery",
         "parse-modelzoo",
-        "finetune",
     }
 )
 

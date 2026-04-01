@@ -114,7 +114,7 @@ def _resumable_download(
     ca_certificate: str | None = None,
     check_certificate: bool = True,
 ) -> Path:
-    """Download a file with resume support. Uses aria2c by default, wget as fallback."""
+    """Download a file with resume support via aria2c; wget does not resume partials."""
     dest_dir.mkdir(parents=True, exist_ok=True)
     if filename is None:
         filename = url.rsplit("/", 1)[-1].split("?")[0]
@@ -127,7 +127,7 @@ def _resumable_download(
     if use_wget:
         print(f"  Downloading (wget) {url} -> {dest_file}")
         cmd: list[str] = [
-            "wget", "-c", "--tries=5", "--timeout=60",
+            "wget", "--tries=5", "--timeout=60",
             "-O", str(dest_file), url,
         ]
         if ca_certificate:
@@ -158,7 +158,7 @@ def _resumable_download(
     if not dest_file.exists() or not zipfile.is_zipfile(dest_file):
         raise RuntimeError(
             f"Download appears incomplete or corrupt: {dest_file}. "
-            "Delete it and re-run to start fresh, or re-run to resume."
+            "Delete it and re-run. (aria2c can resume partial downloads; wget does not.)"
         )
     return dest_file
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run ST Model Zoo object-detection finetuning."""
+"""Run ST Model Zoo object-detection finetuning (TensorFlow / Hydra pipeline)."""
 
 from __future__ import annotations
 
