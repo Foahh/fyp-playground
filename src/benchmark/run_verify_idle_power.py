@@ -20,7 +20,8 @@ import pandas as pd
 
 from src.benchmark.paths import benchmark_paths_for_mode
 
-DEFAULT_METRICS = ("pm_avg_idle_mW", "pm_avg_idle_ms")
+PRIMARY_METRIC = "pm_avg_idle_mW"
+IDLE_OUTLIER_CONTEXT = ("pm_avg_idle_ms", "pm_avg_idle_mJ")
 _MODES = ("underdrive", "nominal", "overdrive")
 
 
@@ -40,7 +41,14 @@ def _unit_for(metric: str) -> str:
     return ""
 
 
-def _print_outliers(df: pd.DataFrame, metric: str, s: pd.Series, *, max_rows: int) -> None:
+def _print_outliers(
+    df: pd.DataFrame,
+    metric: str,
+    s: pd.Series,
+    *,
+    max_rows: int,
+    companion_cols: tuple[str, ...] = (),
+) -> None:
     vals = pd.to_numeric(s, errors="coerce").dropna()
     x = vals.to_numpy(dtype=float)
     if x.size < 4:
@@ -67,7 +75,22 @@ def _print_outliers(df: pd.DataFrame, metric: str, s: pd.Series, *, max_rows: in
             row = df.loc[idx, cols]
             if isinstance(row, pd.Series):
                 ident = " | " + ", ".join(f"{c}={row[c]!s}" for c in cols)
-        print(f"    - row {int(idx)}: {metric}={float(v):.3f}{unit_s}{ident}")
+        extra = ""
+        if companion_cols:
+            parts: list[str] = []
+            for c in companion_cols:
+                if c not in df.columns:
+                    continue
+                raw = df.loc[idx, c]
+                cv = pd.to_numeric(raw, errors="coerce")
+                if pd.isna(cv):
+                    continue
+                u = _unit_for(c)
+                u_s = f" {u}" if u else ""
+                parts.append(f"{c}={float(cv):.3f}{u_s}")
+            if parts:
+                extra = " | " + ", ".join(parts)
+        print(f"    - row {int(idx)}: {metric}={float(v):.3f}{unit_s}{extra}{ident}")
 
     if len(out) > len(shown):
         print(f"    ... {len(out) - len(shown)} more outliers not shown (use --max-outliers to raise)")
@@ -153,15 +176,8 @@ def main() -> int:
         default=20,
         help="Maximum outlier rows to print per mode (default: 20).",
     )
-    parser.add_argument(
-        "--metric",
-        action="append",
-        dest="metrics",
-        help=f"Metric column to audit (repeatable). Default: {', '.join(DEFAULT_METRICS)}.",
-    )
     args = parser.parse_args()
     modes = tuple(args.modes) if args.modes else _MODES
-    metrics = tuple(args.metrics) if args.metrics else DEFAULT_METRICS
 
     failures = 0
     for mode in modes:
@@ -172,21 +188,27 @@ def main() -> int:
             continue
 
         df = pd.read_csv(csv_path)
-        for metric in metrics:
-            if metric not in df.columns:
-                print(f"## {mode} — {csv_path}: missing column {metric!r}", file=sys.stderr)
-                failures += 1
-                continue
+        metric = PRIMARY_METRIC
+        if metric not in df.columns:
+            print(f"## {mode} — {csv_path}: missing column {metric!r}", file=sys.stderr)
+            failures += 1
+            continue
 
-            s = pd.to_numeric(df[metric], errors="coerce")
-            vals = s.dropna().to_numpy()
-            null_ct = int(s.isna().sum())
-            stats = _audit_values(vals)
-            print(_format_report(mode, metric, csv_path, stats))
-            if null_ct:
-                print(f"  warning: {null_ct} null/non-numeric {metric} rows ignored")
-            _print_outliers(df, metric, s, max_rows=int(args.max_outliers))
-            print()
+        s = pd.to_numeric(df[metric], errors="coerce")
+        vals = s.dropna().to_numpy()
+        null_ct = int(s.isna().sum())
+        stats = _audit_values(vals)
+        print(_format_report(mode, metric, csv_path, stats))
+        if null_ct:
+            print(f"  warning: {null_ct} null/non-numeric {metric} rows ignored")
+        _print_outliers(
+            df,
+            metric,
+            s,
+            max_rows=int(args.max_outliers),
+            companion_cols=IDLE_OUTLIER_CONTEXT,
+        )
+        print()
 
     return 1 if failures else 0
 

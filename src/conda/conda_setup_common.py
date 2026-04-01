@@ -112,6 +112,7 @@ _BHMK_COMMANDS = frozenset(
         "prepare-finetune-dataset",
         "verify-model-config",
         "verify-idle-power",
+        "estimate-battery",
         "parse-modelzoo",
         "finetune",
     }

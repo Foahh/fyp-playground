@@ -1,4 +1,4 @@
-"""Model selection scoring for STM32N6570-DK deployment.
+"""Model selection / filtering for STM32N6570-DK deployment.
 
 From repo root:
   python src/benchmark/run_model_selection.py [flags]
