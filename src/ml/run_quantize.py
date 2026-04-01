@@ -63,7 +63,6 @@ def _quantize(img_size: int, pt_path: Path) -> Path:
         int8=True,
         data=str(data_yaml),
         imgsz=[img_size, img_size],
-        split="train"
     )
 
     exported = Path(exported_path).resolve()
