@@ -39,6 +39,7 @@ tinyissimoyolo_v8_320
 best_saved_model
 best.onnx
 
+epoch*.pt
 *.npy
 ai_runner.log
 yolo26n.pt
