@@ -26,7 +26,7 @@ Use `project.py` as the main entry point for most tasks.
 - [`src/ml`](src/ml) — training, INT8 TFLite quantization, Model Zoo finetune runners
 - [`src/benchmark`](src/benchmark) — on-device benchmark and README compare tooling
 - [`configs/`](configs) — YAML configs for export and finetuning
-- [`requirements-ml.txt`](requirements-ml.txt), [`requirements-bhmk.txt`](requirements-bhmk.txt) — extra pip constraints
+- [`requirements-ml.txt`](requirements-ml.txt) (train + quantize), [`requirements-st.txt`](requirements-st.txt) — extra pip constraints for `fyp-st`
 
 ### `project.py` command reference
 
@@ -34,21 +34,20 @@ All workflows are exposed as the first argument to [`project.py`](project.py). E
 
 | Command | Conda env | Purpose |
 | --- | --- | --- |
-| `setup-env-ml` | *(none — runs installer)* | Create/update `fyp-ml` |
-| `setup-env-qtlz` | *(none)* | Create/update `fyp-qtlz` |
-| `setup-env-bhmk` | *(none)* | Create/update `fyp-bhmk` |
+| `setup-env-ml` | *(none — runs installer)* | Create/update `fyp-ml` (train, datasets, quantize) |
+| `setup-env-st` | *(none)* | Create/update `fyp-st` |
 | `download-coco` | `fyp-ml` | Download and prepare COCO (person) for training |
 | `download-finetune` | `fyp-ml` | Download and prepare hand / hazardous-tool finetune sources |
 | `train` | `fyp-ml` | Train TinyissimoYOLO |
-| `quantize` | `fyp-qtlz` | INT8 TFLite export from a trained checkpoint |
-| `benchmark` | `fyp-bhmk` | On-device STM32 benchmark |
-| `evaluate` | `fyp-bhmk` | Host-side AP evaluation via Model Zoo → `results/evaluation_result.csv` |
-| `parse-modelzoo` | `fyp-bhmk` | Parse Model Zoo README tables → `results/benchmark_parsed.csv` |
-| `compare` | `fyp-bhmk` | Compare two metric sources (README vs bench CSVs, etc.) |
-| `verify-model-config` | `fyp-bhmk` | Print I/O tensor dtypes for each registered model (TFLite / ONNX QDQ) |
-| `select-model` | `fyp-bhmk` | Score and rank candidates from benchmark + optional AP CSV |
-| `prepare-finetune-dataset` | `fyp-bhmk` | Prepare STM32 Model Zoo finetune dataset pipeline |
-| `finetune` | `fyp-bhmk` | Run Model Zoo finetune / chain modes from YAML |
+| `quantize` | `fyp-ml` | INT8 TFLite export from a trained checkpoint |
+| `benchmark` | `fyp-st` | On-device STM32 benchmark |
+| `evaluate` | `fyp-st` | Host-side AP evaluation via Model Zoo → `results/evaluation_result.csv` |
+| `parse-modelzoo` | `fyp-st` | Parse Model Zoo README tables → `results/benchmark_parsed.csv` |
+| `compare` | `fyp-st` | Compare two metric sources (README vs bench CSVs, etc.) |
+| `verify-model-config` | `fyp-st` | Print I/O tensor dtypes for each registered model (TFLite / ONNX QDQ) |
+| `select-model` | `fyp-st` | Score and rank candidates from benchmark + optional AP CSV |
+| `prepare-finetune-dataset` | `fyp-st` | Prepare STM32 Model Zoo finetune dataset pipeline |
+| `finetune` | `fyp-st` | Run Model Zoo finetune / chain modes from YAML |
 
 ---
 
@@ -58,7 +57,7 @@ All workflows are exposed as the first argument to [`project.py`](project.py). E
 git submodule update --init --recursive
 
 python project.py setup-env-ml
-python project.py setup-env-bhmk
+python project.py setup-env-st
 
 python project.py download-coco
 python project.py train --size 192
@@ -105,32 +104,29 @@ Log out and back in after changing groups.
 
 ### Conda environments
 
-Three Conda environments are used by default:
+Two Conda environments are used by default:
 
 | Purpose | Default env | Setup |
 |---|---|---|
-| Dataset prep, TinyissimoYOLO training | `fyp-ml` (`FYP_YOLO_ENV`) | `python project.py setup-env-ml` |
-| Ultralytics export / INT8 TFLite quantization (`src/ml/run_quantize.py`) | `fyp-qtlz` (`FYP_QTLZ_ENV`) | `python project.py setup-env-qtlz` |
-| Benchmarking, README comparison, Model Zoo finetuning | `fyp-bhmk` (`FYP_STZOO_ENV`) | `python project.py setup-env-bhmk` |
+| Dataset prep, training, Ultralytics export / INT8 TFLite (`src/ml/run_quantize.py`) | `fyp-ml` (`FYP_YOLO_ENV`) | `python project.py setup-env-ml` |
+| Benchmarking, README comparison, Model Zoo finetuning | `fyp-st` (`FYP_STZOO_ENV`) | `python project.py setup-env-st` |
 
 Command mapping:
 
 | Command | Env |
 |---|---|
-| `download-coco`, `download-finetune`, `train` | `fyp-ml` |
-| `quantize` | `fyp-qtlz` |
-| `benchmark`, `evaluate`, `compare`, `select-model`, `verify-model-config`, `parse-modelzoo`, `prepare-finetune-dataset`, `finetune` | `fyp-bhmk` |
-| `setup-env-ml`, `setup-env-qtlz`, `setup-env-bhmk` | base or any env with `conda` |
+| `download-coco`, `download-finetune`, `train`, `quantize` | `fyp-ml` |
+| `benchmark`, `evaluate`, `compare`, `select-model`, `verify-model-config`, `parse-modelzoo`, `prepare-finetune-dataset`, `finetune` | `fyp-st` |
+| `setup-env-ml`, `setup-env-st` | base or any env with `conda` |
 
 Create environments:
 
 ```sh
 python project.py setup-env-ml
-python project.py setup-env-bhmk
-python project.py setup-env-qtlz
+python project.py setup-env-st
 ```
 
-After that you can use `conda activate fyp-ml` / `fyp-bhmk` / `fyp-qtlz` as usual (conda will find them via `CONDA_ENVS_PATH`).
+After that you can use `conda activate fyp-ml` / `fyp-st` as usual (conda will find them via `CONDA_ENVS_PATH`).
 
 On HPC you may prefer **prefix-based** environments in a user-owned location (e.g. node-local storage under `/local`). Enable this by setting:
 
@@ -173,7 +169,7 @@ See the docstring in [`src/dataset/run_download_finetune_dataset.py`](src/datase
 
 Train TinyissimoYOLO in `fyp-ml`.
 
-`setup-env-ml` already installs PyTorch from the CUDA 12.8 wheel index. To reinstall manually:
+The installer uses **Python 3.12** by default (override with `FYP_ML_PYTHON`) so TensorFlow / `onnx2tf` match the quantization stack. Conda-forge may give a CPU `torch`; for **CUDA 12.8** wheels:
 
 ```sh
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
@@ -206,7 +202,7 @@ results/model/tinyissimoyolo_v8_<size>/weights/best.pt
 
 ## 3. Quantize
 
-Quantize a trained checkpoint to **INT8 TFLite** in `fyp-qtlz` (this runs `src/ml/run_quantize.py`).
+Quantize a trained checkpoint to **INT8 TFLite** in `fyp-ml` (this runs `src/ml/run_quantize.py`).
 
 Main command:
 
@@ -233,13 +229,13 @@ results/model/tinyissimoyolo_v8_<size>/weights/best_saved_model/val_int8/
 
 - Export uses Ultralytics INT8 TFLite flow.
 - The script prints the final artifact path.
-- For STM32 Model Zoo host-side evaluation, use `configs/tinyissimoyolo_v8_192_config.yaml` and run `stm32ai_main.py` from `fyp-bhmk`.
+- For STM32 Model Zoo host-side evaluation, use `configs/tinyissimoyolo_v8_192_config.yaml` and run `stm32ai_main.py` from `fyp-st`.
 
 ---
 
 ## 4. Benchmark
 
-Benchmark on **STM32N6570-DK** in `fyp-bhmk`.
+Benchmark on **STM32N6570-DK** in `fyp-st`.
 
 Results are saved to:
 
@@ -365,7 +361,7 @@ python project.py select-model -- --help
 
 ## 5. Finetune
 
-Use the STM32 Model Zoo finetune pipeline in `fyp-bhmk`.
+Use the STM32 Model Zoo finetune pipeline in `fyp-st`.
 
 Configs:
 

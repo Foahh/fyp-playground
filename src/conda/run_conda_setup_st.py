@@ -21,7 +21,7 @@ from src.conda.conda_setup_common import (
     repo_root,
 )
 
-STZOO_ENV_NAME = os.environ.get("FYP_STZOO_ENV", "fyp-bhmk")
+STZOO_ENV_NAME = os.environ.get("FYP_STZOO_ENV", "fyp-st")
 PYTHON_VERSION = "3.12.9"
 
 
@@ -29,7 +29,7 @@ def main() -> None:
     main_guard()
     root = repo_root()
     benchmark_req = root / "external" / "stm32ai-modelzoo-services" / "requirements.txt"
-    benchmark_extra_req = root / "requirements-bhmk.txt"
+    benchmark_extra_req = root / "requirements-st.txt"
 
     if not benchmark_req.is_file():
         print(f"Missing {benchmark_req}", file=sys.stderr)

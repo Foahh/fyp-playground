@@ -11,10 +11,10 @@ fragile across versions. This script instead takes the SavedModel from Step 1 an
   external/stm32ai-modelzoo-services/object_detection/docs/tuto/
   How_to_deploy_yolov8_yolov5_object_detection.md  (Option 2)
 
-Requires the ``fyp-qtlz`` conda env (ultralytics + tensorflow).
+Requires the ``fyp-ml`` conda env (ultralytics + TensorFlow / export stack).
 
 Usage:
-    conda activate fyp-qtlz
+    conda activate fyp-ml
     python src/ml/run_quantize.py --size 256
     python src/ml/run_quantize.py --size 256 --input-type uint8 --output-type int8
     python src/ml/run_quantize.py --size 256 --checkpoint /path/to/best.pt --force

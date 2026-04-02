@@ -120,6 +120,7 @@ def main(
         "exist_ok": True,
         "patience": 0,
         "resume": resume,
+        "save_period": 5,
     }
     if device:
         train_kw["device"] = device

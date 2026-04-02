@@ -74,20 +74,15 @@ def ml_conda_env_name() -> str:
     return os.environ.get("FYP_YOLO_ENV", "fyp-ml")
 
 
-def bhmk_conda_env_name() -> str:
-    """Benchmarking / Model Zoo finetune env (``FYP_STZOO_ENV``, default ``fyp-bhmk``)."""
-    return os.environ.get("FYP_STZOO_ENV", "fyp-bhmk")
-
-def qtlz_conda_env_name() -> str:
-    """Ultralytics export / INT8 TFLite quantization env (``FYP_QTLZ_ENV``, default ``fyp-qtlz``)."""
-    return os.environ.get("FYP_QTLZ_ENV", "fyp-qtlz")
+def st_conda_env_name() -> str:
+    """Benchmarking / Model Zoo finetune env (``FYP_STZOO_ENV``, default ``fyp-st``)."""
+    return os.environ.get("FYP_STZOO_ENV", "fyp-st")
 
 
 _BASE_ENV_COMMANDS = frozenset(
     {
-        "setup-env-qtlz",
         "setup-env-ml",
-        "setup-env-bhmk",
+        "setup-env-st",
     }
 )
 
@@ -98,12 +93,11 @@ _ML_COMMANDS = frozenset(
         "train",
         "finetune-tinyissimoyolo",
         "finetune-yolo26",
+        "quantize",
     }
 )
 
-_QTLZ_COMMANDS = frozenset({"quantize"})
-
-_BHMK_COMMANDS = frozenset(
+_ST_COMMANDS = frozenset(
     {
         "benchmark",
         "generate-model",
@@ -127,10 +121,8 @@ def target_conda_env_for_command(command: str) -> str | None:
         return None
     if command in _ML_COMMANDS:
         return ml_conda_env_name()
-    if command in _QTLZ_COMMANDS:
-        return qtlz_conda_env_name()
-    if command in _BHMK_COMMANDS:
-        return bhmk_conda_env_name()
+    if command in _ST_COMMANDS:
+        return st_conda_env_name()
     raise ValueError(f"Unknown command for conda routing: {command!r}")
 
 
