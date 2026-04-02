@@ -1,6 +1,4 @@
 """
-THIS SCRIPT IS CONSIDERED MEANINGLESS. USE run_train_tinyissimo_coco80_320.py INSTEAD.
-
 Train TinyissimoYOLO v8 on COCO Person (single class).
 
 Run from the repository root (outputs under $FYP_RESULTS_DIR/model/ or results/model/):
@@ -8,6 +6,8 @@ Run from the repository root (outputs under $FYP_RESULTS_DIR/model/ or results/m
     python src/ml/run_train_tinyissimo_coco_person.py --size 192 --no-resume
 
 Quantization to INT8 TFLite is handled separately by run_quantize.py.
+
+Checkpoints: ``save_period`` 10 (epoch*.pt); ``on_model_save`` prunes epoch checkpoints, keeping 5.
 """
 
 import sys
@@ -32,7 +32,7 @@ def run_name_for(size: int) -> str:
     return f"tinyissimoyolo_v8_{size}"
 
 
-def prune_epoch_checkpoints(trainer, keep: int = 3) -> None:
+def prune_epoch_checkpoints(trainer, keep: int = 5) -> None:
     wdir = trainer.wdir
 
     def epoch_key(p: Path) -> int:
@@ -145,7 +145,7 @@ def main(
         "exist_ok": True,
         "patience": 0,
         "resume": resume,
-        "save_period": 1,
+        "save_period": 10,
     }
     if device:
         train_kw["device"] = device
@@ -154,7 +154,7 @@ def main(
     if cache_norm is not None:
         train_kw["cache"] = False if cache_norm == "none" else cache_norm
 
-    model.add_callback("on_model_save", lambda tr: prune_epoch_checkpoints(tr, keep=3))
+    model.add_callback("on_model_save", lambda tr: prune_epoch_checkpoints(tr, keep=5))
     try:
         model.train(**train_kw)
     except KeyboardInterrupt:

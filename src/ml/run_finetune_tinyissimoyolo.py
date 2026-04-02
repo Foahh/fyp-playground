@@ -9,13 +9,17 @@ Run from the repository root:
     python src/ml/run_finetune_tinyissimoyolo.py
     python src/ml/run_finetune_tinyissimoyolo.py --weights /path/to/best.pt
 
-By default training **resumes** from ``last.pt`` under the run dir if present (same as
-Ultralytics). Pass ``--no-resume`` to always start a new run from the resolved checkpoint
-(e.g. after changing hyperparameters or when you want a clean slate).
+By default training **resumes** from ``last.pt`` under the run dir if present (passes
+that path as ``resume``; boolean ``resume=True`` does not work when ``YOLO()`` was loaded
+from arbitrary weights). Pass ``--no-resume`` to always start a new run from the resolved
+checkpoint (e.g. after changing hyperparameters or when you want a clean slate).
+
+Saves ``epoch*.pt`` every 10 epochs and prunes older epoch checkpoints (keeps the last 5).
 """
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -42,6 +46,18 @@ FINETUNE_IMGSZ = 320
 
 def run_name_for(size: int) -> str:
     return f"tinyissimoyolo_v8_{size}"
+
+
+def prune_epoch_checkpoints(trainer, keep: int = 5) -> None:
+    wdir = trainer.wdir
+
+    def epoch_key(p: Path) -> int:
+        m = re.match(r"epoch(\d+)\.pt$", p.name)
+        return int(m.group(1)) if m else -1
+
+    epoch_pts = sorted(wdir.glob("epoch*.pt"), key=epoch_key)
+    for p in epoch_pts[:-keep] if keep > 0 else epoch_pts:
+        p.unlink(missing_ok=True)
 
 
 def _resolve_weights(source_run_name: str, weights: Path | None) -> Path:
@@ -119,6 +135,11 @@ def main(
         f"device={device or 'auto'}"
     )
 
+    last_pt = weights_dir / "last.pt"
+    resume_val: bool | str = False
+    if not no_resume and last_pt.is_file():
+        resume_val = str(last_pt)
+
     train_kw: dict = {
         "data": data_yaml,
         "imgsz": FINETUNE_IMGSZ,
@@ -149,7 +170,8 @@ def main(
         "name": run_name,
         "exist_ok": True,
         "patience": 30,
-        "resume": not no_resume,
+        "resume": resume_val,
+        "save_period": 10,
     }
     if device:
         train_kw["device"] = device
@@ -158,6 +180,7 @@ def main(
     if cache_norm is not None:
         train_kw["cache"] = False if cache_norm == "none" else cache_norm
 
+    model.add_callback("on_model_save", lambda tr: prune_epoch_checkpoints(tr, keep=5))
     try:
         model.train(**train_kw)
     except KeyboardInterrupt:

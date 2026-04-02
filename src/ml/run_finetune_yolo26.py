@@ -9,8 +9,10 @@ Run from the repository root:
     python src/ml/run_finetune_yolo26.py --model yolo26n.pt
     python src/ml/run_finetune_yolo26.py --model /path/to/best.pt
 
-By default training **resumes** from ``last.pt`` under the run dir if present. Pass
-``--no-resume`` to always start a new run from the loaded model checkpoint.
+By default training **resumes** from ``last.pt`` under the run dir if present (passed
+as the ``resume`` path; boolean ``resume=True`` does not work after loading hub ``.pt``
+weights — see Ultralytics ``Model.train``). Pass ``--no-resume`` to always start a new
+run from the loaded model checkpoint.
 """
 
 from __future__ import annotations
@@ -89,6 +91,12 @@ def main(
             typer.echo("Error: cache must be one of [none, disk, ram]", err=True)
             raise typer.Exit(1)
 
+    last_pt = weights_dir / "last.pt"
+
+    resume_val: bool | str = False
+    if not no_resume and last_pt.is_file():
+        resume_val = str(last_pt)
+
     train_kw: dict = {
         "data": data_yaml,
         "imgsz": FINETUNE_IMGSZ,
@@ -118,7 +126,7 @@ def main(
         "name": run_name,
         "exist_ok": True,
         "patience": 30,
-        "resume": not no_resume,
+        "resume": resume_val,
     }
     if device:
         train_kw["device"] = device
