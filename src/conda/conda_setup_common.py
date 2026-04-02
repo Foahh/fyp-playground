@@ -97,6 +97,8 @@ _ML_COMMANDS = frozenset(
     }
 )
 
+_FORMAT_COMMANDS = frozenset({"format"})
+
 _ST_COMMANDS = frozenset(
     {
         "benchmark",
@@ -119,6 +121,8 @@ def target_conda_env_for_command(command: str) -> str | None:
     """Return the conda env name ``project.py`` should run ``command`` in, or ``None``."""
     if command in _BASE_ENV_COMMANDS:
         return None
+    if command in _FORMAT_COMMANDS:
+        return ml_conda_env_name()
     if command in _ML_COMMANDS:
         return ml_conda_env_name()
     if command in _ST_COMMANDS:

@@ -1,4 +1,6 @@
 """
+THIS SCRIPT IS CONSIDERED MEANINGLESS. USE run_train_tinyissimo_coco80_320.py INSTEAD.
+
 Train TinyissimoYOLO v8 on COCO Person (single class).
 
 Run from the repository root (outputs under $FYP_RESULTS_DIR/model/ or results/model/):

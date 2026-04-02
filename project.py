@@ -37,6 +37,7 @@ LOCAL_COMMANDS: dict[str, str] = {
     "finetune-st": "src/ml/run_finetune_st.py",
     "finetune-tinyissimoyolo": "src/ml/run_finetune_tinyissimoyolo.py",
     "finetune-yolo26": "src/ml/run_finetune_yolo26.py",
+    "format": "src/dev/run_format.py",
 }
 
 
