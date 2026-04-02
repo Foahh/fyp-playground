@@ -9,6 +9,7 @@ Quantization to INT8 TFLite is handled separately by run_quantize.py.
 """
 
 import sys
+import re
 from pathlib import Path
 
 import typer
@@ -27,6 +28,15 @@ PROJECT = get_results_dir() / "model"
 
 def run_name_for(size: int) -> str:
     return f"tinyissimoyolo_v8_{size}"
+
+def prune_epoch_checkpoints(trainer, keep: int = 3) -> None:
+    wdir = trainer.wdir
+    def epoch_key(p: Path) -> int:
+        m = re.match(r"epoch(\d+)\.pt$", p.name)
+        return int(m.group(1)) if m else -1
+    epoch_pts = sorted(wdir.glob("epoch*.pt"), key=epoch_key)
+    for p in epoch_pts[:-keep] if keep > 0 else epoch_pts:
+        p.unlink(missing_ok=True)
 
 
 app = typer.Typer()
@@ -120,7 +130,7 @@ def main(
         "exist_ok": True,
         "patience": 0,
         "resume": resume,
-        "save_period": 5,
+        "save_period": 1,
     }
     if device:
         train_kw["device"] = device
@@ -129,6 +139,7 @@ def main(
     if cache_norm is not None:
         train_kw["cache"] = False if cache_norm == "none" else cache_norm
 
+    model.add_callback("on_model_save", lambda tr: prune_epoch_checkpoints(tr, keep=5))
     try:
         model.train(**train_kw)
     except KeyboardInterrupt:
