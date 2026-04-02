@@ -346,13 +346,9 @@ def convert_ego2hands() -> None:
 #  Construction Tools (Zenodo)  —  hazardous subset of 12-class YOLO labels
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def _looks_extracted_construction_tools(raw_dir: Path) -> bool:
-    """Heuristic: if raw_dir already contains images and labels, treat it as extracted."""
-    if not raw_dir.exists():
-        return False
-    has_images = any(p.suffix.lower() in (".jpg", ".jpeg", ".png", ".bmp") for p in raw_dir.rglob("*"))
-    has_labels = any(p.suffix.lower() == ".txt" for p in raw_dir.rglob("*"))
-    return has_images and has_labels
+def _all_construction_tools_zenodo_extracted(raw_dir: Path) -> bool:
+    """True only when all four Zenodo parts have been extracted (per-zip markers)."""
+    return all((raw_dir / f".DATA{i}.zip.extracted").exists() for i in range(1, 5))
 
 
 def download_construction_tools(
@@ -363,8 +359,11 @@ def download_construction_tools(
     zips_dir: Path = Path(dl_kwargs.pop("zips_dir", ZIPS_DIR_DEFAULT))
     zips_dir.mkdir(parents=True, exist_ok=True)
 
-    if _looks_extracted_construction_tools(raw_dir):
-        print(f"  Construction Tools raw data already present under {raw_dir}, skipping download.")
+    if _all_construction_tools_zenodo_extracted(raw_dir):
+        print(
+            f"  Construction Tools: all Zenodo archives already extracted under {raw_dir}, "
+            "skipping download."
+        )
         return
 
     for url, filename in ZENODO_DOWNLOADS:
