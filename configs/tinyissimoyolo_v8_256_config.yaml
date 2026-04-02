@@ -14,7 +14,7 @@ dataset:
   test_path: ./datasets/coco_2017_person/test
 
 preprocessing:
-  rescaling: { scale: 1/255, offset: 0 }
+  rescaling: {scale: 1/255, offset: 0}
   resizing:
     aspect_ratio: fit
     interpolation: nearest

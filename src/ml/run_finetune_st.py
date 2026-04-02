@@ -31,12 +31,20 @@ app = typer.Typer()
 
 @app.command()
 def main(
-    config: Path = typer.Option(..., help="Path to finetune YAML config (Hydra config)."),
-    mode: str | None = typer.Option(None, help="Optional operation_mode override (training, chain_tqe, chain_tqeb)."),
-    override: list[str] = typer.Option([], help="Additional Hydra override(s), repeated as needed."),
+    config: Path = typer.Option(
+        ..., help="Path to finetune YAML config (Hydra config)."
+    ),
+    mode: str | None = typer.Option(
+        None, help="Optional operation_mode override (training, chain_tqe, chain_tqeb)."
+    ),
+    override: list[str] = typer.Option(
+        [], help="Additional Hydra override(s), repeated as needed."
+    ),
 ) -> int:
     if mode and mode not in ["training", "chain_tqe", "chain_tqeb"]:
-        typer.echo(f"Error: mode must be one of [training, chain_tqe, chain_tqeb]", err=True)
+        typer.echo(
+            f"Error: mode must be one of [training, chain_tqe, chain_tqeb]", err=True
+        )
         raise typer.Exit(1)
     if not STM32AI_MAIN.is_file():
         raise FileNotFoundError(f"Expected script not found: {STM32AI_MAIN}")

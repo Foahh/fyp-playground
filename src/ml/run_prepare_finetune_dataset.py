@@ -30,7 +30,15 @@ def _resolve_repo_path(path_value: str) -> Path:
 
 
 def _is_image_file(path: Path) -> bool:
-    return path.suffix.lower() in {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff"}
+    return path.suffix.lower() in {
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".bmp",
+        ".webp",
+        ".tif",
+        ".tiff",
+    }
 
 
 def _convert_split_yolo_to_coco(
@@ -96,7 +104,10 @@ def _convert_split_yolo_to_coco(
 
         image_id += 1
 
-    categories = [{"id": idx + 1, "name": name, "supercategory": "object"} for idx, name in enumerate(class_names)]
+    categories = [
+        {"id": idx + 1, "name": name, "supercategory": "object"}
+        for idx, name in enumerate(class_names)
+    ]
     payload = {
         "images": images,
         "annotations": annotations,
@@ -119,7 +130,9 @@ def _ensure_coco_annotations(config_file: Path, force: bool = False) -> None:
 
     class_names = ds.get("class_names") or []
     if not class_names:
-        raise ValueError("dataset.class_names is required for COCO annotation generation")
+        raise ValueError(
+            "dataset.class_names is required for COCO annotation generation"
+        )
 
     train_images_rel = ds.get("train_images_path")
     val_images_rel = ds.get("val_images_path")
@@ -127,7 +140,12 @@ def _ensure_coco_annotations(config_file: Path, force: bool = False) -> None:
     train_ann_rel = ds.get("train_annotations_path")
     val_ann_rel = ds.get("val_annotations_path")
     test_ann_rel = ds.get("test_annotations_path")
-    if not train_images_rel or not val_images_rel or not train_ann_rel or not val_ann_rel:
+    if (
+        not train_images_rel
+        or not val_images_rel
+        or not train_ann_rel
+        or not val_ann_rel
+    ):
         raise ValueError(
             "dataset.train_images_path, dataset.val_images_path, dataset.train_annotations_path, "
             "and dataset.val_annotations_path are required for COCO annotation generation"
@@ -149,14 +167,20 @@ def _ensure_coco_annotations(config_file: Path, force: bool = False) -> None:
     if test_json is not None:
         required_jsons.append(test_json)
     if not force and all(path.is_file() for path in required_jsons):
-        print("[prepare-finetune-dataset] COCO annotation JSON files already exist; skipping regeneration.")
+        print(
+            "[prepare-finetune-dataset] COCO annotation JSON files already exist; skipping regeneration."
+        )
         return
 
-    train_counts = _convert_split_yolo_to_coco(train_images_dir, train_json, class_names)
+    train_counts = _convert_split_yolo_to_coco(
+        train_images_dir, train_json, class_names
+    )
     val_counts = _convert_split_yolo_to_coco(val_images_dir, val_json, class_names)
     test_counts: tuple[int, int] | None = None
     if test_images_dir is not None and test_json is not None:
-        test_counts = _convert_split_yolo_to_coco(test_images_dir, test_json, class_names)
+        test_counts = _convert_split_yolo_to_coco(
+            test_images_dir, test_json, class_names
+        )
 
     log_parts = [
         "[prepare-finetune-dataset] Wrote COCO annotations "
@@ -164,7 +188,9 @@ def _ensure_coco_annotations(config_file: Path, force: bool = False) -> None:
         f"val={val_json} ({val_counts[0]} images, {val_counts[1]} boxes)"
     ]
     if test_counts is not None and test_json is not None:
-        log_parts.append(f", test={test_json} ({test_counts[0]} images, {test_counts[1]} boxes)")
+        log_parts.append(
+            f", test={test_json} ({test_counts[0]} images, {test_counts[1]} boxes)"
+        )
     print("".join(log_parts) + ".")
 
 
@@ -223,11 +249,22 @@ app = typer.Typer()
 
 @app.command()
 def main(
-    config: Path = typer.Option(..., help="Path to the dataset config YAML used by ST Model Zoo dataset tools."),
-    skip_convert: bool = typer.Option(False, help="Skip converter.py and only run dataset_create_tfs.py."),
-    force_coco: bool = typer.Option(False, help="Force regeneration of COCO JSON annotations from YOLO txt labels."),
-    analyze: bool = typer.Option(False, help="Run dataset_analysis.py after TFS creation."),
-    override: list[str] = typer.Option([], help="Hydra override passed through to each invoked dataset tool. Repeat as needed."),
+    config: Path = typer.Option(
+        ..., help="Path to the dataset config YAML used by ST Model Zoo dataset tools."
+    ),
+    skip_convert: bool = typer.Option(
+        False, help="Skip converter.py and only run dataset_create_tfs.py."
+    ),
+    force_coco: bool = typer.Option(
+        False, help="Force regeneration of COCO JSON annotations from YOLO txt labels."
+    ),
+    analyze: bool = typer.Option(
+        False, help="Run dataset_analysis.py after TFS creation."
+    ),
+    override: list[str] = typer.Option(
+        [],
+        help="Hydra override passed through to each invoked dataset tool. Repeat as needed.",
+    ),
 ) -> int:
     overrides = list(override)
 

@@ -53,7 +53,11 @@ def conda_env_spec_args(env_name: str) -> list[str]:
 def conda_activate_hint(env_name: str) -> str:
     """Shell snippet to activate the target env (name or prefix)."""
     prefix = conda_env_prefix(env_name)
-    return f"conda activate {prefix}" if prefix is not None else f"conda activate {env_name}"
+    return (
+        f"conda activate {prefix}"
+        if prefix is not None
+        else f"conda activate {env_name}"
+    )
 
 
 def _conda_run_cmd(env: str, *args: str) -> list[str]:

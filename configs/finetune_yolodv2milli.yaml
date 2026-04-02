@@ -11,7 +11,7 @@ model:
   framework: torch
   model_type: st_yolod
   model_name: st_yolodv2milli_actrelu_pt
-  pretrained: True
+  pretrained: true
   pretrained_dataset: coco
   pretrained_input_shape: [3, 640, 640]
   input_shape: [3, 256, 256]
@@ -40,7 +40,7 @@ dataset:
   degrees: 3.0
   translate: 0.05
   mosaic_scale: (0.7, 1.3)
-  enable_mixup: True
+  enable_mixup: true
   mixup_scale: (0.8, 1.2)
   shear: 1.0
 
@@ -51,10 +51,10 @@ training:
   epochs: 180
   scheduler: yoloxwarmcos
   no_aug_epochs: 25
-  ema: True
+  ema: true
   print_interval: 1
   eval_interval: 1
-  save_history_ckpt: True
+  save_history_ckpt: true
   optimizer:
     SGD:
       learning_rate: 0.0008
@@ -64,7 +64,7 @@ training:
       weight_decay: 5.0e-4
   resume_training_from: ''
   start_epoch: 0
-  fp16: True
+  fp16: true
 
 # ---- Preprocessing ----------------------------------------------------------
 preprocessing:

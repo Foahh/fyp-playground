@@ -75,5 +75,7 @@ def resolve_coco_root() -> Path:
             return root
     raise FileNotFoundError(
         "Unable to locate COCO root with annotations. Checked: "
-        + ", ".join(str(c / "annotations" / "instances_val2017.json") for c in candidates)
+        + ", ".join(
+            str(c / "annotations" / "instances_val2017.json") for c in candidates
+        )
     )

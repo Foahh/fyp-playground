@@ -75,7 +75,9 @@ def build_eval_config(entry: ModelEntry) -> Path:
 
     if entry.framework == "torch":
         if not base_model.get("model_name"):
-            overrides["model"]["model_name"] = base_model.get("model_type") or entry.family
+            overrides["model"]["model_name"] = (
+                base_model.get("model_type") or entry.family
+            )
     else:
         overrides["model"]["model_name"] = None
 

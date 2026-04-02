@@ -5,16 +5,19 @@ Run from repository root:
     python src/ml/run_train_tinyissimo_coco80_320.py
     python src/ml/run_train_tinyissimo_coco80_320.py --no-resume
 """
+
 from __future__ import annotations
 import re
 import sys
 from pathlib import Path
 import typer
 import yaml
+
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from src.common.paths import get_results_dir
 from src.dataset.dataset_common import materialize_coco_80_data_yaml
+
 TINY = ROOT / "external" / "TinyissimoYOLO"
 MODEL_YAML = str(TINY / "ultralytics/cfg/models/tinyissimo/tinyissimo-v8.yaml")
 PROJECT = get_results_dir() / "model"
@@ -23,16 +26,24 @@ DEFAULT_EPOCHS = 300
 DEFAULT_LR0 = 0.001
 DEFAULT_BATCH = 64
 DEFAULT_NBS = 64
+
+
 def run_name_for(size: int = DEFAULT_IMGSZ) -> str:
     return f"tinyissimoyolo_v8_{size}_coco80"
+
+
 def prune_epoch_checkpoints(trainer, keep: int = 3) -> None:
     wdir = trainer.wdir
+
     def epoch_key(path: Path) -> int:
         match = re.match(r"epoch(\d+)\.pt$", path.name)
         return int(match.group(1)) if match else -1
+
     epoch_pts = sorted(wdir.glob("epoch*.pt"), key=epoch_key)
     for path in epoch_pts[:-keep] if keep > 0 else epoch_pts:
         path.unlink(missing_ok=True)
+
+
 def build_train_kwargs(
     *,
     data_yaml: str,
@@ -84,7 +95,11 @@ def build_train_kwargs(
     if cache_norm is not None:
         train_kw["cache"] = False if cache_norm == "none" else cache_norm
     return train_kw
+
+
 app = typer.Typer()
+
+
 @app.command()
 def main(
     no_resume: bool = typer.Option(
@@ -114,15 +129,18 @@ def main(
         if last_pt.exists():
             print(f"Resuming from {last_pt} ...")
             from ultralytics import YOLO
+
             model = YOLO(str(last_pt))
         else:
             print(f"No checkpoint found at {last_pt}; starting a new run ...")
             resume = False
             from ultralytics import YOLO
+
             model = YOLO(MODEL_YAML)
     else:
         print(f"Creating new model from {MODEL_YAML} ...")
         from ultralytics import YOLO
+
         model = YOLO(MODEL_YAML)
     data_yaml = materialize_coco_80_data_yaml()
     with open(data_yaml, encoding="utf-8") as file:
@@ -155,11 +173,15 @@ def main(
         workers=workers,
         cache_norm=cache_norm,
     )
-    model.add_callback("on_model_save", lambda trainer: prune_epoch_checkpoints(trainer, keep=3))
+    model.add_callback(
+        "on_model_save", lambda trainer: prune_epoch_checkpoints(trainer, keep=3)
+    )
     try:
         model.train(**train_kw)
     except KeyboardInterrupt:
         print("Interrupted.")
     print(f"Training done. Weights under {weights_dir}")
+
+
 if __name__ == "__main__":
     app()

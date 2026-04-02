@@ -104,7 +104,9 @@ def main() -> None:
 
     print()
     total = len(load_model_registry())
-    print(f"Total: {total}  |  OK: {total - mismatches - missing}  |  Mismatches: {mismatches}  |  Missing files: {missing}")
+    print(
+        f"Total: {total}  |  OK: {total - mismatches - missing}  |  Mismatches: {mismatches}  |  Missing files: {missing}"
+    )
 
 
 if __name__ == "__main__":

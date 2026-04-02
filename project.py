@@ -48,7 +48,11 @@ def main() -> int:
         choices=list(LOCAL_COMMANDS.keys()),
         help="Workflow command to execute",
     )
-    parser.add_argument("args", nargs=argparse.REMAINDER, help="Arguments passed through to the target script")
+    parser.add_argument(
+        "args",
+        nargs=argparse.REMAINDER,
+        help="Arguments passed through to the target script",
+    )
     args = parser.parse_args()
 
     # Normalize passthrough args (allow both "-- --flag" and "--flag" styles)

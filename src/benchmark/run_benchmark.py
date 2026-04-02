@@ -90,7 +90,9 @@ def _apply_benchmark_mode(mode: str) -> None:
 
     text = APP_CONFIG_PATH.read_text(encoding="utf-8")
     pattern = r"(^\s*#define\s+USE_OVERDRIVE\s+)\d+"
-    updated, count = re.subn(pattern, rf"\g<1>{use_overdrive}", text, flags=re.MULTILINE)
+    updated, count = re.subn(
+        pattern, rf"\g<1>{use_overdrive}", text, flags=re.MULTILINE
+    )
     if count == 0:
         raise RuntimeError(
             f"Failed to patch USE_OVERDRIVE in {APP_CONFIG_PATH}: define not found"
@@ -149,7 +151,9 @@ def run_benchmark(
     if mode == "all":
         _run_all_modes(filter_substr, power_serial, power_baud, validation_count)
     else:
-        _run_single_mode(mode, filter_substr, power_serial, power_baud, validation_count)
+        _run_single_mode(
+            mode, filter_substr, power_serial, power_baud, validation_count
+        )
 
 
 def _run_all_modes(
@@ -161,13 +165,20 @@ def _run_all_modes(
     """Run benchmark in underdrive mode, pause, nominal mode, pause, then overdrive mode."""
 
     get_logger("benchmark").info("Running benchmark in underdrive mode...")
-    _run_single_mode("underdrive", filter_substr, power_serial, power_baud, validation_count)
+    _run_single_mode(
+        "underdrive", filter_substr, power_serial, power_baud, validation_count
+    )
 
     get_logger("benchmark").info("Running benchmark in nominal mode...")
-    _run_single_mode("nominal", filter_substr, power_serial, power_baud, validation_count)
+    _run_single_mode(
+        "nominal", filter_substr, power_serial, power_baud, validation_count
+    )
 
     get_logger("benchmark").info("Running benchmark in overdrive mode...")
-    _run_single_mode("overdrive", filter_substr, power_serial, power_baud, validation_count)
+    _run_single_mode(
+        "overdrive", filter_substr, power_serial, power_baud, validation_count
+    )
+
 
 def _run_single_mode(
     mode: str,
@@ -276,11 +287,13 @@ def _run_benchmark_loop(
             metrics = parse_metrics(res.combined_stdout, res.combined_stderr)
 
             missing = [
-                k for k, v in {
+                k
+                for k, v in {
                     "inference_time_ms": metrics.get("inference_time_ms"),
                     "inf_per_sec": metrics.get("inf_per_sec"),
                     "pm_avg_inf_mW": res.pm_avg_inf_mW,
-                }.items() if not v
+                }.items()
+                if not v
             ]
 
             row = {
@@ -299,9 +312,7 @@ def _run_benchmark_loop(
                 "inference_time_ms": metrics.get("inference_time_ms", ""),
                 "inf_per_sec": metrics.get("inf_per_sec", ""),
                 "pm_avg_inf_mW": (
-                    f"{res.pm_avg_inf_mW:.3f}"
-                    if res.pm_avg_inf_mW is not None
-                    else ""
+                    f"{res.pm_avg_inf_mW:.3f}" if res.pm_avg_inf_mW is not None else ""
                 ),
                 "pm_avg_idle_mW": (
                     f"{res.pm_avg_idle_mW:.3f}"
@@ -314,9 +325,7 @@ def _run_benchmark_loop(
                     else ""
                 ),
                 "pm_avg_inf_ms": (
-                    f"{res.pm_avg_inf_ms:.3f}"
-                    if res.pm_avg_inf_ms is not None
-                    else ""
+                    f"{res.pm_avg_inf_ms:.3f}" if res.pm_avg_inf_ms is not None else ""
                 ),
                 "pm_avg_idle_ms": (
                     f"{res.pm_avg_idle_ms:.3f}"
@@ -324,9 +333,7 @@ def _run_benchmark_loop(
                     else ""
                 ),
                 "pm_avg_inf_mJ": (
-                    f"{res.pm_avg_inf_mJ:.3f}"
-                    if res.pm_avg_inf_mJ is not None
-                    else ""
+                    f"{res.pm_avg_inf_mJ:.3f}" if res.pm_avg_inf_mJ is not None else ""
                 ),
                 "pm_avg_idle_mJ": (
                     f"{res.pm_avg_idle_mJ:.3f}"

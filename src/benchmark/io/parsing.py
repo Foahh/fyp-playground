@@ -27,7 +27,17 @@ def parse_metrics(stdout: str, stderr: str, cinfo_path: Path | None = None) -> d
                 cinfo = json.load(f)
 
             # Internal memory pools (on-chip)
-            INTERNAL_POOLS = {"flexMEM", "cpuRAM1", "cpuRAM2", "npuRAM3", "npuRAM4", "npuRAM5", "npuRAM6", "npuCache", "vencRAM"}
+            INTERNAL_POOLS = {
+                "flexMEM",
+                "cpuRAM1",
+                "cpuRAM2",
+                "npuRAM3",
+                "npuRAM4",
+                "npuRAM5",
+                "npuRAM6",
+                "npuCache",
+                "vencRAM",
+            }
             # External memory pools (off-chip)
             EXTERNAL_POOLS = {"hyperRAM", "octoFlash", "xSPI3", "sdRAM"}
 

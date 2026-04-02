@@ -121,7 +121,9 @@ def run_evaluate(
         key = (entry.variant, entry.fmt)
 
         if key in completed:
-            logger.info(f"[{i}/{total}] Skipped (already evaluated)", variant=entry.variant)
+            logger.info(
+                f"[{i}/{total}] Skipped (already evaluated)", variant=entry.variant
+            )
             continue
 
         logger.info(

@@ -46,7 +46,10 @@ def _write_coco_data_yaml_file(cfg: dict) -> str:
 def materialize_coco_80_data_yaml() -> str:
     """Write a data YAML for full COCO (80 classes); absolute root, not global Ultralytics datasets_dir."""
     coco_root = (get_datasets_dir() / "coco").resolve()
-    if not (coco_root / "train2017.txt").is_file() or not (coco_root / "val2017.txt").is_file():
+    if (
+        not (coco_root / "train2017.txt").is_file()
+        or not (coco_root / "val2017.txt").is_file()
+    ):
         raise FileNotFoundError(
             "Missing COCO split files. Checked: "
             f"{coco_root / 'train2017.txt'} and {coco_root / 'val2017.txt'}"

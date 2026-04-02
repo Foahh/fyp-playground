@@ -122,7 +122,14 @@ PER_VARIANT_COLUMNS_BENCH_PAIR = (
 )
 
 
-_DATASOURCE_CHOICES = ("readme", "underdrive", "nominal", "overdrive", "memory", "evaluate")
+_DATASOURCE_CHOICES = (
+    "readme",
+    "underdrive",
+    "nominal",
+    "overdrive",
+    "memory",
+    "evaluate",
+)
 
 
 def _ds_norm(s: str) -> str:
@@ -177,7 +184,9 @@ class ComparisonResult:
     left: str = ""
     right: str = ""
     headline: str = ""
-    table_columns: tuple[str, ...] = field(default_factory=lambda: PER_VARIANT_COLUMNS_README)
+    table_columns: tuple[str, ...] = field(
+        default_factory=lambda: PER_VARIANT_COLUMNS_README
+    )
     skipped_parsed_no_readme: int = 0
     matched_rows: int = 0
     missing_in_right: list[str] = field(default_factory=list)
@@ -244,7 +253,9 @@ def _external_ram_kib_float(raw: str) -> float:
         return 0.0
 
 
-def metric_floats(col: str, parsed_raw: str, bench_raw: str) -> tuple[float | None, float | None]:
+def metric_floats(
+    col: str, parsed_raw: str, bench_raw: str
+) -> tuple[float | None, float | None]:
     if col == "external_ram_kib":
         return _external_ram_kib_float(parsed_raw), _external_ram_kib_float(bench_raw)
     pr = _parse_float(parsed_raw)
@@ -462,7 +473,10 @@ def _append_duplicate_labels(
     for key_tuple, cnt in size_by_key.items():
         if cnt <= 1:
             continue
-        kt = tuple(str(x) for x in (key_tuple if isinstance(key_tuple, tuple) else (key_tuple,)))
+        kt = tuple(
+            str(x)
+            for x in (key_tuple if isinstance(key_tuple, tuple) else (key_tuple,))
+        )
         lbl = key_label(kt)
         dup_list = out.duplicate_left_keys if left else out.duplicate_right_keys
         dup_list.extend([lbl] * (cnt - 1))
@@ -525,7 +539,9 @@ def compare_readme_to_bench(
         for _, r in parsed_with.iterrows():
             parsed_key_set.add(tuple(str(r[c]) for c in KEY_MERGE))
 
-    left_df_m, right_df_m = (parsed_with, bench_first) if left_is_readme else (bench_first, parsed_with)
+    left_df_m, right_df_m = (
+        (parsed_with, bench_first) if left_is_readme else (bench_first, parsed_with)
+    )
     left_m = pd.merge(
         left_df_m,
         right_df_m,
@@ -547,12 +563,16 @@ def compare_readme_to_bench(
             if k not in parsed_key_set:
                 out.missing_in_left.append(key_label(k))
     else:
-        bench_key_set = {tuple(str(rrow[c]) for c in KEY_MERGE) for _, rrow in bench_first.iterrows()}
+        bench_key_set = {
+            tuple(str(rrow[c]) for c in KEY_MERGE) for _, rrow in bench_first.iterrows()
+        }
         for k in parsed_key_set:
             if k not in bench_key_set:
                 out.missing_in_left.append(key_label(k))
 
-    delta_src = left_m[left_m["_merge"] == "both"].drop(columns=["_merge"], errors="ignore")
+    delta_src = left_m[left_m["_merge"] == "both"].drop(
+        columns=["_merge"], errors="ignore"
+    )
     for _, mrow in delta_src.iterrows():
         res_s = str(mrow["_res"])
         for col in METRIC_COLS:
@@ -632,7 +652,9 @@ def compare_bench_to_bench(
     left_first = left_n.drop_duplicates(subset=list(KEY_MERGE), keep="first")
     right_first = right_n.drop_duplicates(subset=list(KEY_MERGE), keep="first")
 
-    left_key_set = {tuple(str(r[c]) for c in KEY_MERGE) for _, r in left_first.iterrows()}
+    left_key_set = {
+        tuple(str(r[c]) for c in KEY_MERGE) for _, r in left_first.iterrows()
+    }
 
     left_m = pd.merge(
         left_first,
@@ -654,7 +676,9 @@ def compare_bench_to_bench(
         if k not in left_key_set:
             out.missing_in_left.append(key_label(k))
 
-    delta_src = left_m[left_m["_merge"] == "both"].drop(columns=["_merge"], errors="ignore")
+    delta_src = left_m[left_m["_merge"] == "both"].drop(
+        columns=["_merge"], errors="ignore"
+    )
     for _, mrow in delta_src.iterrows():
         res_s = str(mrow["_res"])
         for col in METRIC_COLS_BENCH_PAIR:
@@ -738,11 +762,9 @@ def _stedgeai_hoist_banner(
         counts[(lv, rv)] += 1
     if len(counts) == 1:
         (lv, rv) = next(iter(counts.keys()))
-        return (
-            f"stedgeai_version: {left_label}={lv} │ {right_label}={rv} (≠)"
-        )
+        return f"stedgeai_version: {left_label}={lv} │ {right_label}={rv} (≠)"
     parts: list[str] = []
-    for (lv, rv) in sorted(counts.keys()):
+    for lv, rv in sorted(counts.keys()):
         n = counts[(lv, rv)]
         parts.append(f"{left_label}={lv} {right_label}={rv} ({n} configs)")
     return "stedgeai_version mismatches: " + "; ".join(parts)
@@ -779,7 +801,9 @@ def print_comparison_report(
     if not body_rows:
         console.print("No overlapping metric cells (nothing to tabulate).")
     else:
-        by_variant_and_format: dict[tuple[str, str], list[dict[str, str]]] = defaultdict(list)
+        by_variant_and_format: dict[tuple[str, str], list[dict[str, str]]] = (
+            defaultdict(list)
+        )
         for r in body_rows:
             by_variant_and_format[(r["model_variant"], r["format"])].append(r)
 
@@ -947,7 +971,9 @@ def compare_entry(
             raise typer.Exit(2)
         ordered_spec, thresh_by_metric = parsed
         if not thresh_by_metric:
-            _err_console.print("[red]error: --delta requires at least one METRIC:NUMBER[/red]")
+            _err_console.print(
+                "[red]error: --delta requires at least one METRIC:NUMBER[/red]"
+            )
             raise typer.Exit(2)
         delta_abs_desc = "; ".join(f"{n} |Δ| ≥ {t:g}" for n, t in ordered_spec)
 
@@ -989,7 +1015,9 @@ def compare_entry(
         result.delta_rows = filter_rows_excluding(result.delta_rows, exclude)
     if thresh_by_metric:
         before_delta_abs = len(result.delta_rows)
-        result.delta_rows = filter_rows_by_delta_spec(result.delta_rows, thresh_by_metric)
+        result.delta_rows = filter_rows_by_delta_spec(
+            result.delta_rows, thresh_by_metric
+        )
     if delta_pct is not None:
         if delta_pct < 0:
             _err_console.print("[red]error: --delta-pct must be >= 0[/red]")

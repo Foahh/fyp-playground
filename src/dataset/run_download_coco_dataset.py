@@ -64,8 +64,10 @@ def _resumable_download(
             "--min-split-size=10M",
             "--max-tries=5",
             "--timeout=60",
-            "--dir", str(dest_dir),
-            "--out", filename,
+            "--dir",
+            str(dest_dir),
+            "--out",
+            filename,
             url,
         ]
         if ca_certificate:
@@ -108,10 +110,9 @@ def download_coco(
     train_img_dir = DEST / "images" / "train2017"
     val_img_dir = DEST / "images" / "val2017"
 
-    has_annotations = (
-        (ann_dir / "instances_train2017.json").is_file()
-        and (ann_dir / "instances_val2017.json").is_file()
-    )
+    has_annotations = (ann_dir / "instances_train2017.json").is_file() and (
+        ann_dir / "instances_val2017.json"
+    ).is_file()
     has_train_images = train_img_dir.is_dir() and any(train_img_dir.iterdir())
     has_val_images = val_img_dir.is_dir() and any(val_img_dir.iterdir())
 
@@ -134,7 +135,8 @@ def download_coco(
             continue
 
         zip_path = _resumable_download(
-            url, zips_dir,
+            url,
+            zips_dir,
             use_wget=use_wget,
             ca_certificate=ca_certificate,
             check_certificate=check_certificate,
@@ -144,6 +146,7 @@ def download_coco(
 
 def _resolve_coco_root() -> Path:
     from ..common.paths import resolve_coco_root
+
     return resolve_coco_root()
 
 
@@ -326,10 +329,19 @@ app = typer.Typer()
 
 @app.command()
 def main(
-    wget: bool = typer.Option(False, help="Use wget instead of aria2c for downloads (single-connection)"),
-    ca_certificate: str | None = typer.Option(None, help="Path to CA certificate bundle (forwarded to aria2c/wget)"),
-    no_check_certificate: bool = typer.Option(False, help="Disable server certificate verification (forwarded to aria2c/wget)"),
-    zips_dir: Path = typer.Option(ZIPS_DIR_DEFAULT, help="Directory to store downloaded zip files (can be deleted later)"),
+    wget: bool = typer.Option(
+        False, help="Use wget instead of aria2c for downloads (single-connection)"
+    ),
+    ca_certificate: str | None = typer.Option(
+        None, help="Path to CA certificate bundle (forwarded to aria2c/wget)"
+    ),
+    no_check_certificate: bool = typer.Option(
+        False, help="Disable server certificate verification (forwarded to aria2c/wget)"
+    ),
+    zips_dir: Path = typer.Option(
+        ZIPS_DIR_DEFAULT,
+        help="Directory to store downloaded zip files (can be deleted later)",
+    ),
 ):
     download_coco(
         use_wget=wget,

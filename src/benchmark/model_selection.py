@@ -32,10 +32,10 @@ DEFAULT_MEMORY_CSV = RESULTS_DIR / "generate_result.csv"
 
 # ── Hardware constants (STM32N6570-DK) ──────────────────────────────────────
 
-NPU_RAM_ACTIVATION_KIB = 4 * 448 # npuRAM3–6
-CPU_RAM_ACTIVATION_KIB = 512     # cpuRAM2
-MAX_LATENCY_MS = 66              # 15 FPS ceiling
-MAX_WEIGHTS_FLASH_KIB = 10240    # 10 MiB octoFlash (for glass deployment, altough 60 MiB is given on the STM32N6570-DK)
+NPU_RAM_ACTIVATION_KIB = 4 * 448  # npuRAM3–6
+CPU_RAM_ACTIVATION_KIB = 512  # cpuRAM2
+MAX_LATENCY_MS = 66  # 15 FPS ceiling
+MAX_WEIGHTS_FLASH_KIB = 10240  # 10 MiB octoFlash (for glass deployment, altough 60 MiB is given on the STM32N6570-DK)
 
 # Quantisation formats dropped before gating and listing.
 SELECTION_EXCLUDED_FORMATS: frozenset[str] = frozenset({"W4A8"})
@@ -278,7 +278,9 @@ def _print_column_abbreviations_legend() -> None:
         "Efficiency curve: √(AP/ms × AP/mJ) ([bold]efficiency_geo[/bold]); "
         "needs valid AP, latency, and mJ.",
     )
-    legend.add_row("fmt", "Quantisation format (W4A8 excluded from the candidate pool).")
+    legend.add_row(
+        "fmt", "Quantisation format (W4A8 excluded from the candidate pool)."
+    )
     legend.add_row("res", "Input resolution in pixels.")
     legend.add_row(
         "act_no_io",
@@ -512,9 +514,7 @@ def run_selection(
 
     before_fam = len(df)
     fam_series = df["model_family"].astype(str)
-    df = df[
-        ~fam_series.str.startswith(SELECTION_EXCLUDED_FAMILY_PREFIXES)
-    ].copy()
+    df = df[~fam_series.str.startswith(SELECTION_EXCLUDED_FAMILY_PREFIXES)].copy()
     dropped_fam = before_fam - len(df)
     if dropped_fam:
         shown = ", ".join(SELECTION_EXCLUDED_FAMILY_PREFIXES)

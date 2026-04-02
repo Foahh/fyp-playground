@@ -172,7 +172,9 @@ def _representative_data_gen(
             image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         resized = cv2.resize(
-            image, (img_size, img_size), interpolation=cv2.INTER_LINEAR,
+            image,
+            (img_size, img_size),
+            interpolation=cv2.INTER_LINEAR,
         )
         # Ultralytics uses [0, 255] → [0, 1] normalisation
         normalized = resized / 255.0
@@ -221,7 +223,9 @@ def _st_quantize(
 
     converter.optimizations = [tf.lite.Optimize.DEFAULT]
     converter.representative_dataset = lambda: _representative_data_gen(
-        calib_dir, img_size, max_calib,
+        calib_dir,
+        img_size,
+        max_calib,
     )
 
     tflite_bytes = converter.convert()
@@ -305,13 +309,19 @@ def main(
         typer.echo(f"Error: --size must be one of {list(VALID_SIZES)}", err=True)
         raise typer.Exit(1)
     if input_type not in VALID_IO_TYPES:
-        typer.echo(f"Error: --input-type must be one of {list(VALID_IO_TYPES)}", err=True)
+        typer.echo(
+            f"Error: --input-type must be one of {list(VALID_IO_TYPES)}", err=True
+        )
         raise typer.Exit(1)
     if output_type not in VALID_IO_TYPES:
-        typer.echo(f"Error: --output-type must be one of {list(VALID_IO_TYPES)}", err=True)
+        typer.echo(
+            f"Error: --output-type must be one of {list(VALID_IO_TYPES)}", err=True
+        )
         raise typer.Exit(1)
     if quant_type not in VALID_QUANT_TYPES:
-        typer.echo(f"Error: --quant-type must be one of {list(VALID_QUANT_TYPES)}", err=True)
+        typer.echo(
+            f"Error: --quant-type must be one of {list(VALID_QUANT_TYPES)}", err=True
+        )
         raise typer.Exit(1)
 
     pt_path = _resolve_checkpoint(size, checkpoint)

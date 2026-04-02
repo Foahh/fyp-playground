@@ -49,7 +49,9 @@ def configure_logging(
     """
     global _configured, _audit_formatter
 
-    audit_path = audit_log_path if audit_log_path is not None else _default_audit_log_path()
+    audit_path = (
+        audit_log_path if audit_log_path is not None else _default_audit_log_path()
+    )
     audit_path.parent.mkdir(parents=True, exist_ok=True)
 
     if not _configured:

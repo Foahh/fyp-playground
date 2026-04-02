@@ -26,9 +26,7 @@ def _append_csv_row(csv_path: Path, row: dict, fieldnames: list[str]):
     csv_path.parent.mkdir(parents=True, exist_ok=True)
     write_header = not csv_path.exists() or csv_path.stat().st_size == 0
     with open(csv_path, "a", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(
-            f, fieldnames=fieldnames, quoting=csv.QUOTE_ALL
-        )
+        writer = csv.DictWriter(f, fieldnames=fieldnames, quoting=csv.QUOTE_ALL)
         if write_header:
             writer.writeheader()
         writer.writerow(row)

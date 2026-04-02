@@ -12,14 +12,14 @@ class ModelEntry:
     family: str
     variant: str
     hyperparameters: str
-    dataset: str        # "COCO-Person", "COCO-80"
+    dataset: str  # "COCO-Person", "COCO-80"
     num_classes: int
-    fmt: str            # "Int8" or "W4A8"
+    fmt: str  # "Int8" or "W4A8"
     resolution: int
-    model_path: str     # absolute path to model file
-    config_path: str    # absolute path to base config YAML
+    model_path: str  # absolute path to model file
+    config_path: str  # absolute path to base config YAML
     overrides: dict = field(default_factory=dict)
-    framework: str = "tf"           # "tf" or "torch"
+    framework: str = "tf"  # "tf" or "torch"
     input_data_type: str = "uint8"
     output_data_type: str = "int8"
 

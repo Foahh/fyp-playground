@@ -66,7 +66,9 @@ def _print_outliers(
     cols_pref = ["model_variant", "format", "resolution", "dataset"]
     cols = [c for c in cols_pref if c in df.columns]
     if not cols:
-        cols = [c for c in ("model_family", "model_variant", "format") if c in df.columns]
+        cols = [
+            c for c in ("model_family", "model_variant", "format") if c in df.columns
+        ]
 
     shown = out.sort_values().head(max_rows)
     for idx, v in shown.items():
@@ -93,7 +95,9 @@ def _print_outliers(
         print(f"    - row {int(idx)}: {metric}={float(v):.3f}{unit_s}{extra}{ident}")
 
     if len(out) > len(shown):
-        print(f"    ... {len(out) - len(shown)} more outliers not shown (use --max-outliers to raise)")
+        print(
+            f"    ... {len(out) - len(shown)} more outliers not shown (use --max-outliers to raise)"
+        )
 
 
 def _audit_values(values: np.ndarray) -> dict[str, float | int]:
@@ -139,10 +143,16 @@ def _audit_values(values: np.ndarray) -> dict[str, float | int]:
     }
 
 
-def _format_report(mode: str, metric: str, csv_path: Path, stats: dict[str, float | int]) -> str:
+def _format_report(
+    mode: str, metric: str, csv_path: Path, stats: dict[str, float | int]
+) -> str:
     unit = _unit_for(metric)
     unit_s = f" {unit}" if unit else ""
-    lines = [f"## {mode} — {csv_path}", f"  metric: {metric}", f"  rows (non-null): {stats['n']}"]
+    lines = [
+        f"## {mode} — {csv_path}",
+        f"  metric: {metric}",
+        f"  rows (non-null): {stats['n']}",
+    ]
     if stats["n"] == 0:
         return "\n".join(lines)
 
@@ -162,7 +172,9 @@ def _format_report(mode: str, metric: str, csv_path: Path, stats: dict[str, floa
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Audit pm_avg_idle_mW per benchmark mode CSV.")
+    parser = argparse.ArgumentParser(
+        description="Audit pm_avg_idle_mW per benchmark mode CSV."
+    )
     parser.add_argument(
         "--mode",
         action="append",

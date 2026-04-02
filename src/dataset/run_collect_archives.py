@@ -81,8 +81,12 @@ app = typer.Typer(add_completion=False)
 @app.command()
 def main(
     dry_run: bool = typer.Option(True, help="Print actions but do not move files"),
-    zips_dir: Path = typer.Option(None, help="Where to collect archives (default: <datasets>/_zips)"),
-    ext: list[str] = typer.Option([".zip"], help="File extensions to collect (case-insensitive)"),
+    zips_dir: Path = typer.Option(
+        None, help="Where to collect archives (default: <datasets>/_zips)"
+    ),
+    ext: list[str] = typer.Option(
+        [".zip"], help="File extensions to collect (case-insensitive)"
+    ),
 ) -> int:
     datasets_dir = get_datasets_dir()
     zips_dir = (datasets_dir / "_zips") if zips_dir is None else zips_dir.expanduser()
@@ -92,7 +96,9 @@ def main(
     plans = _plan_moves(datasets_dir, zips_dir, extensions)
 
     if not plans:
-        print(f"No archives found under {datasets_dir} matching {sorted(extensions)} outside {zips_dir}.")
+        print(
+            f"No archives found under {datasets_dir} matching {sorted(extensions)} outside {zips_dir}."
+        )
         return 0
 
     print(f"Collecting {len(plans)} archive(s) into: {zips_dir}")
@@ -136,4 +142,3 @@ def main(
 
 if __name__ == "__main__":
     raise SystemExit(app())
-

@@ -41,6 +41,7 @@ def _get_n6_scripts_dir() -> Path:
 
 def get_stedgeai_version(benchmark_log: Path) -> str:
     """Return normalized stedgeai version string, or ``unknown`` on failure."""
+
     def _probe_version() -> tuple[str, str, int]:
         return _run_streaming(
             [STEDGEAI_PATH, "--version"],
@@ -238,12 +239,19 @@ def _step_validate(
 
     try:
         # Import ai_runner from STEdgeAI installation
-        stedgeai_scripts = Path(os.environ["STEDGEAI_CORE_DIR"]) / "scripts" / "ai_runner"
+        stedgeai_scripts = (
+            Path(os.environ["STEDGEAI_CORE_DIR"]) / "scripts" / "ai_runner"
+        )
         if str(stedgeai_scripts) not in sys.path:
             sys.path.insert(0, str(stedgeai_scripts))
         from stm_ai_runner import AiRunner
     except ImportError as e:
-        get_logger("workflow").error("Validate import failed", step="validate", variant=entry.variant, error=str(e))
+        get_logger("workflow").error(
+            "Validate import failed",
+            step="validate",
+            variant=entry.variant,
+            error=str(e),
+        )
         return "", f"Failed to import ai_runner: {e}", 1
 
     output_lines = []
@@ -276,8 +284,8 @@ def _step_validate(
                 disable_pb=True,
             )
 
-            if profile['c_durations']:
-                d_ms = profile['c_durations'][0]
+            if profile["c_durations"]:
+                d_ms = profile["c_durations"][0]
                 durations.append(d_ms)
             else:
                 d_ms = None
@@ -285,7 +293,7 @@ def _step_validate(
                 "Inference run completed",
                 step="validate",
                 variant=entry.variant,
-                run=f"{i+1}/{n_runs}",
+                run=f"{i + 1}/{n_runs}",
                 duration_ms=f"{d_ms:.3f}" if d_ms else None,
             )
 
@@ -297,7 +305,9 @@ def _step_validate(
             min_ms = min(durations)
             max_ms = max(durations)
             output_lines.append(f"Completed {len(durations)} inferences")
-            output_lines.append(f"Inference time: avg={avg_ms:.3f}ms, min={min_ms:.3f}ms, max={max_ms:.3f}ms")
+            output_lines.append(
+                f"Inference time: avg={avg_ms:.3f}ms, min={min_ms:.3f}ms, max={max_ms:.3f}ms"
+            )
             _append_stdout_log(
                 f"VALIDATE_SUMMARY n={len(durations)} avg_ms={avg_ms:.6f} min_ms={min_ms:.6f} max_ms={max_ms:.6f}",
                 benchmark_log,
@@ -351,15 +361,11 @@ class EvalResult:
 
     @property
     def combined_stdout(self) -> str:
-        return "\n".join(
-            [self.generate_out, self.load_out, self.validate_out]
-        )
+        return "\n".join([self.generate_out, self.load_out, self.validate_out])
 
     @property
     def combined_stderr(self) -> str:
-        return "\n".join(
-            [self.generate_err, self.load_err, self.validate_err]
-        )
+        return "\n".join([self.generate_err, self.load_err, self.validate_err])
 
     @property
     def failed_step(self) -> Optional[str]:
@@ -397,7 +403,9 @@ def run_benchmark(
             res.validate_out, res.validate_err, res.validate_rc = _step_validate(
                 entry, validation_count, benchmark_log
             )
-            get_logger("workflow").info("Validation complete", variant=entry.variant, rc=res.validate_rc)
+            get_logger("workflow").info(
+                "Validation complete", variant=entry.variant, rc=res.validate_rc
+            )
         finally:
             validate_dt = time.monotonic() - validate_t0
             validate_lines = end_validate_capture()
@@ -437,17 +445,29 @@ def run_benchmark(
                 step="validate",
                 variant=entry.variant,
                 pm_avg_inf_mW=f"{res.pm_avg_inf_mW:.3f}" if res.pm_avg_inf_mW else "",
-                pm_avg_idle_mW=f"{res.pm_avg_idle_mW:.3f}" if res.pm_avg_idle_mW else "",
-                pm_avg_delta_mW=f"{res.pm_avg_delta_mW:.3f}" if res.pm_avg_delta_mW else "",
+                pm_avg_idle_mW=f"{res.pm_avg_idle_mW:.3f}"
+                if res.pm_avg_idle_mW
+                else "",
+                pm_avg_delta_mW=f"{res.pm_avg_delta_mW:.3f}"
+                if res.pm_avg_delta_mW
+                else "",
                 pm_avg_inf_ms=f"{res.pm_avg_inf_ms:.3f}" if res.pm_avg_inf_ms else "",
-                pm_avg_idle_ms=f"{res.pm_avg_idle_ms:.3f}" if res.pm_avg_idle_ms else "",
+                pm_avg_idle_ms=f"{res.pm_avg_idle_ms:.3f}"
+                if res.pm_avg_idle_ms
+                else "",
                 pm_avg_inf_mJ=f"{res.pm_avg_inf_mJ:.3f}" if res.pm_avg_inf_mJ else "",
-                pm_avg_idle_mJ=f"{res.pm_avg_idle_mJ:.3f}" if res.pm_avg_idle_mJ else "",
+                pm_avg_idle_mJ=f"{res.pm_avg_idle_mJ:.3f}"
+                if res.pm_avg_idle_mJ
+                else "",
             )
         elif is_power_session_active():
-            get_logger("workflow").warning("Power active but no samples captured", variant=entry.variant)
+            get_logger("workflow").warning(
+                "Power active but no samples captured", variant=entry.variant
+            )
         if res.validate_rc != 0:
-            get_logger("workflow").warning("Validation failed", variant=entry.variant, rc=res.validate_rc)
+            get_logger("workflow").warning(
+                "Validation failed", variant=entry.variant, rc=res.validate_rc
+            )
 
     except subprocess.TimeoutExpired as e:
         step = "on-target"

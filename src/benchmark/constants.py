@@ -3,17 +3,85 @@
 # ── COCO 80 class names ──
 
 COCO_80_CLASSES = [
-    "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck",
-    "boat", "traffic light", "fire hydrant", "stop sign", "parking meter", "bench",
-    "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra",
-    "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee",
-    "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove",
-    "skateboard", "surfboard", "tennis racket", "bottle", "wine glass", "cup",
-    "fork", "knife", "spoon", "bowl", "banana", "apple", "sandwich", "orange",
-    "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "couch",
-    "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse",
-    "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink",
-    "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier",
+    "person",
+    "bicycle",
+    "car",
+    "motorcycle",
+    "airplane",
+    "bus",
+    "train",
+    "truck",
+    "boat",
+    "traffic light",
+    "fire hydrant",
+    "stop sign",
+    "parking meter",
+    "bench",
+    "bird",
+    "cat",
+    "dog",
+    "horse",
+    "sheep",
+    "cow",
+    "elephant",
+    "bear",
+    "zebra",
+    "giraffe",
+    "backpack",
+    "umbrella",
+    "handbag",
+    "tie",
+    "suitcase",
+    "frisbee",
+    "skis",
+    "snowboard",
+    "sports ball",
+    "kite",
+    "baseball bat",
+    "baseball glove",
+    "skateboard",
+    "surfboard",
+    "tennis racket",
+    "bottle",
+    "wine glass",
+    "cup",
+    "fork",
+    "knife",
+    "spoon",
+    "bowl",
+    "banana",
+    "apple",
+    "sandwich",
+    "orange",
+    "broccoli",
+    "carrot",
+    "hot dog",
+    "pizza",
+    "donut",
+    "cake",
+    "chair",
+    "couch",
+    "potted plant",
+    "bed",
+    "dining table",
+    "toilet",
+    "tv",
+    "laptop",
+    "mouse",
+    "remote",
+    "keyboard",
+    "cell phone",
+    "microwave",
+    "oven",
+    "toaster",
+    "sink",
+    "refrigerator",
+    "book",
+    "clock",
+    "vase",
+    "scissors",
+    "teddy bear",
+    "hair drier",
     "toothbrush",
 ]
 
@@ -69,8 +137,7 @@ _MEMORY_COLUMNS = [
 ]
 
 BENCHMARK_CSV_COLUMNS = [
-    c for c in CSV_COLUMNS
-    if c not in (["ap_50"] + _MEMORY_COLUMNS)
+    c for c in CSV_COLUMNS if c not in (["ap_50"] + _MEMORY_COLUMNS)
 ]
 
 GENERATE_CSV_COLUMNS = [
@@ -98,9 +165,16 @@ EVAL_CSV_COLUMNS = [
 ]
 
 CSV_COLUMNS_NO_POWER = [
-    c for c in CSV_COLUMNS
-    if c not in (
-        "pm_avg_inf_mW", "pm_avg_idle_mW", "pm_avg_delta_mW",
-        "pm_avg_inf_ms", "pm_avg_idle_ms", "pm_avg_inf_mJ", "pm_avg_idle_mJ",
+    c
+    for c in CSV_COLUMNS
+    if c
+    not in (
+        "pm_avg_inf_mW",
+        "pm_avg_idle_mW",
+        "pm_avg_delta_mW",
+        "pm_avg_inf_ms",
+        "pm_avg_idle_ms",
+        "pm_avg_inf_mJ",
+        "pm_avg_idle_mJ",
     )
 ]

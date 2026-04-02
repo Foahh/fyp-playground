@@ -70,9 +70,15 @@ def main(
         None,
         help=f"Checkpoint .pt; default: best.pt then last.pt under {SOURCE_RUN_NAME}/weights",
     ),
-    device: str | None = typer.Option(None, help="Ultralytics device (e.g. 0, cpu); default is auto"),
-    workers: int | None = typer.Option(None, help="Data loader workers; omit for Ultralytics default"),
-    cache: str | None = typer.Option(None, help="Dataset cache mode (none, disk, ram); omit for default"),
+    device: str | None = typer.Option(
+        None, help="Ultralytics device (e.g. 0, cpu); default is auto"
+    ),
+    workers: int | None = typer.Option(
+        None, help="Data loader workers; omit for Ultralytics default"
+    ),
+    cache: str | None = typer.Option(
+        None, help="Dataset cache mode (none, disk, ram); omit for default"
+    ),
     no_resume: bool = typer.Option(
         False,
         "--no-resume",

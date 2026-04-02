@@ -22,7 +22,9 @@ def _benchmark_results_subdir(mode: str) -> str:
         return "benchmark_nominal"
     if mode == "underdrive":
         return "benchmark_underdrive"
-    raise ValueError(f"Invalid benchmark mode {mode!r}; expected one of {sorted(_VALID_BENCHMARK_MODES)}")
+    raise ValueError(
+        f"Invalid benchmark mode {mode!r}; expected one of {sorted(_VALID_BENCHMARK_MODES)}"
+    )
 
 
 BASE_DIR = get_repo_root()

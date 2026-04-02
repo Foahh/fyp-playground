@@ -47,7 +47,9 @@ def main() -> None:
         script.write_text(
             "export LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-}:${CONDA_PREFIX}/lib/\n"
         )
-        print(f"Wrote {script} (LD_LIBRARY_PATH for conda CUDA libs in '{STZOO_ENV_NAME}')")
+        print(
+            f"Wrote {script} (LD_LIBRARY_PATH for conda CUDA libs in '{STZOO_ENV_NAME}')"
+        )
 
     pip_install(STZOO_ENV_NAME, "-r", str(benchmark_req))
     pip_install(STZOO_ENV_NAME, "-r", str(benchmark_extra_req))

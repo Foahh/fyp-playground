@@ -17,9 +17,11 @@ from tenacity import Retrying, stop_after_attempt, wait_fixed
 def _log(level: str, msg: str, **kwargs) -> None:
     try:
         from ..utils.logutil import get_logger
+
         getattr(get_logger("power"), level)(msg, **kwargs)
     except Exception:
         print(f"[{level.upper()}] {msg}")
+
 
 # Add external/fyp-power-measure to path for protobuf import
 _pb_path = Path(__file__).resolve().parents[3] / "external" / "fyp-power-measure"
@@ -28,6 +30,7 @@ if str(_pb_path) not in sys.path:
 
 try:
     from power_sample_pb2 import PowerSample
+
     _HAS_PROTOBUF = True
 except ImportError:
     _HAS_PROTOBUF = False
@@ -35,6 +38,7 @@ except ImportError:
 
 try:
     from serial.tools import list_ports
+
     _HAS_SERIAL_TOOLS = True
 except ImportError:
     _HAS_SERIAL_TOOLS = False
@@ -58,11 +62,13 @@ def _auto_detect_esp32c6() -> Optional[str]:
             continue
 
         score = 0
-        text = " ".join([
-            (port.manufacturer or ""),
-            (port.product or ""),
-            (port.description or ""),
-        ]).lower()
+        text = " ".join(
+            [
+                (port.manufacturer or ""),
+                (port.product or ""),
+                (port.description or ""),
+            ]
+        ).lower()
 
         if "esp32c6" in text:
             score += 8
@@ -111,9 +117,7 @@ def compute_power_metrics(samples: list[dict], num_inferences: int = 1) -> dict:
 
     inference_samples = [s for s in samples if s.get("is_inference")]
     idle_samples = [
-        s
-        for s in samples
-        if not s.get("is_inference") and s.get("duration_us", 0) > 0
+        s for s in samples if not s.get("is_inference") and s.get("duration_us", 0) > 0
     ]
 
     # Compute inference metrics
@@ -124,7 +128,9 @@ def compute_power_metrics(samples: list[dict], num_inferences: int = 1) -> dict:
         avg_power_inf = (
             (inf_energy_j / inf_duration_s) * 1000.0 if inf_duration_s > 0 else None
         )
-        avg_duration_ms = (inf_duration_us / num_inferences) / 1000.0 if inf_duration_us > 0 else None
+        avg_duration_ms = (
+            (inf_duration_us / num_inferences) / 1000.0 if inf_duration_us > 0 else None
+        )
         avg_energy_mj = (
             (inf_energy_j / num_inferences) * 1000.0 if inf_energy_j > 0 else None
         )
@@ -147,9 +153,7 @@ def compute_power_metrics(samples: list[dict], num_inferences: int = 1) -> dict:
             else None
         )
         avg_energy_idle_mj = (
-            (idle_energy_j / num_inferences) * 1000.0
-            if idle_energy_j > 0
-            else None
+            (idle_energy_j / num_inferences) * 1000.0 if idle_energy_j > 0 else None
         )
     else:
         avg_power_idle = None
@@ -220,7 +224,11 @@ class PowerMeasureSession:
         if not port:
             port = _auto_detect_esp32c6()
         if not port:
-            _log("warning", "Power disabled: no ESP32-C6 found", hint="enable USB-CDC or use --power-serial")
+            _log(
+                "warning",
+                "Power disabled: no ESP32-C6 found",
+                hint="enable USB-CDC or use --power-serial",
+            )
             return False
 
         def _open_serial() -> Any:
@@ -253,7 +261,11 @@ class PowerMeasureSession:
             )
             retry_hs(_handshake_or_raise)
         except Exception:
-            _log("warning", "Power disabled: no handshake ACK", hint="check firmware PM_PING/PM_ACK support")
+            _log(
+                "warning",
+                "Power disabled: no handshake ACK",
+                hint="check firmware PM_PING/PM_ACK support",
+            )
             try:
                 self._ser.close()
             except Exception as e:
@@ -270,7 +282,9 @@ class PowerMeasureSession:
             self._csv_writer.writerow(self._CSV_FIELDS)
             self._csv_fd.flush()
 
-        self._thread = threading.Thread(target=self._run, name="ina228-power", daemon=True)
+        self._thread = threading.Thread(
+            target=self._run, name="ina228-power", daemon=True
+        )
         self._thread.start()
 
         return True
@@ -351,7 +365,11 @@ class PowerMeasureSession:
                             self._ser.write(self._RESET_REQUEST)
                             self._ser.flush()
                     except Exception as e:
-                        _log("warning", "Failed to reset accumulators (reader)", error=str(e))
+                        _log(
+                            "warning",
+                            "Failed to reset accumulators (reader)",
+                            error=str(e),
+                        )
                     finally:
                         self._reset_pending.clear()
                         self._reset_done.set()
@@ -407,7 +425,11 @@ class PowerMeasureSession:
                 self._reset_done.clear()
                 self._reset_pending.set()
                 if not self._reset_done.wait(timeout=10.0):
-                    _log("warning", "PM_RESET timed out waiting for reader thread", timeout_s=10.0)
+                    _log(
+                        "warning",
+                        "PM_RESET timed out waiting for reader thread",
+                        timeout_s=10.0,
+                    )
             else:
                 with self._io_lock:
                     self._ser.write(self._RESET_REQUEST)

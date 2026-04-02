@@ -59,7 +59,9 @@ def main() -> None:
     print(f"Installing pip requirements from {yolo_req} ...")
     pip_install(YOLO_ENV_NAME, "-r", str(yolo_req))
 
-    export_conda_env_yaml(YOLO_ENV_NAME, root / "results" / "conda_envs" / f"{YOLO_ENV_NAME}.yml")
+    export_conda_env_yaml(
+        YOLO_ENV_NAME, root / "results" / "conda_envs" / f"{YOLO_ENV_NAME}.yml"
+    )
 
     print("Done.")
     print(f"- ML env: {conda_activate_hint(YOLO_ENV_NAME)}")

@@ -41,7 +41,7 @@ def _norm_model_basename(name: str) -> str:
     for ext in (".tflite", ".onnx", ".keras"):
         suf = "-st" + ext
         if n.endswith(suf):
-            n = n[:-len(suf)] + ext
+            n = n[: -len(suf)] + ext
             break
     return n
 
@@ -235,7 +235,9 @@ def _extract_family_metrics(readme_path: Path) -> tuple[dict[str, dict], bool]:
                     continue
                 rec: dict = {
                     "link_key": key,
-                    "internal_ram_kib": row_cells[ir].strip() if ir < len(row_cells) else "",
+                    "internal_ram_kib": row_cells[ir].strip()
+                    if ir < len(row_cells)
+                    else "",
                     "external_ram_kib": row_cells[er].strip()
                     if er is not None and er < len(row_cells)
                     else "0",
@@ -282,7 +284,9 @@ def _extract_family_metrics(readme_path: Path) -> tuple[dict[str, dict], bool]:
                     continue
                 rec = {
                     "link_key": key,
-                    "inference_time_ms": row_cells[it].strip() if it < len(row_cells) else "",
+                    "inference_time_ms": row_cells[it].strip()
+                    if it < len(row_cells)
+                    else "",
                     "inf_per_sec": row_cells[ips].strip()
                     if ips is not None and ips < len(row_cells)
                     else "",
@@ -323,12 +327,13 @@ def _extract_family_metrics(readme_path: Path) -> tuple[dict[str, dict], bool]:
                 ap_val = m_pct.group(1) if m_pct else re.sub(r"[^\d.]", "", raw_ap)
                 if href:
                     key = _href_path_key(href)
-                elif fmt_i is not None and res_i is not None and fmt_i < len(
-                    row_cells
-                ) and res_i < len(row_cells):
-                    key = _plain_ap_key(
-                        family, row_cells[fmt_i], row_cells[res_i]
-                    )
+                elif (
+                    fmt_i is not None
+                    and res_i is not None
+                    and fmt_i < len(row_cells)
+                    and res_i < len(row_cells)
+                ):
+                    key = _plain_ap_key(family, row_cells[fmt_i], row_cells[res_i])
                 else:
                     continue
                 if not key:
@@ -369,8 +374,10 @@ def _fmt_match(reg: dict, row_fmt: str) -> bool:
     if {a, b} <= {"w4a8", "w4w8"}:
         return True
     fn = str(reg.get("model", "")).lower()
-    if a == "int8" and b == "w4a8" and (
-        "qdq_int8" in fn or "_int8." in fn or fn.endswith("int8.tflite")
+    if (
+        a == "int8"
+        and b == "w4a8"
+        and ("qdq_int8" in fn or "_int8." in fn or fn.endswith("int8.tflite"))
     ):
         return True
     return False
@@ -392,9 +399,7 @@ def _hyper_match(reg_hp: str, row_hp: str | None) -> bool:
     return reg_hp.strip() == row_hp.strip()
 
 
-def _pick_metrics(
-    reg: dict, family_metrics: dict[str, dict]
-) -> dict[str, str]:
+def _pick_metrics(reg: dict, family_metrics: dict[str, dict]) -> dict[str, str]:
     model_path = resolve_repo_relative_path(reg["model"])
     basename = model_path.name
     lookup_key = _registry_model_key(reg)
@@ -416,6 +421,7 @@ def _pick_metrics(
         for k, v in family_metrics.items():
             if k == norm_base or k.endswith("/" + norm_base) or norm_base == k:
                 candidates.append((k, v))
+
     def _fill_from_row(row: dict, check_resolution: bool) -> bool:
         if not _dataset_match(reg["dataset"], row.get("dataset")):
             return False

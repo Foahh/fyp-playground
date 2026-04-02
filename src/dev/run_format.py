@@ -82,7 +82,9 @@ def yaml_check(paths: list[Path]) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Format Python (ruff) and YAML (ruamel.yaml)")
+    parser = argparse.ArgumentParser(
+        description="Format Python (ruff) and YAML (ruamel.yaml)"
+    )
     parser.add_argument(
         "--check",
         action="store_true",
@@ -94,7 +96,13 @@ def main() -> int:
     yaml_files = iter_yaml_files(root)
 
     rc = 0
-    py_cmd = ["ruff", "format", *(["--check"] if args.check else []), "project.py", "src"]
+    py_cmd = [
+        "ruff",
+        "format",
+        *(["--check"] if args.check else []),
+        "project.py",
+        "src",
+    ]
     print("+", " ".join(py_cmd))
     r = subprocess.run(py_cmd, cwd=root)
     if r.returncode != 0:

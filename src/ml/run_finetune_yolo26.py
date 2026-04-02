@@ -45,10 +45,18 @@ app = typer.Typer()
 
 @app.command()
 def main(
-    model: str = typer.Option("yolo26n.pt", help="Ultralytics hub name or path to a .pt checkpoint"),
-    device: str | None = typer.Option(None, help="Ultralytics device (e.g. 0, cpu); default is auto"),
-    workers: int | None = typer.Option(None, help="Data loader workers; omit for Ultralytics default"),
-    cache: str | None = typer.Option(None, help="Dataset cache mode (none, disk, ram); omit for default"),
+    model: str = typer.Option(
+        "yolo26n.pt", help="Ultralytics hub name or path to a .pt checkpoint"
+    ),
+    device: str | None = typer.Option(
+        None, help="Ultralytics device (e.g. 0, cpu); default is auto"
+    ),
+    workers: int | None = typer.Option(
+        None, help="Data loader workers; omit for Ultralytics default"
+    ),
+    cache: str | None = typer.Option(
+        None, help="Dataset cache mode (none, disk, ram); omit for default"
+    ),
     no_resume: bool = typer.Option(
         False,
         "--no-resume",

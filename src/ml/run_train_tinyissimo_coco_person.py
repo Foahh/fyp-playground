@@ -31,11 +31,14 @@ PROJECT = get_results_dir() / "model"
 def run_name_for(size: int) -> str:
     return f"tinyissimoyolo_v8_{size}"
 
+
 def prune_epoch_checkpoints(trainer, keep: int = 3) -> None:
     wdir = trainer.wdir
+
     def epoch_key(p: Path) -> int:
         m = re.match(r"epoch(\d+)\.pt$", p.name)
         return int(m.group(1)) if m else -1
+
     epoch_pts = sorted(wdir.glob("epoch*.pt"), key=epoch_key)
     for p in epoch_pts[:-keep] if keep > 0 else epoch_pts:
         p.unlink(missing_ok=True)
@@ -47,10 +50,20 @@ app = typer.Typer()
 @app.command()
 def main(
     size: int = typer.Option(..., help="Input resolution (192, 256, 288, or 320)"),
-    no_resume: bool = typer.Option(False, help="Start a fresh run instead of resuming from last checkpoint"),
-    device: str | None = typer.Option(None, help="Ultralytics device (e.g. 0, 0,1 for multi-GPU, cpu); default is auto"),
-    workers: int | None = typer.Option(None, help="Data loader workers; omit to use Ultralytics default"),
-    cache: str | None = typer.Option(None, help="Dataset cache mode (none, disk, ram); omit to use Ultralytics default"),
+    no_resume: bool = typer.Option(
+        False, help="Start a fresh run instead of resuming from last checkpoint"
+    ),
+    device: str | None = typer.Option(
+        None,
+        help="Ultralytics device (e.g. 0, 0,1 for multi-GPU, cpu); default is auto",
+    ),
+    workers: int | None = typer.Option(
+        None, help="Data loader workers; omit to use Ultralytics default"
+    ),
+    cache: str | None = typer.Option(
+        None,
+        help="Dataset cache mode (none, disk, ram); omit to use Ultralytics default",
+    ),
 ):
     if size not in [192, 256, 288, 320]:
         typer.echo(f"Error: size must be one of [192, 256, 288, 320]", err=True)

@@ -80,20 +80,43 @@ EGO2HANDS_CLASSES = ["hand"]
 OUTPUT_TOOL_CLASSES = ["tool"]
 
 _ZENODO_ALL_CLASSES = [
-    "bucket", "cutter", "drill", "grinder", "hammer", "knife",
-    "saw", "shovel", "spanner", "tacker", "trowel", "wrench",
+    "bucket",
+    "cutter",
+    "drill",
+    "grinder",
+    "hammer",
+    "knife",
+    "saw",
+    "shovel",
+    "spanner",
+    "tacker",
+    "trowel",
+    "wrench",
 ]
 
 ZENODO_HAZARD_IDS: set[int] = {
-    _ZENODO_ALL_CLASSES.index(n)
-    for n in ("cutter", "knife", "saw")
+    _ZENODO_ALL_CLASSES.index(n) for n in ("cutter", "knife", "saw")
 }
 ZENODO_HAZARD_NAMES: set[str] = {_ZENODO_ALL_CLASSES[i] for i in ZENODO_HAZARD_IDS}
 
 HAZARD_KEYWORDS: set[str] = {
-    "axe", "blade", "chisel", "cleaver", "cutter",
-    "hatchet", "knife", "machete", "plier", "plane", "saw",
-    "scissor", "scythe", "shear", "sickle", "snip", "solder",
+    "axe",
+    "blade",
+    "chisel",
+    "cleaver",
+    "cutter",
+    "hatchet",
+    "knife",
+    "machete",
+    "plier",
+    "plane",
+    "saw",
+    "scissor",
+    "scythe",
+    "shear",
+    "sickle",
+    "snip",
+    "solder",
 }
 
 VAL_RATIO = 0.2
@@ -103,6 +126,7 @@ RANDOM_SEED = 42
 # ═══════════════════════════════════════════════════════════════════════════════
 #  Shared helpers
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 def _resumable_download(
     url: str,
@@ -126,8 +150,12 @@ def _resumable_download(
     if use_wget:
         print(f"  Downloading (wget) {url} -> {dest_file}")
         cmd: list[str] = [
-            "wget", "--tries=5", "--timeout=60",
-            "-O", str(dest_file), url,
+            "wget",
+            "--tries=5",
+            "--timeout=60",
+            "-O",
+            str(dest_file),
+            url,
         ]
         if ca_certificate:
             cmd[1:1] = [f"--ca-certificate={ca_certificate}"]
@@ -143,8 +171,10 @@ def _resumable_download(
             "--min-split-size=10M",
             "--max-tries=5",
             "--timeout=60",
-            "--dir", str(dest_dir),
-            "--out", filename,
+            "--dir",
+            str(dest_dir),
+            "--out",
+            filename,
             url,
         ]
         if ca_certificate:
@@ -213,6 +243,7 @@ def _collect_images(root: Path) -> list[Path]:
 # ═══════════════════════════════════════════════════════════════════════════════
 #  Ego2Hands  —  hand detection from segmentation masks
 # ═══════════════════════════════════════════════════════════════════════════════
+
 
 def _mask_to_yolo_boxes(mask_array: np.ndarray) -> list[list[float]]:
     """Derive YOLO bounding boxes from an Ego2Hands segmentation mask.
@@ -346,14 +377,13 @@ def convert_ego2hands() -> None:
 #  Construction Tools (Zenodo)  —  hazardous subset of 12-class YOLO labels
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 def _all_construction_tools_zenodo_extracted(raw_dir: Path) -> bool:
     """True only when all four Zenodo parts have been extracted (per-zip markers)."""
     return all((raw_dir / f".DATA{i}.zip.extracted").exists() for i in range(1, 5))
 
 
-def download_construction_tools(
-    *, use_wget: bool = False, **dl_kwargs: object
-) -> None:
+def download_construction_tools(*, use_wget: bool = False, **dl_kwargs: object) -> None:
     """Download construction-tool images + YOLO labels from Zenodo (4 zips, ~110 GB)."""
     raw_dir = CONSTRUCTION_TOOLS_RAW
     zips_dir: Path = Path(dl_kwargs.pop("zips_dir", ZIPS_DIR_DEFAULT))
@@ -487,9 +517,7 @@ def convert_construction_tools() -> None:
         print("  No construction-tools images with hazardous labels found — skipping.")
         return
 
-    hazard_names = sorted(
-        _ZENODO_ALL_CLASSES[i] for i in ZENODO_HAZARD_IDS
-    )
+    hazard_names = sorted(_ZENODO_ALL_CLASSES[i] for i in ZENODO_HAZARD_IDS)
     print(f"  Keeping hazardous classes: {hazard_names}")
 
     train_items, val_items = _train_val_split(all_items)
@@ -517,6 +545,7 @@ def convert_construction_tools() -> None:
 #  METU-ALET  —  hazardous tool detection (filtered from 49 classes)
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 def download_metu_alet(*, use_wget: bool = False, **dl_kwargs: object) -> None:
     """Download METU-ALET dataset from SharePoint.
 
@@ -537,8 +566,11 @@ def download_metu_alet(*, use_wget: bool = False, **dl_kwargs: object) -> None:
 
     try:
         _resumable_download(
-            METU_ALET_SHAREPOINT_URL, zips_dir, "metu_alet.zip",
-            use_wget=use_wget, **dl_kwargs,
+            METU_ALET_SHAREPOINT_URL,
+            zips_dir,
+            "metu_alet.zip",
+            use_wget=use_wget,
+            **dl_kwargs,
         )
     except subprocess.CalledProcessError:
         print(
@@ -557,8 +589,12 @@ def download_metu_alet(*, use_wget: bool = False, **dl_kwargs: object) -> None:
 
 
 def _voc_bbox_to_yolo(
-    xmin: float, ymin: float, xmax: float, ymax: float,
-    img_w: int, img_h: int,
+    xmin: float,
+    ymin: float,
+    xmax: float,
+    ymax: float,
+    img_w: int,
+    img_h: int,
 ) -> tuple[float, float, float, float]:
     cx = (xmin + xmax) / 2.0 / img_w
     cy = (ymin + ymax) / 2.0 / img_h
@@ -615,8 +651,7 @@ def _convert_alet_voc(raw_dir: Path, out_dir: Path) -> None:
     xml_files = sorted(raw_dir.rglob("*.xml"))
 
     img_dirs = sorted(
-        {p.parent for p in _collect_images(raw_dir)}
-        | {p.parent for p in xml_files}
+        {p.parent for p in _collect_images(raw_dir)} | {p.parent for p in xml_files}
     )
 
     kept_names: set[str] = set()
@@ -767,7 +802,8 @@ def convert_metu_alet() -> None:
 
     xml_files = list(raw_dir.rglob("*.xml"))
     json_files = [
-        f for f in raw_dir.rglob("*.json")
+        f
+        for f in raw_dir.rglob("*.json")
         if any(k in f.stem.lower() for k in ("instance", "annotation", "coco", "alet"))
     ]
     if not json_files:
@@ -905,7 +941,11 @@ def merge_for_finetune() -> None:
     train_items = all_items[n_test + n_val :]
 
     counts: dict[str, int] = {}
-    for name, items in [("train", train_items), ("val", val_items), ("test", test_items)]:
+    for name, items in [
+        ("train", train_items),
+        ("val", val_items),
+        ("test", test_items),
+    ]:
         _populate_split(name, items, counts)
 
     total = sum(counts.values())
@@ -924,13 +964,27 @@ app = typer.Typer()
 
 @app.command()
 def main(
-    dataset: str = typer.Option("all", help="Dataset(s) to process (ego2hands, construction_tools, metu_alet, all)"),
+    dataset: str = typer.Option(
+        "all",
+        help="Dataset(s) to process (ego2hands, construction_tools, metu_alet, all)",
+    ),
     wget: bool = typer.Option(False, help="Use wget instead of aria2c for downloads"),
-    ca_certificate: str | None = typer.Option(None, help="Path to CA certificate bundle"),
-    no_check_certificate: bool = typer.Option(False, help="Disable server certificate verification"),
-    skip_download: bool = typer.Option(False, help="Skip download step; only run conversion on pre-downloaded data"),
-    skip_merge: bool = typer.Option(False, help="Skip the final merge into fyp_merged/"),
-    zips_dir: Path = typer.Option(ZIPS_DIR_DEFAULT, help="Directory to store downloaded zip files (can be deleted later)"),
+    ca_certificate: str | None = typer.Option(
+        None, help="Path to CA certificate bundle"
+    ),
+    no_check_certificate: bool = typer.Option(
+        False, help="Disable server certificate verification"
+    ),
+    skip_download: bool = typer.Option(
+        False, help="Skip download step; only run conversion on pre-downloaded data"
+    ),
+    skip_merge: bool = typer.Option(
+        False, help="Skip the final merge into fyp_merged/"
+    ),
+    zips_dir: Path = typer.Option(
+        ZIPS_DIR_DEFAULT,
+        help="Directory to store downloaded zip files (can be deleted later)",
+    ),
     clear: bool = typer.Option(
         False,
         "--clear",
@@ -938,7 +992,10 @@ def main(
     ),
 ) -> int:
     if dataset not in ["ego2hands", "construction_tools", "metu_alet", "all"]:
-        typer.echo(f"Error: dataset must be one of [ego2hands, construction_tools, metu_alet, all]", err=True)
+        typer.echo(
+            f"Error: dataset must be one of [ego2hands, construction_tools, metu_alet, all]",
+            err=True,
+        )
         raise typer.Exit(1)
 
     dl_kwargs = dict(

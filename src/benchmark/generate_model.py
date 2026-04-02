@@ -13,9 +13,18 @@ import typer
 
 from .constants import GENERATE_CSV_COLUMNS, SSD_FAMILIES
 from .core.models import ModelEntry, load_models
-from .execution.workflow import generated_model_dir, generated_st_ai_output_dir, get_stedgeai_version
+from .execution.workflow import (
+    generated_model_dir,
+    generated_st_ai_output_dir,
+    get_stedgeai_version,
+)
 from .io.parsing import parse_metrics
-from .paths import GENERATE_LOG_PATH, GENERATE_RESULT_CSV_PATH, RESULTS_DIR, STEDGEAI_PATH
+from .paths import (
+    GENERATE_LOG_PATH,
+    GENERATE_RESULT_CSV_PATH,
+    RESULTS_DIR,
+    STEDGEAI_PATH,
+)
 from .utils.logutil import (
     configure_logging,
     get_logger,
@@ -129,7 +138,9 @@ def _run_generate_step(entry: ModelEntry, benchmark_log: Path) -> tuple[str, str
     return out, err, rc
 
 
-def run_generate_model(entry: ModelEntry, benchmark_log: Path) -> tuple[dict[str, str], int]:
+def run_generate_model(
+    entry: ModelEntry, benchmark_log: Path
+) -> tuple[dict[str, str], int]:
     out, err, rc = _run_generate_step(entry, benchmark_log)
     if rc != 0:
         return {}, rc
@@ -229,11 +240,15 @@ def generate_entry(
         try:
             metrics, rc = run_generate_model(entry, GENERATE_LOG_PATH)
             if rc != 0:
-                log_model_fail(i, total, entry.variant, "generate", "stedgeai generate failed")
+                log_model_fail(
+                    i, total, entry.variant, "generate", "stedgeai generate failed"
+                )
                 continue
 
             row = {
-                "host_time_iso": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                "host_time_iso": datetime.datetime.now(
+                    datetime.timezone.utc
+                ).isoformat(),
                 "stedgeai_version": stedgeai_version,
                 "model_family": entry.family,
                 "model_variant": entry.variant,
@@ -257,7 +272,9 @@ def generate_entry(
     get_logger("benchmark").info(
         "Generate-model complete",
         generated_csv=str(GENERATE_RESULT_CSV_PATH),
-        generated_network_dir=str(generated_model_dir(entries[0]).parent) if entries else "",
+        generated_network_dir=str(generated_model_dir(entries[0]).parent)
+        if entries
+        else "",
     )
 
 
@@ -270,4 +287,3 @@ def generate_main(argv: list[str] | None = None) -> int:
     except typer.Exit as e:
         return int(e.exit_code) if e.exit_code is not None else 0
     return 0
-
