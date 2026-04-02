@@ -22,42 +22,42 @@ dataset:
   dataset_name: coco
   class_names: [hand, tool]
   seed: 127
-  num_workers: 4
+  num_workers: 8
   multiscale_range: 2
   training_path: " "
   train_images_path: ./datasets/fyp_merged/train
   train_annotations_path: ./datasets/fyp_merged/annotations/instances_train.json
   val_images_path: ./datasets/fyp_merged/val
   val_annotations_path: ./datasets/fyp_merged/annotations/instances_val.json
-  test_images_path: ./datasets/fyp_merged/val
-  test_annotations_path: ./datasets/fyp_merged/annotations/instances_val.json
+  test_images_path: ./datasets/fyp_merged/test
+  test_annotations_path: ./datasets/fyp_merged/annotations/instances_test.json
   quantization_split: 1
   quantization_path: ./datasets/fyp_merged/val
-  mosaic_prob: 1.0
-  mixup_prob: 1.0
-  hsv_prob: 1.0
+  mosaic_prob: 0.6
+  mixup_prob: 0.05
+  hsv_prob: 0.8
   flip_prob: 0.5
-  degrees: 5.0
-  translate: 0.1
-  mosaic_scale: (0.5, 1.5)
+  degrees: 3.0
+  translate: 0.05
+  mosaic_scale: (0.7, 1.3)
   enable_mixup: True
-  mixup_scale: (0.5, 1.5)
-  shear: 2.0
+  mixup_scale: (0.8, 1.2)
+  shear: 1.0
 
 training:
   trainer_name: yolod
-  batch_size: 64
+  batch_size: 32
   warmup_epochs: 3
-  epochs: 200
+  epochs: 180
   scheduler: yoloxwarmcos
-  no_aug_epochs: 15
+  no_aug_epochs: 25
   ema: True
   print_interval: 1
   eval_interval: 1
   save_history_ckpt: True
   optimizer:
     SGD:
-      learning_rate: 0.001
+      learning_rate: 0.0008
       momentum: 0.9
       warmup_lr: 0.0
       min_lr_ratio: 0.05

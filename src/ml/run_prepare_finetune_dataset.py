@@ -123,30 +123,49 @@ def _ensure_coco_annotations(config_file: Path, force: bool = False) -> None:
 
     train_images_rel = ds.get("train_images_path")
     val_images_rel = ds.get("val_images_path")
+    test_images_rel = ds.get("test_images_path")
     train_ann_rel = ds.get("train_annotations_path")
     val_ann_rel = ds.get("val_annotations_path")
+    test_ann_rel = ds.get("test_annotations_path")
     if not train_images_rel or not val_images_rel or not train_ann_rel or not val_ann_rel:
         raise ValueError(
             "dataset.train_images_path, dataset.val_images_path, dataset.train_annotations_path, "
             "and dataset.val_annotations_path are required for COCO annotation generation"
+        )
+    if bool(test_images_rel) != bool(test_ann_rel):
+        raise ValueError(
+            "dataset.test_images_path and dataset.test_annotations_path must either both be set "
+            "or both be omitted for COCO annotation generation"
         )
 
     train_images_dir = _resolve_repo_path(train_images_rel)
     val_images_dir = _resolve_repo_path(val_images_rel)
     train_json = _resolve_repo_path(train_ann_rel)
     val_json = _resolve_repo_path(val_ann_rel)
+    test_images_dir = _resolve_repo_path(test_images_rel) if test_images_rel else None
+    test_json = _resolve_repo_path(test_ann_rel) if test_ann_rel else None
 
-    if not force and train_json.is_file() and val_json.is_file():
+    required_jsons = [train_json, val_json]
+    if test_json is not None:
+        required_jsons.append(test_json)
+    if not force and all(path.is_file() for path in required_jsons):
         print("[prepare-finetune-dataset] COCO annotation JSON files already exist; skipping regeneration.")
         return
 
     train_counts = _convert_split_yolo_to_coco(train_images_dir, train_json, class_names)
     val_counts = _convert_split_yolo_to_coco(val_images_dir, val_json, class_names)
-    print(
+    test_counts: tuple[int, int] | None = None
+    if test_images_dir is not None and test_json is not None:
+        test_counts = _convert_split_yolo_to_coco(test_images_dir, test_json, class_names)
+
+    log_parts = [
         "[prepare-finetune-dataset] Wrote COCO annotations "
         f"train={train_json} ({train_counts[0]} images, {train_counts[1]} boxes), "
-        f"val={val_json} ({val_counts[0]} images, {val_counts[1]} boxes)."
-    )
+        f"val={val_json} ({val_counts[0]} images, {val_counts[1]} boxes)"
+    ]
+    if test_counts is not None and test_json is not None:
+        log_parts.append(f", test={test_json} ({test_counts[0]} images, {test_counts[1]} boxes)")
+    print("".join(log_parts) + ".")
 
 
 def _skip_st_converter(config_file: Path) -> bool:

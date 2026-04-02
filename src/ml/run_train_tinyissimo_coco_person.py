@@ -139,7 +139,7 @@ def main(
     if cache_norm is not None:
         train_kw["cache"] = False if cache_norm == "none" else cache_norm
 
-    model.add_callback("on_model_save", lambda tr: prune_epoch_checkpoints(tr, keep=5))
+    model.add_callback("on_model_save", lambda tr: prune_epoch_checkpoints(tr, keep=3))
     try:
         model.train(**train_kw)
     except KeyboardInterrupt:

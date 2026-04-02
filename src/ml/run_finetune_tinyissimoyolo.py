@@ -1,13 +1,17 @@
 """
 Finetune TinyissimoYOLO v8 on ``datasets/fyp_merged`` (hand + tool) from a checkpoint.
 
-Loads ``best.pt`` then ``last.pt`` from the 320px run under ``results/model/tinyissimoyolo_v8_320``
-(unless ``--weights`` is set), then trains at **288px** into ``tinyissimoyolo_v8_288`` with
-``resume=False``.
+Loads ``best.pt`` then ``last.pt`` from ``results/model/tinyissimoyolo_v8_320`` (unless
+``--weights`` is set), then runs a fresh finetune at **320px** with balanced defaults into
+``tinyissimoyolo_v8_320``.
 
 Run from the repository root:
     python src/ml/run_finetune_tinyissimoyolo.py
     python src/ml/run_finetune_tinyissimoyolo.py --weights /path/to/best.pt
+
+By default training **resumes** from ``last.pt`` under the run dir if present (same as
+Ultralytics). Pass ``--no-resume`` to always start a new run from the resolved checkpoint
+(e.g. after changing hyperparameters or when you want a clean slate).
 """
 
 from __future__ import annotations
@@ -27,9 +31,9 @@ from src.dataset.dataset_common import materialize_fyp_merged_data_yaml
 TINY = ROOT / "external" / "TinyissimoYOLO"
 PROJECT = get_results_dir() / "model"
 
-FINETUNE_EPOCHS = 300
-FINETUNE_LR0 = 0.0005
-FINETUNE_BATCH = 64
+FINETUNE_EPOCHS = 220
+FINETUNE_LR0 = 0.001
+FINETUNE_BATCH = 32
 FINETUNE_NBS = 64
 
 SOURCE_RUN_NAME = "tinyissimoyolo_v8_320"
@@ -69,6 +73,11 @@ def main(
     device: str | None = typer.Option(None, help="Ultralytics device (e.g. 0, cpu); default is auto"),
     workers: int | None = typer.Option(None, help="Data loader workers; omit for Ultralytics default"),
     cache: str | None = typer.Option(None, help="Dataset cache mode (none, disk, ram); omit for default"),
+    no_resume: bool = typer.Option(
+        False,
+        "--no-resume",
+        help="Do not resume: start a new run from the resolved weights (ignore last.pt in the output dir).",
+    ),
 ):
     if not TINY.is_dir():
         raise FileNotFoundError(f"Expected TinyissimoYOLO at {TINY}")
@@ -120,22 +129,21 @@ def main(
         "warmup_momentum": 0.8,
         "cos_lr": True,
         "amp": True,
-        "label_smoothing": 0.05,
         "hsv_h": 0.015,
-        "hsv_s": 0.5,
-        "hsv_v": 0.3,
+        "hsv_s": 0.4,
+        "hsv_v": 0.2,
         "fliplr": 0.5,
-        "translate": 0.1,
-        "scale": 0.4,
-        "mosaic": 1.0,
-        "mixup": 0.15,
-        "close_mosaic": 15,
+        "translate": 0.05,
+        "scale": 0.25,
+        "mosaic": 0.6,
+        "mixup": 0.05,
+        "close_mosaic": 25,
         "deterministic": False,
         "project": str(PROJECT),
         "name": run_name,
         "exist_ok": True,
-        "patience": 50,
-        "resume": True,
+        "patience": 30,
+        "resume": not no_resume,
     }
     if device:
         train_kw["device"] = device
