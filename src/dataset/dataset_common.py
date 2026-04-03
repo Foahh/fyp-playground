@@ -87,6 +87,36 @@ def _dir_has_split_images(split_dir: Path) -> bool:
     return any(p.suffix.lower() in exts for p in split_dir.iterdir() if p.is_file())
 
 
+def get_finetune_yolo_dir(name: str) -> Path:
+    """Path to a *converted* finetune dataset (YOLO layout), never ``*_raw``.
+
+    These trees are produced by ``run_download_finetune_dataset`` (per-dataset
+    conversion and optional merge). Use this in tooling so scripts read
+    ``ego2hands/``, ``person_hand/``, etc., not the download-only raw folders.
+
+    *name* can be ``ego2hands``, ``person`` / ``person_hand``, ``construction_tools``,
+    ``metu_alet``, or ``fyp_merged`` (aliases with hyphens are accepted).
+    """
+    key = name.lower().replace("-", "_")
+    aliases = {"person": "person_hand"}
+    key = aliases.get(key, key)
+    root = get_datasets_dir().resolve()
+    mapping = {
+        "ego2hands": "ego2hands",
+        "person_hand": "person_hand",
+        "construction_tools": "construction_tools",
+        "metu_alet": "metu_alet",
+        "fyp_merged": "fyp_merged",
+    }
+    sub = mapping.get(key)
+    if sub is None:
+        raise ValueError(
+            f"Unknown finetune YOLO dataset {name!r}; "
+            f"expected one of: {', '.join(sorted(mapping))} (person → person_hand)."
+        )
+    return root / sub
+
+
 def materialize_fyp_merged_data_yaml() -> str:
     """Write a data YAML for merged finetune data (hand + tool) under ``datasets/fyp_merged``.
 

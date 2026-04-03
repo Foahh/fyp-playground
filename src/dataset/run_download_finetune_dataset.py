@@ -16,17 +16,25 @@ Environment
 -----------
 Use the ``fyp-ml`` conda env (same as COCO prep / training)::
 
-    python project.py setup-conda-ml
-    conda activate fyp-ml    # or $ST_YOLO_ENV
+    ./project.py setup-env-ml
+    conda activate fyp-ml    # or ``FYP_YOLO_ENV``
 
 Usage
 -----
-python src/dataset/run_download_finetune_dataset.py                      # all datasets
-python src/dataset/run_download_finetune_dataset.py --dataset ego2hands    # single dataset
-python src/dataset/run_download_finetune_dataset.py --dataset person       # Human-Parts hand-only
-python src/dataset/run_download_finetune_dataset.py --skip-download        # convert only (pre-downloaded)
-python src/dataset/run_download_finetune_dataset.py --wget --no-check-certificate
-python src/dataset/run_download_finetune_dataset.py --clear   # remove merged + dataset outputs (see --help)
+./project.py download-finetune                                           # all datasets
+./project.py download-finetune -- --dataset ego2hands                      # single dataset
+./project.py download-finetune -- --dataset person                         # Human-Parts hand-only
+./project.py download-finetune -- --skip-download                          # convert only (pre-downloaded)
+./project.py download-finetune -- --wget --no-check-certificate
+./project.py download-finetune -- --clear   # remove merged + dataset outputs (see --help)
+
+Inspect *converted* labels (not ``*_raw``)::
+
+    ./project.py view-finetune-labels -- --preset person-hand
+    ./project.py view-finetune-labels -- --preset construction_tools
+    ./project.py view-finetune-labels -- --preset fyp_merged
+    ./project.py view-finetune-labels -- --preset merged-al
+    ./project.py view-finetune-labels -- --preset ego2hands --mask
 """
 
 from __future__ import annotations
@@ -119,7 +127,6 @@ HAZARD_KEYWORDS: set[str] = {
     "knife",
     "machete",
     "plier",
-    "plane",
     "saw",
     "scissor",
     "scythe",
@@ -236,12 +243,7 @@ def _stable_unique_stem(path: Path, *, root: Path | None = None) -> str:
 
     base = rel.with_suffix("").as_posix()
 
-    safe = (
-        base.replace("/", "__")
-        .replace("\\", "__")
-        .replace(":", "_")
-        .lstrip("._-")
-    )
+    safe = base.replace("/", "__").replace("\\", "__").replace(":", "_").lstrip("._-")
     if not safe:
         safe = resolved.stem
     digest = hashlib.sha1(str(resolved).encode("utf-8")).hexdigest()[:8]
@@ -629,7 +631,14 @@ def _voc_bbox_to_yolo(
     ymax: float,
     img_w: int,
     img_h: int,
-) -> tuple[float, float, float, float]:
+) -> tuple[float, float, float, float] | None:
+    """Convert VOC bbox to YOLO (cx, cy, w, h), clipping to image bounds."""
+    xmin = max(0.0, min(xmin, float(img_w)))
+    ymin = max(0.0, min(ymin, float(img_h)))
+    xmax = max(0.0, min(xmax, float(img_w)))
+    ymax = max(0.0, min(ymax, float(img_h)))
+    if xmax <= xmin or ymax <= ymin:
+        return None
     cx = (xmin + xmax) / 2.0 / img_w
     cy = (ymin + ymax) / 2.0 / img_h
     w = (xmax - xmin) / img_w
@@ -705,8 +714,10 @@ def _convert_alet_voc(raw_dir: Path, out_dir: Path) -> None:
         for name, xmin, ymin, xmax, ymax in objects:
             if _is_hazard_class(name):
                 kept_names.add(name)
-                cx, cy, w, h = _voc_bbox_to_yolo(xmin, ymin, xmax, ymax, img_w, img_h)
-                yolo_boxes.append([0.0, cx, cy, w, h])
+                result = _voc_bbox_to_yolo(xmin, ymin, xmax, ymax, img_w, img_h)
+                if result is not None:
+                    cx, cy, w, h = result
+                    yolo_boxes.append([0.0, cx, cy, w, h])
             else:
                 skipped_names.add(name)
 
@@ -915,9 +926,8 @@ def download_person(*, use_wget: bool = False, **dl_kwargs: object) -> None:
 
     opt_person_url = dl_kwargs.pop("person_url", None)
     person_url = (
-        (opt_person_url.strip() if isinstance(opt_person_url, str) else "")
-        or os.environ.get("PERSON_DATASET_URL", "").strip()
-    )
+        opt_person_url.strip() if isinstance(opt_person_url, str) else ""
+    ) or os.environ.get("PERSON_DATASET_URL", "").strip()
     if not person_url:
         print(
             "\n  Human-Parts archive URL was not provided.\n"
@@ -964,7 +974,9 @@ def convert_person() -> None:
     split_files = sorted(raw_dir.rglob("privpersonpart_*.txt"))
     train_split_file = next((p for p in split_files if "train" in p.name), None)
     val_split_file = next((p for p in split_files if "val" in p.name), None)
-    train_stems = _normalise_split_stems(train_split_file) if train_split_file else set()
+    train_stems = (
+        _normalise_split_stems(train_split_file) if train_split_file else set()
+    )
     val_stems = _normalise_split_stems(val_split_file) if val_split_file else set()
 
     train_items: list[tuple[Path, list[list[float]]]] = []
@@ -973,21 +985,32 @@ def convert_person() -> None:
     kept_names: set[str] = set()
     skipped_names: set[str] = set()
 
+    dim_fixes = 0
     for xml_path in xml_files:
-        img_w, img_h, objects = _parse_voc_xml(xml_path)
-        if not objects or img_w <= 0 or img_h <= 0:
+        xml_w, xml_h, objects = _parse_voc_xml(xml_path)
+        if not objects:
             continue
 
         img_path = image_index.get(xml_path.stem)
         if img_path is None:
             continue
 
+        with Image.open(img_path) as im:
+            real_w, real_h = im.size
+        if real_w <= 0 or real_h <= 0:
+            continue
+        if (xml_w, xml_h) != (real_w, real_h):
+            dim_fixes += 1
+        img_w, img_h = real_w, real_h
+
         yolo_boxes: list[list[float]] = []
         for name, xmin, ymin, xmax, ymax in objects:
             if _is_hand_part_class(name):
                 kept_names.add(name)
-                cx, cy, w, h = _voc_bbox_to_yolo(xmin, ymin, xmax, ymax, img_w, img_h)
-                yolo_boxes.append([0.0, cx, cy, w, h])
+                result = _voc_bbox_to_yolo(xmin, ymin, xmax, ymax, img_w, img_h)
+                if result is not None:
+                    cx, cy, w, h = result
+                    yolo_boxes.append([0.0, cx, cy, w, h])
             else:
                 skipped_names.add(name)
 
@@ -1015,6 +1038,8 @@ def convert_person() -> None:
         print(f"  Kept hand-like classes : {sorted(kept_names)}")
     if skipped_names:
         print(f"  Skipped other classes  : {sorted(skipped_names)}")
+    if dim_fixes:
+        print(f"  Fixed XML size metadata: {dim_fixes} images had wrong width/height")
 
     written = 0
     for split, items in [("train", train_items), ("val", val_items)]:
@@ -1069,6 +1094,7 @@ def _clear_script_artifacts(*, dataset: str) -> None:
         if p.exists():
             shutil.rmtree(p)
             print(f"  Removed existing {p}")
+
 
 # hand=0, tool=1
 _DATASET_REMAP: list[tuple[Path, str, dict[int, int]]] = [

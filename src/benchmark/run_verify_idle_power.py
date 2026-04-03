@@ -5,8 +5,7 @@ Reads ``results/benchmark_{underdrive,nominal,overdrive}/benchmark_results.csv``
 and reports basic spread stats (mean, std, CV, percentiles, Tukey outliers).
 
 Usage:
-    python -m src.benchmark.run_verify_idle_power
-    python project.py verify-idle-power
+    ./project.py verify-idle-power
 """
 
 from __future__ import annotations

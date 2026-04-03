@@ -7,9 +7,8 @@ frames (idle segment) is a fixed application value (default 1 ms), not the
 longer idle windows used during power measurement.
 
 From repo root:
-    python -m src.benchmark.run_estimate_battery --mah 500
-    python project.py estimate-battery --mah 500
-    python project.py estimate-battery --mah 1000 --mode underdrive
+    ./project.py estimate-battery --mah 500
+    ./project.py estimate-battery --mah 1000 --mode underdrive
 """
 
 from __future__ import annotations

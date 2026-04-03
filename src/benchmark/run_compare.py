@@ -1,10 +1,9 @@
-"""Compare benchmark results (no parsing - use 'python project.py parse-modelzoo-readme' for that).
+"""Compare benchmark results (no parsing — use ``./project.py parse-modelzoo`` for that).
 
 From repo root:
-  python src/benchmark/run_compare.py [compare flags]
-  python src/benchmark/run_compare.py --delta METRIC:NUMBER ...
-  python src/benchmark/run_compare.py --exclude METRIC_OR_MODEL_SUBSTRING ...
-  python project.py compare [flags]
+  ./project.py compare [compare flags]
+  ./project.py compare --delta METRIC:NUMBER ...
+  ./project.py compare --exclude METRIC_OR_MODEL_SUBSTRING ...
 """
 
 from __future__ import annotations

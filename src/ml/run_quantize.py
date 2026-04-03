@@ -15,9 +15,9 @@ Requires the ``fyp-ml`` conda env (ultralytics + TensorFlow / export stack).
 
 Usage:
     conda activate fyp-ml
-    python src/ml/run_quantize.py --size 256
-    python src/ml/run_quantize.py --size 256 --input-type uint8 --output-type int8
-    python src/ml/run_quantize.py --size 256 --checkpoint /path/to/best.pt --force
+    ./project.py quantize --size 256
+    ./project.py quantize --size 256 --input-type uint8 --output-type int8
+    ./project.py quantize --size 256 --checkpoint /path/to/best.pt --force
 """
 
 from __future__ import annotations

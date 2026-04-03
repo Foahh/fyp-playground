@@ -94,7 +94,9 @@ _ML_COMMANDS = frozenset(
     {
         "download-coco",
         "download-finetune",
+        "view-finetune-labels",
         "train",
+        "train-coco80-320",
         "finetune-tinyissimoyolo",
         "finetune-yolo26",
         "quantize",

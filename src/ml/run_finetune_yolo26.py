@@ -5,9 +5,9 @@ Loads ``--model`` (default ``yolo26n.pt`` from the Ultralytics hub, or a local `
 Requires an Ultralytics build that defines YOLO26 (newer than some vendored trees).
 
 Run from the repository root:
-    python src/ml/run_finetune_yolo26.py
-    python src/ml/run_finetune_yolo26.py --model yolo26n.pt
-    python src/ml/run_finetune_yolo26.py --model /path/to/best.pt
+    ./project.py finetune-yolo26
+    ./project.py finetune-yolo26 -- --model yolo26n.pt
+    ./project.py finetune-yolo26 -- --model /path/to/best.pt
 
 By default training **resumes** from ``last.pt`` under the run dir if present (passed
 as the ``resume`` path; boolean ``resume=True`` does not work after loading hub ``.pt``

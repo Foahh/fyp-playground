@@ -2,7 +2,7 @@
 
 Run in the same ``fyp-ml`` conda env as training / quantization::
 
-    python project.py setup-conda-ml
+    ./project.py setup-env-ml
     conda activate fyp-ml    # or $ST_YOLO_ENV
 """
 

@@ -6,8 +6,8 @@ Loads ``best.pt`` then ``last.pt`` from ``results/model/tinyissimoyolo_v8_320`` 
 ``tinyissimoyolo_v8_320``.
 
 Run from the repository root:
-    python src/ml/run_finetune_tinyissimoyolo.py
-    python src/ml/run_finetune_tinyissimoyolo.py --weights /path/to/best.pt
+    ./project.py finetune-tinyissimoyolo
+    ./project.py finetune-tinyissimoyolo -- --weights /path/to/best.pt
 
 By default training **resumes** from ``last.pt`` under the run dir if present (passes
 that path as ``resume``; boolean ``resume=True`` does not work when ``YOLO()`` was loaded

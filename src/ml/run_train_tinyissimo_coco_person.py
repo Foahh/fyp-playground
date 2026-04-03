@@ -2,8 +2,8 @@
 Train TinyissimoYOLO v8 on COCO Person (single class).
 
 Run from the repository root (outputs under $FYP_RESULTS_DIR/model/ or results/model/):
-    python src/ml/run_train_tinyissimo_coco_person.py --size 192
-    python src/ml/run_train_tinyissimo_coco_person.py --size 192 --no-resume
+    ./project.py train --size 192
+    ./project.py train --size 192 --no-resume
 
 Quantization to INT8 TFLite is handled separately by run_quantize.py.
 

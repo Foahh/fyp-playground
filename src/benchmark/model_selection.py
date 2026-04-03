@@ -6,8 +6,7 @@ constraint gates, and derived memory and efficiency-curve metrics
 composite ranking score).
 
 From repo root:
-  python src/benchmark/run_model_selection.py [flags]
-  python project.py select-model [flags]
+  ./project.py select-model [flags]
 """
 
 from __future__ import annotations

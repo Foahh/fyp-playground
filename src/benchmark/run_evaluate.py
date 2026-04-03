@@ -1,8 +1,7 @@
 """Host-side model evaluation (AP metrics).
 
 From repo root:
-  python src/benchmark/run_evaluate.py [flags]
-  python project.py evaluate [flags]
+  ./project.py evaluate [flags]
 
 Use ``--force`` / ``-f`` to re-evaluate models already present in the output CSV.
 

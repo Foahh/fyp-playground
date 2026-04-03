@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parent
 LOCAL_COMMANDS: dict[str, str] = {
     "download-coco": "src/dataset/run_download_coco_dataset.py",
     "download-finetune": "src/dataset/run_download_finetune_dataset.py",
+    "view-finetune-labels": "src/dataset/view_yolo_labels.py",
     "benchmark": "src/benchmark/run_benchmark.py",
     "generate-model": "src/benchmark/run_generate_model.py",
     "evaluate": "src/benchmark/run_evaluate.py",
@@ -31,6 +32,7 @@ LOCAL_COMMANDS: dict[str, str] = {
     "setup-env-ml": "src/conda/run_conda_setup_ml.py",
     "setup-env-st": "src/conda/run_conda_setup_st.py",
     "train": "src/ml/run_train_tinyissimo_coco_person.py",
+    "train-coco80-320": "src/ml/run_train_tinyissimo_coco80_320.py",
     "quantize": "src/ml/run_quantize.py",
     "prepare-finetune-dataset": "src/ml/run_prepare_finetune_dataset.py",
     "finetune": "src/ml/run_finetune_st.py",

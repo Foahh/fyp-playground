@@ -4,8 +4,7 @@ Runs the STM32 Model Zoo evaluator for each registered model and writes
 results to ``results/evaluation_result.csv``.
 
 From repo root:
-  python src/benchmark/run_evaluate.py [flags]
-  python project.py evaluate [flags]
+  ./project.py evaluate [flags]
 """
 
 from __future__ import annotations

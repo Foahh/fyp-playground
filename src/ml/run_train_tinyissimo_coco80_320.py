@@ -2,8 +2,8 @@
 Train TinyissimoYOLO v8 on full COCO-80 at 320px (pretraining for lower-res finetuning).
 
 Run from repository root:
-    python src/ml/run_train_tinyissimo_coco80_320.py
-    python src/ml/run_train_tinyissimo_coco80_320.py --no-resume
+    ./project.py train-coco80-320
+    ./project.py train-coco80-320 --no-resume
 """
 
 from __future__ import annotations
