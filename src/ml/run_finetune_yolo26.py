@@ -4,6 +4,10 @@ Finetune YOLO26 (Ultralytics) on ``datasets/fyp_merged`` (hand + tool).
 Loads ``--model`` (default ``yolo26n.pt`` from the Ultralytics hub, or a local ``.pt``).
 Requires an Ultralytics build that defines YOLO26 (newer than some vendored trees).
 
+Multi-scale training is enabled by default (``multi_scale=0.25``) so the model sees
+resolutions from 240 to 400 px during training, covering all deployment targets
+(256, 288, 320, 384).
+
 Run from the repository root:
     ./project.py finetune-yolo26
     ./project.py finetune-yolo26 -- --model yolo26n.pt
@@ -36,6 +40,7 @@ FINETUNE_LR0 = 0.0008
 FINETUNE_BATCH = 24
 FINETUNE_NBS = 64
 FINETUNE_IMGSZ = 320
+FINETUNE_MULTI_SCALE = 0.25
 
 
 def run_name_for(size: int) -> str:
@@ -118,6 +123,7 @@ def main(
         "fliplr": 0.5,
         "translate": 0.05,
         "scale": 0.25,
+        "multi_scale": FINETUNE_MULTI_SCALE,
         "mosaic": 0.6,
         "mixup": 0.05,
         "close_mosaic": 25,

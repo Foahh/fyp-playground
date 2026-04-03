@@ -31,14 +31,14 @@ LOCAL_COMMANDS: dict[str, str] = {
     "parse-modelzoo": "src/benchmark/run_parse_modelzoo_readme.py",
     "setup-env-ml": "src/conda/run_conda_setup_ml.py",
     "setup-env-st": "src/conda/run_conda_setup_st.py",
-    "train": "src/ml/run_train_tinyissimo_coco_person.py",
+    "train-person": "src/ml/run_train_tinyissimo_coco_person.py",
     "train-coco80-320": "src/ml/run_train_tinyissimo_coco80_320.py",
-    "quantize": "src/ml/run_quantize.py",
+    "quantize-tiny": "src/ml/run_quantize_tinyissimo_coco_person.py",
     "prepare-finetune-dataset": "src/ml/run_prepare_finetune_dataset.py",
-    "finetune": "src/ml/run_finetune_st.py",
     "finetune-st": "src/ml/run_finetune_st.py",
-    "finetune-tinyissimoyolo": "src/ml/run_finetune_tinyissimoyolo.py",
+    "finetune-tiny": "src/ml/run_finetune_tinyissimoyolo.py",
     "finetune-yolo26": "src/ml/run_finetune_yolo26.py",
+    "quantize-yolo26": "src/ml/run_quantize_yolo26_finetuned.py",
     "format": "src/dev/run_format.py",
 }
 

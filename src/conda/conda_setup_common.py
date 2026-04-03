@@ -95,11 +95,12 @@ _ML_COMMANDS = frozenset(
         "download-coco",
         "download-finetune",
         "view-finetune-labels",
-        "train",
+        "train-person",
         "train-coco80-320",
-        "finetune-tinyissimoyolo",
+        "finetune-tiny",
         "finetune-yolo26",
-        "quantize",
+        "quantize-tiny",
+        "quantize-yolo26",
     }
 )
 
@@ -113,7 +114,6 @@ _ST_COMMANDS = frozenset(
         "compare",
         "select-model",
         "prepare-finetune-dataset",
-        "finetune",
         "finetune-st",
         "verify-model-config",
         "verify-idle-power",

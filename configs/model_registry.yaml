@@ -528,6 +528,15 @@
     fmt: Int8
     resolution: 288
 
+  - config: configs/tinyissimoyolo_v8_320_config.yaml
+    model: results/model/tinyissimoyolo_v8_320_quant_pc_ui_coco_person.tflite
+    family: tinyissimoyolo_v8
+    variant: tinyissimoyolo_v8_320
+    hyperparameters: ""
+    dataset: COCO-Person
+    fmt: Int8
+    resolution: 320
+
   - config: configs/yolo26_config.yaml
     model: 
       external/ultralytics/examples/YOLOv8-STEdgeAI/stedgeai_models/object_detection/yolo26/yolo26_256_qdq_int8_od_coco-person-st.onnx

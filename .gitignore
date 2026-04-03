@@ -33,9 +33,6 @@ results/model/**/*.csv
 
 !results/model/ap_comparison.csv
 
-# still training
-tinyissimoyolo_v8_320
-
 best_saved_model
 best.onnx
 
