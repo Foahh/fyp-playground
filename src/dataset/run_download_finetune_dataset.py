@@ -10,6 +10,7 @@ Datasets
 ego2hands          Ego2Hands hand segmentation/detection (Box.com, ~2 k eval images)
 construction_tools Zenodo small construction-tool detection (hazard subset of 12 classes)
 metu_alet          METU-ALET tool detection in the wild (hazard subset of 49 classes)
+person             Human-Parts person-part detection (keep hand only)
 
 Environment
 -----------
@@ -22,14 +23,16 @@ Usage
 -----
 python src/dataset/run_download_finetune_dataset.py                      # all datasets
 python src/dataset/run_download_finetune_dataset.py --dataset ego2hands    # single dataset
+python src/dataset/run_download_finetune_dataset.py --dataset person       # Human-Parts hand-only
 python src/dataset/run_download_finetune_dataset.py --skip-download        # convert only (pre-downloaded)
 python src/dataset/run_download_finetune_dataset.py --wget --no-check-certificate
-python src/dataset/run_download_finetune_dataset.py --clear   # replace existing fyp_merged/
+python src/dataset/run_download_finetune_dataset.py --clear   # remove merged + dataset outputs (see --help)
 """
 
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import random
 import shutil
@@ -58,6 +61,9 @@ CONSTRUCTION_TOOLS_YOLO = DATASETS_DIR / "construction_tools"
 METU_ALET_RAW = DATASETS_DIR / "metu_alet_raw"
 METU_ALET_YOLO = DATASETS_DIR / "metu_alet"
 
+PERSON_RAW = DATASETS_DIR / "person_raw"
+PERSON_YOLO = DATASETS_DIR / "person_hand"
+
 # ── Download URLs ────────────────────────────────────────────────────────────
 EGO2HANDS_EVAL_URL = "https://app.box.com/s/gd1uywmyeodpwcyyi3dnyfrb8oybe8nx"
 
@@ -75,9 +81,13 @@ METU_ALET_SHAREPOINT_URL = (
     "Ee9IYWHjbWxMrQNuVkuvlU0Buu3DgplFP7BBAWMyG06Qlw?download=1"
 )
 
+HUMAN_PARTS_REPO_URL = "https://github.com/xiaojie1017/Human-Parts"
+PERSON_ARCHIVE_NAME = "Priv_personpart.tar"
+
 # ── Class lists ──────────────────────────────────────────────────────────────
 EGO2HANDS_CLASSES = ["hand"]
 OUTPUT_TOOL_CLASSES = ["tool"]
+PERSON_CLASSES = ["hand"]
 
 _ZENODO_ALL_CLASSES = [
     "bucket",
@@ -213,6 +223,29 @@ def _safe_symlink(src: Path, dst: Path) -> None:
         return
     rel = os.path.relpath(src.resolve(), start=dst.parent.resolve())
     os.symlink(rel, dst)
+
+
+def _stable_unique_stem(path: Path, *, root: Path | None = None) -> str:
+    """Create a deterministic, collision-resistant stem from a file path."""
+    resolved = path.resolve()
+    base_root = DATASETS_DIR if root is None else root
+    try:
+        rel = resolved.relative_to(base_root.resolve())
+    except ValueError:
+        rel = Path(path.name)
+
+    base = rel.with_suffix("").as_posix()
+
+    safe = (
+        base.replace("/", "__")
+        .replace("\\", "__")
+        .replace(":", "_")
+        .lstrip("._-")
+    )
+    if not safe:
+        safe = resolved.stem
+    digest = hashlib.sha1(str(resolved).encode("utf-8")).hexdigest()[:8]
+    return f"{safe}__{digest}"
 
 
 def _train_val_split(
@@ -362,8 +395,9 @@ def convert_ego2hands() -> None:
             if not boxes:
                 continue
 
-            _safe_symlink(img_path, img_out / img_path.name)
-            _write_yolo_label(lbl_out / (img_path.stem + ".txt"), boxes)
+            unique_stem = _stable_unique_stem(img_path, root=EGO2HANDS_RAW)
+            _safe_symlink(img_path, img_out / f"{unique_stem}.png")
+            _write_yolo_label(lbl_out / f"{unique_stem}.txt", boxes)
             written += 1
 
     _write_classes_txt(out_dir, EGO2HANDS_CLASSES)
@@ -826,15 +860,220 @@ def convert_metu_alet() -> None:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+#  Human-Parts (Priv_personpart)  —  hand-only VOC -> YOLO conversion
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def _extract_tar(archive_path: Path, out_dir: Path) -> None:
+    """Extract ``archive_path`` into ``out_dir``."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    print(f"  Extracting {archive_path.name} …")
+    with tarfile.open(archive_path) as tf:
+        tf.extractall(path=out_dir, filter="data")
+
+
+def _normalise_split_stems(path: Path) -> set[str]:
+    """Load image stems from an ImageSets split file."""
+    stems: set[str] = set()
+    if not path.exists():
+        return stems
+    with path.open(encoding="utf-8") as f:
+        for raw in f:
+            token = raw.strip()
+            if not token:
+                continue
+            stems.add(Path(token).stem)
+    return stems
+
+
+def _is_hand_part_class(name: str) -> bool:
+    """Return True when class name represents hand/hand-part."""
+    return "hand" in name.strip().lower()
+
+
+def download_person(*, use_wget: bool = False, **dl_kwargs: object) -> None:
+    """Download/extract Human-Parts (Priv_personpart) archive."""
+    raw_dir = PERSON_RAW
+    zips_dir: Path = Path(dl_kwargs.pop("zips_dir", ZIPS_DIR_DEFAULT))
+    zips_dir.mkdir(parents=True, exist_ok=True)
+    raw_dir.mkdir(parents=True, exist_ok=True)
+
+    if any(raw_dir.rglob("Annotations/*.xml")) and any(raw_dir.rglob("Images/*")):
+        print("  Human-Parts data already present")
+        return
+
+    archive_in_raw = raw_dir / PERSON_ARCHIVE_NAME
+    archive_in_zips = zips_dir / PERSON_ARCHIVE_NAME
+
+    if archive_in_raw.exists():
+        _extract_tar(archive_in_raw, raw_dir)
+        return
+
+    if archive_in_zips.exists():
+        _extract_tar(archive_in_zips, raw_dir)
+        return
+
+    opt_person_url = dl_kwargs.pop("person_url", None)
+    person_url = (
+        (opt_person_url.strip() if isinstance(opt_person_url, str) else "")
+        or os.environ.get("PERSON_DATASET_URL", "").strip()
+    )
+    if not person_url:
+        print(
+            "\n  Human-Parts archive URL was not provided.\n"
+            f"  1. Download {PERSON_ARCHIVE_NAME} manually from:\n"
+            f"     {HUMAN_PARTS_REPO_URL}\n"
+            f"  2. Save it to either:\n"
+            f"     {archive_in_raw}\n"
+            f"     or {archive_in_zips}\n"
+            "  3. Re-run this script (or pass --skip-download).\n"
+            "  You can also set PERSON_DATASET_URL or pass --person-url.\n"
+        )
+        return
+
+    _resumable_download(
+        person_url,
+        zips_dir,
+        PERSON_ARCHIVE_NAME,
+        use_wget=use_wget,
+        **dl_kwargs,
+    )
+    if archive_in_zips.exists():
+        _extract_tar(archive_in_zips, raw_dir)
+
+
+def convert_person() -> None:
+    """Convert Human-Parts VOC annotations to hand-only YOLO labels."""
+    raw_dir = PERSON_RAW
+    out_dir = PERSON_YOLO
+
+    if not raw_dir.exists():
+        print("  Human-Parts raw directory not found — skipping conversion.")
+        return
+
+    xml_files = sorted(raw_dir.rglob("*.xml"))
+    if not xml_files:
+        print("  No Human-Parts XML annotations found — skipping conversion.")
+        return
+
+    image_index = {p.stem: p for p in _collect_images(raw_dir)}
+    if not image_index:
+        print("  No Human-Parts images found — skipping conversion.")
+        return
+
+    split_files = sorted(raw_dir.rglob("privpersonpart_*.txt"))
+    train_split_file = next((p for p in split_files if "train" in p.name), None)
+    val_split_file = next((p for p in split_files if "val" in p.name), None)
+    train_stems = _normalise_split_stems(train_split_file) if train_split_file else set()
+    val_stems = _normalise_split_stems(val_split_file) if val_split_file else set()
+
+    train_items: list[tuple[Path, list[list[float]]]] = []
+    val_items: list[tuple[Path, list[list[float]]]] = []
+    unsplit_items: list[tuple[Path, list[list[float]]]] = []
+    kept_names: set[str] = set()
+    skipped_names: set[str] = set()
+
+    for xml_path in xml_files:
+        img_w, img_h, objects = _parse_voc_xml(xml_path)
+        if not objects or img_w <= 0 or img_h <= 0:
+            continue
+
+        img_path = image_index.get(xml_path.stem)
+        if img_path is None:
+            continue
+
+        yolo_boxes: list[list[float]] = []
+        for name, xmin, ymin, xmax, ymax in objects:
+            if _is_hand_part_class(name):
+                kept_names.add(name)
+                cx, cy, w, h = _voc_bbox_to_yolo(xmin, ymin, xmax, ymax, img_w, img_h)
+                yolo_boxes.append([0.0, cx, cy, w, h])
+            else:
+                skipped_names.add(name)
+
+        if not yolo_boxes:
+            continue
+
+        item = (img_path, yolo_boxes)
+        if xml_path.stem in train_stems:
+            train_items.append(item)
+        elif xml_path.stem in val_stems:
+            val_items.append(item)
+        else:
+            unsplit_items.append(item)
+
+    if unsplit_items:
+        extra_train, extra_val = _train_val_split(unsplit_items)
+        train_items.extend(extra_train)
+        val_items.extend(extra_val)
+
+    if not train_items and not val_items:
+        print("  No Human-Parts hand instances found — skipping conversion.")
+        return
+
+    if kept_names:
+        print(f"  Kept hand-like classes : {sorted(kept_names)}")
+    if skipped_names:
+        print(f"  Skipped other classes  : {sorted(skipped_names)}")
+
+    written = 0
+    for split, items in [("train", train_items), ("val", val_items)]:
+        img_out = out_dir / "images" / split
+        lbl_out = out_dir / "labels" / split
+        img_out.mkdir(parents=True, exist_ok=True)
+        lbl_out.mkdir(parents=True, exist_ok=True)
+        for img_path, yolo_boxes in items:
+            if not yolo_boxes:
+                continue
+            _safe_symlink(img_path, img_out / img_path.name)
+            _write_yolo_label(lbl_out / (img_path.stem + ".txt"), yolo_boxes)
+            written += 1
+
+    _write_classes_txt(out_dir, PERSON_CLASSES)
+    print(
+        f"  Human-Parts YOLO dataset written to {out_dir}: "
+        f"{written} images (train={len(train_items)}, val={len(val_items)})"
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 #  Merge — combine per-dataset YOLO outputs into fyp_merged/ for ST pipeline
 # ═══════════════════════════════════════════════════════════════════════════════
 
 MERGED_DIR = DATASETS_DIR / "fyp_merged"
 MERGED_CLASSES = ["hand", "tool"]
 
+# Per-dataset YOLO output dirs under DATASETS_DIR (for --clear; *_raw is kept).
+_DATASET_YOLO_OUTPUTS: dict[str, list[Path]] = {
+    "ego2hands": [EGO2HANDS_YOLO],
+    "person": [PERSON_YOLO],
+    "construction_tools": [CONSTRUCTION_TOOLS_YOLO],
+    "metu_alet": [METU_ALET_YOLO],
+}
+
+
+def _clear_script_artifacts(*, dataset: str) -> None:
+    """Remove merged output and per-dataset YOLO trees before a rebuild (not *_raw or _zips)."""
+    paths: list[Path] = [MERGED_DIR]
+    if dataset == "all":
+        for sub in _DATASET_YOLO_OUTPUTS.values():
+            paths.extend(sub)
+    else:
+        paths.extend(_DATASET_YOLO_OUTPUTS[dataset])
+    seen: set[Path] = set()
+    for p in paths:
+        rp = p.resolve()
+        if rp in seen:
+            continue
+        seen.add(rp)
+        if p.exists():
+            shutil.rmtree(p)
+            print(f"  Removed existing {p}")
+
 # hand=0, tool=1
 _DATASET_REMAP: list[tuple[Path, str, dict[int, int]]] = [
     (EGO2HANDS_YOLO, "eh", {0: 0}),
+    (PERSON_YOLO, "ph", {0: 0}),
     (CONSTRUCTION_TOOLS_YOLO, "ct", {0: 1}),
     (METU_ALET_YOLO, "al", {0: 1}),
 ]
@@ -877,18 +1116,17 @@ TEST_RATIO = 0.1
 
 
 def _prepare_merged_dir(*, clear: bool) -> None:
-    """If ``fyp_merged`` exists, exit with an error unless *clear* is set; then remove it."""
+    """If ``fyp_merged`` exists, exit unless *clear* was used (artefacts removed at startup)."""
     if not MERGED_DIR.exists():
         return
-    if not clear:
-        typer.echo(
-            f"Error: merged output already exists: {MERGED_DIR}\n"
-            "  Re-run with --clear to delete it and rebuild.",
-            err=True,
-        )
-        raise typer.Exit(1)
-    shutil.rmtree(MERGED_DIR)
-    print(f"  Removed existing {MERGED_DIR}")
+    if clear:
+        return
+    typer.echo(
+        f"Error: merged output already exists: {MERGED_DIR}\n"
+        "  Re-run with --clear to delete it and rebuild.",
+        err=True,
+    )
+    raise typer.Exit(1)
 
 
 def _populate_split(
@@ -901,7 +1139,7 @@ def _populate_split(
     out_dir.mkdir(parents=True, exist_ok=True)
     n = 0
     for img_path, lbl_src, prefix, cls_map in items:
-        stem = f"{prefix}_{img_path.stem}"
+        stem = f"{prefix}_{_stable_unique_stem(img_path)}"
         dst_jpg = out_dir / (stem + ".jpg")
         dst_txt = out_dir / (stem + ".txt")
         _ensure_jpg(img_path, dst_jpg)
@@ -911,11 +1149,97 @@ def _populate_split(
     return n
 
 
-def merge_for_finetune() -> None:
-    """Combine all per-dataset YOLO outputs into ``fyp_merged/{train,val,test}``."""
-    all_items: list[tuple[Path, Path, str, dict[int, int]]] = []
+def _dataset_premerge_stats(
+    ds_dir: Path, cls_map: dict[int, int]
+) -> tuple[int, int, dict[int, int]]:
+    """Count image/label pairs and remapped instances for train+val splits."""
+    pair_count = 0
+    remapped_image_count = 0
+    class_counts: dict[int, int] = {}
+
+    for split in ("train", "val"):
+        img_dir = ds_dir / "images" / split
+        lbl_dir = ds_dir / "labels" / split
+        if not img_dir.exists():
+            continue
+
+        for img_path in sorted(img_dir.iterdir()):
+            if img_path.suffix.lower() not in (".jpg", ".jpeg", ".png", ".bmp"):
+                continue
+            lbl_src = lbl_dir / (img_path.stem + ".txt")
+            if not lbl_src.exists():
+                continue
+
+            pair_count += 1
+            remapped_in_file = 0
+            with lbl_src.open(encoding="utf-8") as f:
+                for line in f:
+                    parts = line.strip().split()
+                    if len(parts) < 5:
+                        continue
+                    try:
+                        src_cls = int(parts[0])
+                    except ValueError:
+                        continue
+                    dst_cls = cls_map.get(src_cls)
+                    if dst_cls is None:
+                        continue
+                    class_counts[dst_cls] = class_counts.get(dst_cls, 0) + 1
+                    remapped_in_file += 1
+            if remapped_in_file > 0:
+                remapped_image_count += 1
+
+    return pair_count, remapped_image_count, class_counts
+
+
+def _print_premerge_stats() -> None:
+    """Print per-dataset stats right before merged-dataset creation."""
+    print("\n=== Pre-merge dataset stats ===")
+    total_pairs = 0
+    total_remapped_images = 0
+    total_class_counts: dict[int, int] = {}
+
+    for ds_dir, _, cls_map in _DATASET_REMAP:
+        pair_count, remapped_image_count, class_counts = _dataset_premerge_stats(
+            ds_dir, cls_map
+        )
+        total_pairs += pair_count
+        total_remapped_images += remapped_image_count
+        for cls_id, cnt in class_counts.items():
+            total_class_counts[cls_id] = total_class_counts.get(cls_id, 0) + cnt
+
+        cls_parts = [
+            f"{MERGED_CLASSES[cls_id]}={class_counts.get(cls_id, 0)}"
+            for cls_id in range(len(MERGED_CLASSES))
+        ]
+        print(
+            f"  {ds_dir.name}: pairs={pair_count}, "
+            f"images_with_remapped_boxes={remapped_image_count}, "
+            f"instances({', '.join(cls_parts)})"
+        )
+
+    total_cls_parts = [
+        f"{MERGED_CLASSES[cls_id]}={total_class_counts.get(cls_id, 0)}"
+        for cls_id in range(len(MERGED_CLASSES))
+    ]
+    print(
+        f"  total: pairs={total_pairs}, "
+        f"images_with_remapped_boxes={total_remapped_images}, "
+        f"instances({', '.join(total_cls_parts)})"
+    )
+
+
+def merge_for_finetune(*, balance: bool = False) -> None:
+    """Combine all per-dataset YOLO outputs into ``fyp_merged/{train,val,test}``.
+
+    When *balance* is True, hand-only images are subsampled to match the total
+    number of tool-only images, reducing class imbalance.
+    """
+    hand_items: list[tuple[Path, Path, str, dict[int, int]]] = []
+    tool_items: list[tuple[Path, Path, str, dict[int, int]]] = []
 
     for ds_dir, prefix, cls_map in _DATASET_REMAP:
+        is_hand_only = all(v == 0 for v in cls_map.values())
         for split in ("train", "val"):
             img_dir = ds_dir / "images" / split
             lbl_dir = ds_dir / "labels" / split
@@ -926,7 +1250,22 @@ def merge_for_finetune() -> None:
                     continue
                 lbl_src = lbl_dir / (img_path.stem + ".txt")
                 if lbl_src.exists():
-                    all_items.append((img_path, lbl_src, prefix, cls_map))
+                    item = (img_path, lbl_src, prefix, cls_map)
+                    if is_hand_only:
+                        hand_items.append(item)
+                    else:
+                        tool_items.append(item)
+
+    if balance and len(hand_items) > len(tool_items):
+        original = len(hand_items)
+        rng = random.Random(RANDOM_SEED)
+        hand_items = rng.sample(hand_items, len(tool_items))
+        print(
+            f"  Balanced: subsampled hand-only images {original} → {len(hand_items)} "
+            f"(to match {len(tool_items)} tool images)"
+        )
+
+    all_items = hand_items + tool_items
 
     if not all_items:
         print("  No data to merge.")
@@ -966,7 +1305,7 @@ app = typer.Typer()
 def main(
     dataset: str = typer.Option(
         "all",
-        help="Dataset(s) to process (ego2hands, construction_tools, metu_alet, all)",
+        help="Dataset(s) to process (ego2hands, person, construction_tools, metu_alet, all)",
     ),
     wget: bool = typer.Option(False, help="Use wget instead of aria2c for downloads"),
     ca_certificate: str | None = typer.Option(
@@ -985,15 +1324,25 @@ def main(
         ZIPS_DIR_DEFAULT,
         help="Directory to store downloaded zip files (can be deleted later)",
     ),
+    person_url: str | None = typer.Option(
+        None,
+        help="Direct URL for Human-Parts archive (Priv_personpart.tar).",
+    ),
     clear: bool = typer.Option(
         False,
         "--clear",
-        help="Delete existing fyp_merged/ before merge (required if that folder already exists)",
+        help="Delete fyp_merged/ and this run's dataset YOLO dirs (not *_raw, not zips cache) — before rebuild",
+    ),
+    balance: bool = typer.Option(
+        True,
+        "--balance",
+        help="Subsample hand-only images to match tool image count, reducing class imbalance",
     ),
 ) -> int:
-    if dataset not in ["ego2hands", "construction_tools", "metu_alet", "all"]:
+    valid_datasets = ["ego2hands", "person", "construction_tools", "metu_alet", "all"]
+    if dataset not in valid_datasets:
         typer.echo(
-            f"Error: dataset must be one of [ego2hands, construction_tools, metu_alet, all]",
+            f"Error: dataset must be one of [{', '.join(valid_datasets)}]",
             err=True,
         )
         raise typer.Exit(1)
@@ -1003,7 +1352,12 @@ def main(
         ca_certificate=ca_certificate,
         check_certificate=not no_check_certificate,
         zips_dir=zips_dir,
+        person_url=person_url,
     )
+
+    if clear:
+        print("\n=== Clearing previous outputs ===")
+        _clear_script_artifacts(dataset=dataset)
 
     if dataset in ("ego2hands", "all"):
         print("\n=== Ego2Hands (hand detection) ===")
@@ -1017,6 +1371,12 @@ def main(
             download_construction_tools(**dl_kwargs)
         convert_construction_tools()
 
+    if dataset in ("person", "all"):
+        print("\n=== Human-Parts (hand detection) ===")
+        if not skip_download:
+            download_person(**dl_kwargs)
+        convert_person()
+
     if dataset in ("metu_alet", "all"):
         print("\n=== METU-ALET (tool detection) ===")
         if not skip_download:
@@ -1025,8 +1385,9 @@ def main(
 
     if not skip_merge:
         print("\n=== Merging into fyp_merged/ ===")
+        _print_premerge_stats()
         _prepare_merged_dir(clear=clear)
-        merge_for_finetune()
+        merge_for_finetune(balance=balance)
 
     print("\nDone.")
     return 0
