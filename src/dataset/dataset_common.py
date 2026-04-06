@@ -94,18 +94,15 @@ def get_finetune_yolo_dir(name: str) -> Path:
 
     These trees are produced by ``run_download_finetune_dataset`` (per-dataset
     conversion and optional merge). Use this in tooling so scripts read
-    ``ego2hands/``, ``person_hand/``, etc., not the download-only raw folders.
+    ``ego2hands/``, ``construction_tools/``, etc., not the download-only raw folders.
 
-    *name* can be ``ego2hands``, ``person`` / ``person_hand``, ``construction_tools``,
-    ``metu_alet``, or ``fyp_merged`` (aliases with hyphens are accepted).
+    *name* can be ``ego2hands``, ``construction_tools``, ``metu_alet``, or
+    ``fyp_merged`` (aliases with hyphens are accepted).
     """
     key = name.lower().replace("-", "_")
-    aliases = {"person": "person_hand"}
-    key = aliases.get(key, key)
     root = get_datasets_dir().resolve()
     mapping = {
         "ego2hands": "ego2hands",
-        "person_hand": "person_hand",
         "construction_tools": "construction_tools",
         "metu_alet": "metu_alet",
         "fyp_merged": "fyp_merged",
@@ -114,7 +111,7 @@ def get_finetune_yolo_dir(name: str) -> Path:
     if sub is None:
         raise ValueError(
             f"Unknown finetune YOLO dataset {name!r}; "
-            f"expected one of: {', '.join(sorted(mapping))} (person → person_hand)."
+            f"expected one of: {', '.join(sorted(mapping))}."
         )
     return root / sub
 

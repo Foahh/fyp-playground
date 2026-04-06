@@ -2,13 +2,13 @@
 """Browse YOLO labels on *converted* finetune datasets (not ``*_raw``).
 
 Defaults use paths from ``get_finetune_yolo_dir`` in ``dataset_common`` — the same
-trees written by ``run_download_finetune_dataset`` (e.g. ``person_hand/``,
-``ego2hands/``). For Ego2Hands, press ``m`` to overlay ``*_seg.png`` when the RGB
+trees written by ``run_download_finetune_dataset`` (e.g. ``ego2hands/``).
+For Ego2Hands, press ``m`` to overlay ``*_seg.png`` when the RGB
 image resolves next to that mask (see ``convert_ego2hands``).
 
 Run::
 
-    ./project.py view-finetune-labels -- --preset person-hand
+    ./project.py view-finetune-labels -- --preset ego2hands
     ./project.py view-finetune-labels -- --preset construction_tools
     ./project.py view-finetune-labels -- --preset metu_alet
     ./project.py view-finetune-labels -- --preset fyp_merged --split val
@@ -42,9 +42,6 @@ EDGE_COLORS = ["yellow", "cyan", "magenta", "lime", "orange"]
 _PRESETS: dict[str, tuple[str, str, str | None]] = {
     # Per-dataset converted trees (YOLO images/{split} + labels/{split})
     "ego2hands": ("ego2hands", "yolo_splits", None),
-    "person-hand": ("person_hand", "yolo_splits", None),
-    "person": ("person_hand", "yolo_splits", None),
-    "person_hand": ("person_hand", "yolo_splits", None),
     "construction-tools": ("construction_tools", "yolo_splits", None),
     "construction_tools": ("construction_tools", "yolo_splits", None),
     "metu-alet": ("metu_alet", "yolo_splits", None),
@@ -55,8 +52,6 @@ _PRESETS: dict[str, tuple[str, str, str | None]] = {
     "fyp-merged": ("fyp_merged", "flat", None),
     "merged-eh": ("fyp_merged", "flat", "eh_"),
     "merged-ego2hands": ("fyp_merged", "flat", "eh_"),
-    "merged-ph": ("fyp_merged", "flat", "ph_"),
-    "merged-person": ("fyp_merged", "flat", "ph_"),
     "merged-ct": ("fyp_merged", "flat", "ct_"),
     "merged-construction": ("fyp_merged", "flat", "ct_"),
     "merged-tools": ("fyp_merged", "flat", "ct_"),
@@ -209,9 +204,9 @@ def main(
         "--preset",
         "-p",
         help=(
-            "Converted dataset: ego2hands; person-hand|person_hand; "
-            "construction-tools|construction_tools; metu-alet|metu_alet; "
-            "merged|fyp_merged; merged-eh|merged-ph|merged-ct|merged-al (+aliases)"
+            "Converted dataset: ego2hands; construction-tools|construction_tools; "
+            "metu-alet|metu_alet; merged|fyp_merged; "
+            "merged-eh|merged-ct|merged-al (+aliases)"
         ),
     ),
     dataset_root: Path | None = typer.Option(
@@ -235,7 +230,7 @@ def main(
     filename_prefix: str | None = typer.Option(
         None,
         "--filename-prefix",
-        help="Only images whose filename starts with this (e.g. ph_ on merged for Human-Parts)",
+        help="Only images whose filename starts with this (e.g. eh_ on merged for Ego2Hands)",
     ),
 ) -> None:
     root, pairs = _resolve_root_and_pairs(
