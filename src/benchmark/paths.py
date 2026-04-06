@@ -42,6 +42,7 @@ STEDGEAI_PATH = get_stedgeai_path()
 
 COCO_PERSON_TFS_TEST = str(DATASETS_DIR / "coco_2017_person" / "test")
 COCO_80_TFS_TEST = str(DATASETS_DIR / "coco_2017_80_classes" / "test")
+FYP_MERGED_TFS_TEST = str(DATASETS_DIR / "fyp_merged" / "test")
 COCO_PERSON_ANNOTATIONS = str(
     DATASETS_DIR / "coco" / "annotations" / "instances_val2017_person.json"
 )

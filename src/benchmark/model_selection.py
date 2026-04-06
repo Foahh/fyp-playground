@@ -470,6 +470,7 @@ def print_section3(candidates: pd.DataFrame) -> None:
 _DATASET_LABELS: dict[str, str] = {
     "80": "COCO-80",
     "person": "COCO-Person",
+    "merged": "FYP-Merged",
 }
 
 
@@ -485,7 +486,8 @@ def run_selection(
     """Run filtering and print candidate models grouped by family.
 
     *dataset_filter* restricts candidates to a single dataset
-    ("80" for COCO-80, "person" for COCO-Person).  When set, the
+    ("80" for COCO-80, "person" for COCO-Person, "merged" for FYP-Merged).
+    When set, the
     deduplication step is skipped since only one dataset is present.
 
     *min_size* drops rows whose resolution is below this value before
@@ -590,7 +592,7 @@ def _cli_entry(
     dataset: str | None = typer.Option(
         None,
         "--dataset",
-        help="Filter to a single dataset: '80' for COCO-80, 'person' for COCO-Person.",
+        help="Filter dataset: '80', 'person', or 'merged' (FYP-Merged).",
     ),
     min_size: int | None = typer.Option(
         None,
@@ -613,7 +615,7 @@ def _cli_entry(
 
     if dataset is not None and dataset not in _DATASET_LABELS:
         _err.print(
-            f"[red]Error: --dataset must be '80' or 'person', got '{dataset}'[/red]"
+            f"[red]Error: --dataset must be '80', 'person', or 'merged', got '{dataset}'[/red]"
         )
         raise typer.Exit(2)
 

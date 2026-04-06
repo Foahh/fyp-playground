@@ -113,6 +113,9 @@ def _export_saved_model(img_size: int, pt_path: Path) -> Path:
         int8=True,
         data=str(data_yaml),
         imgsz=[img_size, img_size],
+        end2end=False,  # YOLO26 has end2end=True by default in >=8.3; TFLite/STEdgeAI
+        # don't support the Gather/TopK ops it introduces. The exporter doesn't
+        # auto-disable end2end for tflite (only for rknn/ncnn/paddle/etc.).
     )
 
     saved_model_dir = pt_path.parent / f"{pt_path.stem}_saved_model"

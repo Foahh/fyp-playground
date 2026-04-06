@@ -12,7 +12,7 @@ class ModelEntry:
     family: str
     variant: str
     hyperparameters: str
-    dataset: str  # "COCO-Person", "COCO-80"
+    dataset: str  # "COCO-Person", "COCO-80", "FYP-Merged"
     num_classes: int
     fmt: str  # "Int8" or "W4A8"
     resolution: int
@@ -27,6 +27,8 @@ class ModelEntry:
 def _num_classes_for_dataset(dataset: str) -> int:
     if dataset == "COCO-80":
         return 80
+    if dataset == "FYP-Merged":
+        return 2
     return 1
 
 
