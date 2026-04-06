@@ -3,6 +3,14 @@ datasets
 __pycache__/
 
 results/*
+# Commit pseudo-label corrections (merge with datasets/fyp_merged at train time)
+!results/fyp_merged_pseudo/
+!results/fyp_merged_pseudo/overlay/
+!results/fyp_merged_pseudo/overlay/train/
+!results/fyp_merged_pseudo/overlay/val/
+!results/fyp_merged_pseudo/overlay/**/*.txt
+!results/fyp_merged_pseudo/classes.txt
+!results/fyp_merged_pseudo/pseudo_label_review.csv
 !results/benchmark_underdrive/
 !results/benchmark_nominal/
 !results/benchmark_overdrive/

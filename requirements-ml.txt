@@ -11,6 +11,7 @@ onnxruntime
 
 typer>=0.24.1
 pyyaml>=6.0.2
+tqdm>=4.64.0
 
 ruff>=0.8.0
 ruamel.yaml>=0.18.0

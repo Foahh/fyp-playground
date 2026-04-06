@@ -4,8 +4,9 @@ Two-step YOLO26 → INT8 TFLite quantization for STM32N6 deployment.
 Step 1: Ultralytics export → SavedModel (with quantization-friendly output normalization)
 Step 2: TF Lite Converter with ST-compatible settings (per-channel, uint8 input)
 
-The finetuned YOLO26 model is trained with multi_scale=0.25 at imgsz=320, so it handles
-deployment resolutions from 256 to 384.  Pass ``--size`` to choose the target resolution.
+The finetuned YOLO26 model is trained with ``multi_scale`` on ``imgsz`` from
+``run_finetune_yolo26`` (currently 368 px), so it supports deployment resolutions
+including 256–384.  Pass ``--size`` to choose the export / deployment resolution.
 
 Requires the ``fyp-ml`` conda env (ultralytics + TensorFlow / export stack).
 
@@ -25,6 +26,7 @@ from typing import Iterable
 import typer
 
 from src.common.paths import get_datasets_dir, get_results_dir
+from src.ml.run_finetune_yolo26 import FINETUNE_IMGSZ, run_name_for
 
 MODELS = get_results_dir() / "model"
 
@@ -33,7 +35,7 @@ VALID_IO_TYPES = tuple(IO_TAG)
 VALID_QUANT_TYPES = ("per_channel", "per_tensor")
 VALID_SIZES = (256, 288, 320, 384)
 
-RUN_NAME_BASE = "yolo26_320"
+RUN_NAME_BASE = run_name_for(FINETUNE_IMGSZ)
 
 
 # ---------------------------------------------------------------------------

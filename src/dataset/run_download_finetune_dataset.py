@@ -1096,12 +1096,12 @@ def _clear_script_artifacts(*, dataset: str) -> None:
             print(f"  Removed existing {p}")
 
 
-# hand=0, tool=1
-_DATASET_REMAP: list[tuple[Path, str, dict[int, int]]] = [
-    (EGO2HANDS_YOLO, "eh", {0: 0}),
-    (PERSON_YOLO, "ph", {0: 0}),
-    (CONSTRUCTION_TOOLS_YOLO, "ct", {0: 1}),
-    (METU_ALET_YOLO, "al", {0: 1}),
+# hand=0, tool=1  (source layouts: hand datasets use class 0 = hand; tool datasets use 0 = tool)
+_DATASET_SPECS: list[tuple[str, Path, str, dict[int, int]]] = [
+    ("ego2hands", EGO2HANDS_YOLO, "eh", {0: 0}),
+    ("person_hand", PERSON_YOLO, "ph", {0: 0}),
+    ("construction_tools", CONSTRUCTION_TOOLS_YOLO, "ct", {0: 1}),
+    ("metu_alet", METU_ALET_YOLO, "al", {0: 1}),
 ]
 
 
@@ -1225,9 +1225,9 @@ def _print_premerge_stats() -> None:
     total_remapped_images = 0
     total_class_counts: dict[int, int] = {}
 
-    for ds_dir, _, cls_map in _DATASET_REMAP:
+    for logical, base, _, cls_map in _DATASET_SPECS:
         pair_count, remapped_image_count, class_counts = _dataset_premerge_stats(
-            ds_dir, cls_map
+            base, cls_map
         )
         total_pairs += pair_count
         total_remapped_images += remapped_image_count
@@ -1239,7 +1239,7 @@ def _print_premerge_stats() -> None:
             for cls_id in range(len(MERGED_CLASSES))
         ]
         print(
-            f"  {ds_dir.name}: pairs={pair_count}, "
+            f"  {logical}: pairs={pair_count}, "
             f"images_with_remapped_boxes={remapped_image_count}, "
             f"instances({', '.join(cls_parts)})"
         )
@@ -1264,11 +1264,11 @@ def merge_for_finetune(*, balance: bool = False) -> None:
     hand_items: list[tuple[Path, Path, str, dict[int, int]]] = []
     tool_items: list[tuple[Path, Path, str, dict[int, int]]] = []
 
-    for ds_dir, prefix, cls_map in _DATASET_REMAP:
-        is_hand_only = all(v == 0 for v in cls_map.values())
+    for logical, base, prefix, cls_map in _DATASET_SPECS:
+        is_hand_pool = logical in ("ego2hands", "person_hand")
         for split in ("train", "val"):
-            img_dir = ds_dir / "images" / split
-            lbl_dir = ds_dir / "labels" / split
+            img_dir = base / "images" / split
+            lbl_dir = base / "labels" / split
             if not img_dir.exists():
                 continue
             for img_path in sorted(img_dir.iterdir()):
@@ -1277,7 +1277,7 @@ def merge_for_finetune(*, balance: bool = False) -> None:
                 lbl_src = lbl_dir / (img_path.stem + ".txt")
                 if lbl_src.exists():
                     item = (img_path, lbl_src, prefix, cls_map)
-                    if is_hand_only:
+                    if is_hand_pool:
                         hand_items.append(item)
                     else:
                         tool_items.append(item)

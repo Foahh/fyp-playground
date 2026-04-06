@@ -39,8 +39,8 @@ FINETUNE_EPOCHS = 220
 FINETUNE_LR0 = 0.0008
 FINETUNE_BATCH = 24
 FINETUNE_NBS = 64
-FINETUNE_IMGSZ = 320
-FINETUNE_MULTI_SCALE = 0.25
+FINETUNE_IMGSZ = 368
+FINETUNE_MULTI_SCALE = 0.3
 
 
 def run_name_for(size: int) -> str:
@@ -124,9 +124,12 @@ def main(
         "translate": 0.05,
         "scale": 0.25,
         "multi_scale": FINETUNE_MULTI_SCALE,
-        "mosaic": 0.6,
-        "mixup": 0.05,
-        "close_mosaic": 25,
+        "mosaic": 1,
+        "mixup": 0.15,
+        "copy_paste": 0.25,
+        "close_mosaic": 30,
+        "cls": 1.5,
+        "flipud": 0.3,
         "deterministic": False,
         "project": str(PROJECT),
         "name": run_name,

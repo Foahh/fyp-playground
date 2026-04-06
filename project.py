@@ -38,7 +38,8 @@ LOCAL_COMMANDS: dict[str, str] = {
     "finetune-st": "src/ml/run_finetune_st.py",
     "finetune-tiny": "src/ml/run_finetune_tinyissimoyolo.py",
     "finetune-yolo26": "src/ml/run_finetune_yolo26.py",
-    "quantize-yolo26": "src/ml/run_quantize_yolo26_finetuned.py",
+    "quantize-yolo26-finetuned": "src/ml/run_quantize_yolo26_finetuned.py",
+    "pseudo-label": "src/ml/run_pseudo_label.py",
     "format": "src/dev/run_format.py",
 }
 

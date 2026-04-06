@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import os
+import shutil
 import tempfile
 from pathlib import Path
 
 import yaml
 
-from ..common.paths import get_datasets_dir, get_repo_root
+from ..common.paths import get_datasets_dir, get_repo_root, get_results_dir
 
 REPO_ROOT = get_repo_root()
 COCO_TEMPLATE_YAML = (
@@ -117,12 +119,95 @@ def get_finetune_yolo_dir(name: str) -> Path:
     return root / sub
 
 
-def materialize_fyp_merged_data_yaml() -> str:
-    """Write a data YAML for merged finetune data (hand + tool) under ``datasets/fyp_merged``.
+_IMG_EXT_FYP = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 
-    Layout matches ``merge_for_finetune`` in ``run_download_finetune_dataset.py``:
-    ``fyp_merged/{train,val,test}/`` with YOLO ``.jpg`` + ``.txt`` per split.
+
+def fyp_merged_pseudo_root() -> Path:
+    """``results/fyp_merged_pseudo`` (overlay + small metadata; safe to commit ``overlay/``)."""
+    return (get_results_dir() / "fyp_merged_pseudo").resolve()
+
+
+def fyp_merged_overlay_root() -> Path:
+    """Label overrides only: ``overlay/{train,val}/*.txt`` (commit-friendly)."""
+    return fyp_merged_pseudo_root() / "overlay"
+
+
+def fyp_merged_overlay_active() -> bool:
+    """True when at least one overlay label exists (pseudo or hand-corrected)."""
+    root = fyp_merged_overlay_root()
+    for split in ("train", "val"):
+        d = root / split
+        if d.is_dir() and any(d.glob("*.txt")):
+            return True
+    return False
+
+
+def fyp_merged_runtime_root() -> Path:
+    """Generated full YOLO tree (gitignored): base merge + overlay."""
+    return (get_results_dir() / "fyp_merged_runtime").resolve()
+
+
+def sync_fyp_merged_runtime() -> Path:
+    """Build ``results/fyp_merged_runtime`` with symlinks to images and merged labels.
+
+    For each image in ``datasets/fyp_merged/{train,val}``, the label is
+    ``overlay/...`` if present, otherwise the original ``fyp_merged`` ``.txt``.
     """
+    base = (get_datasets_dir() / "fyp_merged").resolve()
+    overlay = fyp_merged_overlay_root()
+    runtime = fyp_merged_runtime_root()
+    if runtime.is_dir():
+        shutil.rmtree(runtime)
+
+    for split in ("train", "val"):
+        src_split = base / split
+        if not src_split.is_dir():
+            continue
+        img_out = runtime / "images" / split
+        lbl_out = runtime / "labels" / split
+        img_out.mkdir(parents=True, exist_ok=True)
+        lbl_out.mkdir(parents=True, exist_ok=True)
+        ovr_split = overlay / split
+
+        for img_path in sorted(src_split.iterdir()):
+            if not img_path.is_file() or img_path.suffix.lower() not in _IMG_EXT_FYP:
+                continue
+            stem = img_path.stem
+            lbl_base = src_split / f"{stem}.txt"
+            if not lbl_base.is_file():
+                continue
+            dst_img = img_out / img_path.name
+            try:
+                rel = os.path.relpath(img_path.resolve(), start=dst_img.parent.resolve())
+                os.symlink(rel, dst_img)
+            except OSError:
+                shutil.copy2(img_path, dst_img)
+
+            lbl_ov = ovr_split / f"{stem}.txt"
+            src_lbl = lbl_ov if lbl_ov.is_file() else lbl_base
+            shutil.copy2(src_lbl, lbl_out / f"{stem}.txt")
+
+    return runtime
+
+
+def materialize_fyp_merged_data_yaml() -> str:
+    """Write a data YAML for merged finetune data (hand + tool).
+
+    If ``results/fyp_merged_pseudo/overlay`` has any ``.txt`` files, builds
+    ``results/fyp_merged_runtime`` (base ``datasets/fyp_merged`` + overlay) and points
+    the YAML there. Otherwise uses ``datasets/fyp_merged/{train,val}/`` directly.
+    """
+    if fyp_merged_overlay_active():
+        root = sync_fyp_merged_runtime()
+        cfg = {
+            "path": str(root),
+            "train": "images/train",
+            "val": "images/val",
+            "nc": 2,
+            "names": ["hand", "tool"],
+        }
+        return _write_coco_data_yaml_file(cfg)
+
     merged_root = (get_datasets_dir() / "fyp_merged").resolve()
     train_dir = merged_root / "train"
     val_dir = merged_root / "val"

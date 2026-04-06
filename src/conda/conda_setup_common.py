@@ -99,6 +99,7 @@ _ML_COMMANDS = frozenset(
         "train-coco80-320",
         "finetune-tiny",
         "finetune-yolo26",
+        "pseudo-label",
         "quantize-tiny",
         "quantize-yolo26",
     }
