@@ -11,7 +11,8 @@ from pathlib import Path
 from src.conda.conda_setup_common import (
     conda_cli_available,
     conda_run_argv,
-    target_conda_env_for_command,
+    ml_conda_env_name,
+    st_conda_env_name,
 )
 
 ROOT = Path(__file__).resolve().parent
@@ -42,6 +43,59 @@ LOCAL_COMMANDS: dict[str, str] = {
     "pseudo-label": "src/ml/run_pseudo_label.py",
     "format": "src/dev/run_format.py",
 }
+
+_BASE_ENV_COMMANDS = frozenset(
+    {
+        "setup-env-ml",
+        "setup-env-st",
+    }
+)
+
+_ML_COMMANDS = frozenset(
+    {
+        "download-coco",
+        "download-finetune",
+        "view-finetune-labels",
+        "train-person",
+        "train-coco80-320",
+        "finetune-tiny",
+        "finetune-yolo26",
+        "pseudo-label",
+        "quantize-tiny",
+        "quantize-yolo26-finetuned",
+    }
+)
+
+_FORMAT_COMMANDS = frozenset({"format"})
+
+_ST_COMMANDS = frozenset(
+    {
+        "benchmark",
+        "generate-model",
+        "evaluate",
+        "compare",
+        "select-model",
+        "prepare-finetune-dataset",
+        "finetune-st",
+        "verify-model-config",
+        "verify-idle-power",
+        "estimate-battery",
+        "parse-modelzoo",
+    }
+)
+
+
+def target_conda_env_for_command(command: str) -> str | None:
+    """Return the conda env name to run ``command`` in, or ``None`` for base-env setup."""
+    if command in _BASE_ENV_COMMANDS:
+        return None
+    if command in _FORMAT_COMMANDS:
+        return ml_conda_env_name()
+    if command in _ML_COMMANDS:
+        return ml_conda_env_name()
+    if command in _ST_COMMANDS:
+        return st_conda_env_name()
+    raise ValueError(f"Unknown command for conda routing: {command!r}")
 
 
 def main() -> int:

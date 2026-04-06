@@ -83,60 +83,6 @@ def st_conda_env_name() -> str:
     return os.environ.get("FYP_STZOO_ENV", "fyp-st")
 
 
-_BASE_ENV_COMMANDS = frozenset(
-    {
-        "setup-env-ml",
-        "setup-env-st",
-    }
-)
-
-_ML_COMMANDS = frozenset(
-    {
-        "download-coco",
-        "download-finetune",
-        "view-finetune-labels",
-        "train-person",
-        "train-coco80-320",
-        "finetune-tiny",
-        "finetune-yolo26",
-        "pseudo-label",
-        "quantize-tiny",
-        "quantize-yolo26",
-    }
-)
-
-_FORMAT_COMMANDS = frozenset({"format"})
-
-_ST_COMMANDS = frozenset(
-    {
-        "benchmark",
-        "generate-model",
-        "evaluate",
-        "compare",
-        "select-model",
-        "prepare-finetune-dataset",
-        "finetune-st",
-        "verify-model-config",
-        "verify-idle-power",
-        "estimate-battery",
-        "parse-modelzoo",
-    }
-)
-
-
-def target_conda_env_for_command(command: str) -> str | None:
-    """Return the conda env name ``project.py`` should run ``command`` in, or ``None``."""
-    if command in _BASE_ENV_COMMANDS:
-        return None
-    if command in _FORMAT_COMMANDS:
-        return ml_conda_env_name()
-    if command in _ML_COMMANDS:
-        return ml_conda_env_name()
-    if command in _ST_COMMANDS:
-        return st_conda_env_name()
-    raise ValueError(f"Unknown command for conda routing: {command!r}")
-
-
 def run(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, check=True, **kwargs)
 
