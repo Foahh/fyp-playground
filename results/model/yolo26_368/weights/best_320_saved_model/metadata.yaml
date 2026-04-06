@@ -1,0 +1,23 @@
+description: Ultralytics YOLO26n model trained on /tmp/coco_data_d5qjjnmw.yaml
+author: Ultralytics
+date: '2026-04-06T23:24:52.464642'
+version: 8.4.33
+license: AGPL-3.0 License (https://ultralytics.com/license)
+docs: https://docs.ultralytics.com
+stride: 32
+task: detect
+batch: 1
+imgsz:
+- 320
+- 320
+names:
+  0: hand
+  1: tool
+args:
+  batch: 1
+  fraction: 1.0
+  half: false
+  int8: true
+  nms: false
+channels: 3
+end2end: false

@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
-"""Prepare an ST Model Zoo object-detection dataset for finetuning."""
+"""Prepare an ST Model Zoo object-detection dataset for finetuning.
+
+Materializes TensorFlow-serialized ``.tfs`` label files next to images for each split
+(``training_path``, ``validation_path``, ``test_path``) so host evaluation and
+benchmarks can load ``.jpg``/``.tfs`` pairs — including non-``.jpg`` image extensions.
+"""
 
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -16,7 +22,6 @@ ROOT = Path(__file__).resolve().parents[2]
 OD_ROOT = ROOT / "external" / "stm32ai-modelzoo-services" / "object_detection"
 
 CONVERTER = OD_ROOT / "datasets" / "dataset_converter" / "converter.py"
-CREATE_TFS = OD_ROOT / "datasets" / "dataset_create_tfs" / "dataset_create_tfs.py"
 ANALYSIS = OD_ROOT / "datasets" / "dataset_analysis" / "dataset_analysis.py"
 
 
@@ -39,6 +44,182 @@ def _is_image_file(path: Path) -> bool:
         ".tif",
         ".tiff",
     }
+
+
+def _list_images_flat_dir(root: Path) -> list[Path]:
+    """Sorted image paths in a single directory (flat YOLO layout)."""
+    if not root.is_dir():
+        return []
+    return sorted(p for p in root.iterdir() if p.is_file() and _is_image_file(p))
+
+
+def _parse_yolo_txt_lines(txt_path: Path) -> list[list[float]]:
+    """Parse YOLO label lines to float rows (class, xc, yc, w, h)."""
+    labels: list[list[float]] = []
+    if not txt_path.is_file():
+        return labels
+    with txt_path.open(encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split()
+            if len(parts) < 5:
+                continue
+            labels.append([float(x) for x in parts[:5]])
+    return labels
+
+
+def _max_label_count_in_split(root: Path) -> int:
+    """Maximum number of YOLO boxes in any ``.txt`` under *root* (for padding size)."""
+    if not root.is_dir():
+        return 0
+    m = 0
+    for p in root.glob("*.txt"):
+        n = len(_parse_yolo_txt_lines(p))
+        if n > m:
+            m = n
+    return m
+
+
+def _resolve_padded_labels_size(
+    training_path: Path, settings: dict | None
+) -> int:
+    settings = settings or {}
+    md = settings.get("max_detections")
+    if md is not None and int(md) > 0:
+        return int(md)
+    m = _max_label_count_in_split(training_path)
+    if m <= 0:
+        return 1
+    return m
+
+
+def _materialize_tfs_for_directory(
+    dataset_path: Path,
+    *,
+    padded_labels_size: int,
+    exclude_unlabeled_images: bool,
+) -> None:
+    """Write ``.tfs`` next to each image from sibling YOLO ``.txt`` (ST Model Zoo layout).
+
+    Matches ``dataset_create_tfs.py`` behaviour: padding with ``[0,0,0,0,0]``, skip images
+    with more than ``padded_labels_size`` boxes, optional background rows when no labels.
+    Unlike the upstream script, all common image extensions are accepted (not only ``.jpg``).
+    """
+    os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
+    try:
+        import tensorflow as tf
+    except ImportError as e:
+        raise SystemExit(
+            "TensorFlow is required to write .tfs files (same as ST dataset_create_tfs). "
+            "Install it in your env or run via the ML env, e.g. "
+            "`conda run -n fyp-ml python -m src.ml.run_prepare_finetune_dataset ...`."
+        ) from e
+
+    try:
+        from tqdm import tqdm
+    except ImportError:
+
+        def tqdm(it, **_kwargs):
+            return it
+
+    if padded_labels_size <= 0:
+        raise ValueError("padded_labels_size must be positive")
+
+    if not dataset_path.is_dir():
+        print(
+            f"[prepare-finetune-dataset] Skip TFS: not a directory: {dataset_path}",
+            file=sys.stderr,
+        )
+        return
+
+    jpg_paths = _list_images_flat_dir(dataset_path)
+    if not jpg_paths:
+        print(
+            f"[prepare-finetune-dataset] Skip TFS: no images in {dataset_path}",
+            file=sys.stderr,
+        )
+        return
+
+    for path in dataset_path.glob("*.tfs"):
+        path.unlink()
+
+    discarded = 0
+    background = 0
+    num_images = len(jpg_paths)
+
+    for jpg_path in tqdm(jpg_paths, desc=f"tfs {dataset_path.name}"):
+        txt_path = jpg_path.with_suffix(".txt")
+        labels = _parse_yolo_txt_lines(txt_path)
+
+        if not labels:
+            background += 1
+            if exclude_unlabeled_images:
+                continue
+            labels = [[0.0, 0.0, 0.0, 0.0, 0.0]]
+
+        if len(labels) > padded_labels_size:
+            discarded += 1
+            continue
+
+        padded: list[list[float]] = []
+        for i in range(padded_labels_size):
+            if i < len(labels):
+                padded.append(labels[i])
+            else:
+                padded.append([0.0, 0.0, 0.0, 0.0, 0.0])
+
+        data = tf.convert_to_tensor(padded, dtype=tf.float32)
+        data = tf.io.serialize_tensor(data)
+        tf.io.write_file(str(jpg_path.with_suffix(".tfs")), data)
+
+    remaining = num_images - discarded
+    print(
+        f"[prepare-finetune-dataset] TFS in {dataset_path}: "
+        f"images={num_images}, written_pairs≈{remaining}, "
+        f"discarded(>{padded_labels_size} boxes)={discarded}, "
+        f"background_no_txt={background}"
+    )
+
+
+def _materialize_tfs_from_dataset_yaml(config_file: Path) -> None:
+    """Create ``.tfs`` for training / validation / test paths declared in the dataset config."""
+    data = _load_config(config_file)
+    ds = data.get("dataset") or {}
+    if not ds.get("training_path"):
+        print(
+            "[prepare-finetune-dataset] No dataset.training_path; skipping TFS creation.",
+            file=sys.stderr,
+        )
+        return
+
+    settings = data.get("settings") or {}
+    train_dir = _resolve_repo_path(str(ds["training_path"]))
+    padded = _resolve_padded_labels_size(train_dir, settings)
+    exclude = bool(settings.get("exclude_unlabeled_images", False))
+
+    _materialize_tfs_for_directory(
+        train_dir,
+        padded_labels_size=padded,
+        exclude_unlabeled_images=exclude,
+    )
+
+    val_rel = ds.get("validation_path")
+    if val_rel:
+        _materialize_tfs_for_directory(
+            _resolve_repo_path(str(val_rel)),
+            padded_labels_size=padded,
+            exclude_unlabeled_images=exclude,
+        )
+
+    test_rel = ds.get("test_path")
+    if test_rel:
+        _materialize_tfs_for_directory(
+            _resolve_repo_path(str(test_rel)),
+            padded_labels_size=padded,
+            exclude_unlabeled_images=exclude,
+        )
 
 
 def _convert_split_yolo_to_coco(
@@ -253,7 +434,7 @@ def main(
         ..., help="Path to the dataset config YAML used by ST Model Zoo dataset tools."
     ),
     skip_convert: bool = typer.Option(
-        False, help="Skip converter.py and only run dataset_create_tfs.py."
+        False, help="Skip converter.py (still writes .tfs from YOLO .txt labels)."
     ),
     force_coco: bool = typer.Option(
         False, help="Force regeneration of COCO JSON annotations from YOLO txt labels."
@@ -273,7 +454,7 @@ def main(
     if not skip_convert and not _skip_st_converter(config):
         _run(CONVERTER, config, overrides)
 
-    _run(CREATE_TFS, config, overrides)
+    _materialize_tfs_from_dataset_yaml(config)
 
     if analyze:
         _run(ANALYSIS, config, overrides)
