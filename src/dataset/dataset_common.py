@@ -96,15 +96,14 @@ def get_finetune_yolo_dir(name: str) -> Path:
     conversion and optional merge). Use this in tooling so scripts read
     ``ego2hands/``, ``construction_tools/``, etc., not the download-only raw folders.
 
-    *name* can be ``ego2hands``, ``construction_tools``, ``metu_alet``, or
-    ``fyp_merged`` (aliases with hyphens are accepted).
+    *name* must be exactly ``ego2hands``, ``construction_tools``, or ``fyp_merged``
+    (lowercase).
     """
-    key = name.lower().replace("-", "_")
+    key = name.strip().lower()
     root = get_datasets_dir().resolve()
     mapping = {
         "ego2hands": "ego2hands",
         "construction_tools": "construction_tools",
-        "metu_alet": "metu_alet",
         "fyp_merged": "fyp_merged",
     }
     sub = mapping.get(key)

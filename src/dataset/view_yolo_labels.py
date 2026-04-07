@@ -10,10 +10,7 @@ Run::
 
     ./project.py view-finetune-labels -- --preset ego2hands
     ./project.py view-finetune-labels -- --preset construction_tools
-    ./project.py view-finetune-labels -- --preset metu_alet
-    ./project.py view-finetune-labels -- --preset fyp_merged --split val
-    ./project.py view-finetune-labels -- --preset merged-al   # METU-ALET rows in merge (prefix al_)
-    ./project.py view-finetune-labels -- --preset merged-ct
+    ./project.py view-finetune-labels -- --preset fyp_merged --split val --filename-prefix ct_
 
 Keys: ``n``/→ next | ``p``/← prev | ``m`` mask toggle | ``q``/Esc quit
 """
@@ -38,25 +35,11 @@ app = typer.Typer(add_completion=False)
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 EDGE_COLORS = ["yellow", "cyan", "magenta", "lime", "orange"]
 
-# preset -> (get_finetune_yolo_dir key, layout, optional default filename prefix)
-_PRESETS: dict[str, tuple[str, str, str | None]] = {
-    # Per-dataset converted trees (YOLO images/{split} + labels/{split})
-    "ego2hands": ("ego2hands", "yolo_splits", None),
-    "construction-tools": ("construction_tools", "yolo_splits", None),
-    "construction_tools": ("construction_tools", "yolo_splits", None),
-    "metu-alet": ("metu_alet", "yolo_splits", None),
-    "metu_alet": ("metu_alet", "yolo_splits", None),
-    # Merged hand+tool (flat train/val/test); prefixes match merge_for_finetune
-    "merged": ("fyp_merged", "flat", None),
-    "fyp_merged": ("fyp_merged", "flat", None),
-    "fyp-merged": ("fyp_merged", "flat", None),
-    "merged-eh": ("fyp_merged", "flat", "eh_"),
-    "merged-ego2hands": ("fyp_merged", "flat", "eh_"),
-    "merged-ct": ("fyp_merged", "flat", "ct_"),
-    "merged-construction": ("fyp_merged", "flat", "ct_"),
-    "merged-tools": ("fyp_merged", "flat", "ct_"),
-    "merged-al": ("fyp_merged", "flat", "al_"),
-    "merged-metu": ("fyp_merged", "flat", "al_"),
+# preset -> (get_finetune_yolo_dir name, layout: yolo_splits | flat)
+_PRESETS: dict[str, tuple[str, str]] = {
+    "ego2hands": ("ego2hands", "yolo_splits"),
+    "construction_tools": ("construction_tools", "yolo_splits"),
+    "fyp_merged": ("fyp_merged", "flat"),
 }
 
 
@@ -141,7 +124,6 @@ def _resolve_root_and_pairs(
 ) -> tuple[Path, list[tuple[Path, Path, str]]]:
     layout: str
     root: Path
-    preset_prefix: str | None = None
     if dataset_root is not None:
         root = dataset_root.expanduser().resolve()
         layout = (
@@ -152,20 +134,12 @@ def _resolve_root_and_pairs(
     elif preset is not None:
         pk = preset.strip().lower()
         if pk not in _PRESETS:
-            alt = pk.replace("-", "_")
-            if alt in _PRESETS:
-                pk = alt
-            else:
-                alt2 = pk.replace("_", "-")
-                if alt2 in _PRESETS:
-                    pk = alt2
-        if pk not in _PRESETS:
             opts = ", ".join(sorted(_PRESETS))
             raise typer.BadParameter(
                 f"unknown preset {preset!r}; choose one of: {opts}"
             )
-        ds_key, layout, preset_prefix = _PRESETS[pk]
-        root = get_finetune_yolo_dir(ds_key)
+        ds_name, layout = _PRESETS[pk]
+        root = get_finetune_yolo_dir(ds_name)
     else:
         root = get_finetune_yolo_dir("ego2hands")
         layout = "yolo_splits"
@@ -190,9 +164,8 @@ def _resolve_root_and_pairs(
                 pairs.append((ip, lp, sp))
 
     user_pref = filename_prefix.strip() if filename_prefix else None
-    eff_pref = user_pref or preset_prefix
-    if eff_pref:
-        pairs = [(a, b, sp) for a, b, sp in pairs if a.name.startswith(eff_pref)]
+    if user_pref:
+        pairs = [(a, b, sp) for a, b, sp in pairs if a.name.startswith(user_pref)]
 
     return root, pairs
 
@@ -203,11 +176,7 @@ def main(
         None,
         "--preset",
         "-p",
-        help=(
-            "Converted dataset: ego2hands; construction-tools|construction_tools; "
-            "metu-alet|metu_alet; merged|fyp_merged; "
-            "merged-eh|merged-ct|merged-al (+aliases)"
-        ),
+        help="Dataset preset: ego2hands | construction_tools | fyp_merged (exact name).",
     ),
     dataset_root: Path | None = typer.Option(
         None,
@@ -230,7 +199,7 @@ def main(
     filename_prefix: str | None = typer.Option(
         None,
         "--filename-prefix",
-        help="Only images whose filename starts with this (e.g. eh_ on merged for Ego2Hands)",
+        help="Only images whose filename starts with this (e.g. eh_ or ct_ under fyp_merged).",
     ),
 ) -> None:
     root, pairs = _resolve_root_and_pairs(

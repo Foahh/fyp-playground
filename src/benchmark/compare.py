@@ -434,12 +434,6 @@ def load_csv_df(path: Path) -> pd.DataFrame:
     return df
 
 
-def load_csv(path: Path) -> tuple[list[str], list[dict[str, str]]]:
-    """Backward-compatible CSV loader (dict rows)."""
-    df = load_csv_df(path)
-    return list(df.columns), df.to_dict("records")
-
-
 def _normalize_identity_df(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
     for c in ["model_family", "model_variant", "hyperparameters", "dataset", "format"]:

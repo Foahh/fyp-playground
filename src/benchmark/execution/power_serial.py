@@ -177,11 +177,6 @@ def compute_power_metrics(samples: list[dict], num_inferences: int = 1) -> dict:
     }
 
 
-def compute_avg_power_mw(samples: list[dict]) -> Optional[float]:
-    """Legacy function for backward compatibility."""
-    return compute_power_metrics(samples)["pm_avg_inf_mW"]
-
-
 class PowerMeasureSession:
     """Reads INA228 protobuf serial for the whole benchmark run; logs to power_measure.csv."""
 
@@ -486,7 +481,7 @@ def begin_validate_capture() -> None:
 
 
 def end_validate_capture() -> list[dict]:
-    """Stop recording validate samples; return captured samples for compute_avg_power_mw."""
+    """Stop recording validate samples; pass returned rows to ``compute_power_metrics``."""
     global _session
     if _session is None:
         return []

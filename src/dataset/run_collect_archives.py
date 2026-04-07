@@ -37,7 +37,6 @@ def _expected_archive_filenames() -> set[str]:
         "DATA2.zip",
         "DATA3.zip",
         "DATA4.zip",
-        "metu_alet.zip",
         "ego2hands_eval.zip",
     }
 
