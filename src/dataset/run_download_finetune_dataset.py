@@ -42,7 +42,6 @@ import shutil
 import subprocess
 import tarfile
 import zipfile
-from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -92,15 +91,12 @@ _ZENODO_ALL_CLASSES = [
 ]
 
 ZENODO_HAZARD_IDS: set[int] = {
-    _ZENODO_ALL_CLASSES.index(n) for n in ("cutter", "knife", "saw")
+    _ZENODO_ALL_CLASSES.index(n) for n in ("knife",)
 }
 ZENODO_HAZARD_NAMES: set[str] = {_ZENODO_ALL_CLASSES[i] for i in ZENODO_HAZARD_IDS}
 
 VAL_RATIO = 0.2
 RANDOM_SEED = 42
-
-# IMX335 (1/2.8") active sensor size in mm
-IMX335_SENSOR_WIDTH_MM = 5.568
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -236,195 +232,6 @@ def _collect_images(root: Path) -> list[Path]:
     """Recursively collect image files under *root*."""
     exts = {".jpg", ".jpeg", ".png", ".bmp"}
     return sorted(p for p in root.rglob("*") if p.suffix.lower() in exts)
-
-
-def _read_yolo_boxes(path: Path) -> list[tuple[int, float, float, float, float]]:
-    """Read YOLO labels as (cls, cx, cy, w, h)."""
-    boxes: list[tuple[int, float, float, float, float]] = []
-    with path.open(encoding="utf-8") as f:
-        for line in f:
-            parts = line.strip().split()
-            if len(parts) < 5:
-                continue
-            try:
-                cls = int(parts[0])
-                cx, cy, bw, bh = map(float, parts[1:5])
-            except ValueError:
-                continue
-            boxes.append((cls, cx, cy, bw, bh))
-    return boxes
-
-
-def _write_yolo_tuples(path: Path, boxes: list[tuple[int, float, float, float, float]]) -> None:
-    """Write YOLO labels from (cls, cx, cy, w, h)."""
-    with path.open("w", encoding="utf-8") as f:
-        for cls, cx, cy, bw, bh in boxes:
-            f.write(f"{cls} {cx:.6f} {cy:.6f} {bw:.6f} {bh:.6f}\n")
-
-
-def _clip_box_xyxy(
-    x1: float,
-    y1: float,
-    x2: float,
-    y2: float,
-    img_w: int,
-    img_h: int,
-) -> tuple[float, float, float, float] | None:
-    x1 = max(0.0, min(x1, float(img_w)))
-    y1 = max(0.0, min(y1, float(img_h)))
-    x2 = max(0.0, min(x2, float(img_w)))
-    y2 = max(0.0, min(y2, float(img_h)))
-    if x2 <= x1 or y2 <= y1:
-        return None
-    return x1, y1, x2, y2
-
-
-def _norm_xywh_to_xyxy(
-    cx: float, cy: float, bw: float, bh: float, img_w: int, img_h: int
-) -> tuple[float, float, float, float]:
-    x1 = (cx - bw / 2.0) * img_w
-    y1 = (cy - bh / 2.0) * img_h
-    x2 = (cx + bw / 2.0) * img_w
-    y2 = (cy + bh / 2.0) * img_h
-    return x1, y1, x2, y2
-
-
-def _xyxy_to_norm_xywh(
-    x1: float, y1: float, x2: float, y2: float, img_w: int, img_h: int
-) -> tuple[float, float, float, float]:
-    cx = ((x1 + x2) / 2.0) / img_w
-    cy = ((y1 + y2) / 2.0) / img_h
-    bw = (x2 - x1) / img_w
-    bh = (y2 - y1) / img_h
-    return cx, cy, bw, bh
-
-
-@dataclass(frozen=True)
-class ToolEgocentricConfig:
-    enabled: bool
-    copies_per_image: int
-    target_distance_min_cm: float
-    target_distance_max_cm: float
-    focal_mm: float
-    sensor_width_mm: float
-    assumed_tool_width_cm: float
-    min_box_side: float = 0.01
-
-
-def _target_tool_norm_side_range(cfg: ToolEgocentricConfig) -> tuple[float, float]:
-    """Estimate target normalized tool size from pinhole model.
-
-    norm_size ~= (focal_mm * tool_width_mm) / (sensor_width_mm * distance_mm)
-    """
-    tool_width_mm = cfg.assumed_tool_width_cm * 10.0
-    dmin = cfg.target_distance_min_cm * 10.0
-    dmax = cfg.target_distance_max_cm * 10.0
-    if dmin <= 0 or dmax <= 0:
-        raise ValueError("target distances must be > 0")
-    if dmin > dmax:
-        dmin, dmax = dmax, dmin
-    near_norm = (cfg.focal_mm * tool_width_mm) / (cfg.sensor_width_mm * dmin)
-    far_norm = (cfg.focal_mm * tool_width_mm) / (cfg.sensor_width_mm * dmax)
-    lo = max(0.03, min(near_norm, far_norm))
-    hi = min(0.95, max(near_norm, far_norm))
-    if hi <= lo:
-        hi = min(0.95, lo + 0.05)
-    return lo, hi
-
-
-def _simulate_tool_egocentric_view(
-    image: np.ndarray,
-    boxes: list[tuple[int, float, float, float, float]],
-    *,
-    cls_map: dict[int, int],
-    cfg: ToolEgocentricConfig,
-    rng: random.Random,
-    target_side_range: tuple[float, float],
-) -> tuple[np.ndarray, list[tuple[int, float, float, float, float]]] | None:
-    """Create one synthetic first-person-ish sample by zooming around a tool.
-
-    The operation simulates camera-to-tool distance changes with crop-and-resize.
-    """
-    img_h, img_w = image.shape[:2]
-    tool_indices: list[int] = []
-    for i, (src_cls, _, _, _, _) in enumerate(boxes):
-        dst_cls = cls_map.get(src_cls)
-        if dst_cls == 1:
-            tool_indices.append(i)
-    if not tool_indices:
-        return None
-
-    # Use the largest tool as scale anchor (more stable than random small boxes).
-    anchor_idx = max(
-        tool_indices,
-        key=lambda i: max(boxes[i][3], boxes[i][4]),
-    )
-    _, acx, acy, abw, abh = boxes[anchor_idx]
-    cur_side = max(abw, abh)
-    if cur_side <= 0:
-        return None
-
-    target_side = rng.uniform(*target_side_range)
-    scale = target_side / cur_side
-    scale = max(0.8, min(4.0, scale))
-
-    crop_w = max(16.0, img_w / scale)
-    crop_h = max(16.0, img_h / scale)
-    anchor_x = acx * img_w
-    anchor_y = acy * img_h
-    jitter_x = rng.uniform(-0.12, 0.12) * crop_w
-    jitter_y = rng.uniform(-0.12, 0.12) * crop_h
-
-    x0 = anchor_x - crop_w / 2.0 + jitter_x
-    y0 = anchor_y - crop_h / 2.0 + jitter_y
-    x0 = max(0.0, min(x0, img_w - crop_w))
-    y0 = max(0.0, min(y0, img_h - crop_h))
-    x1 = x0 + crop_w
-    y1 = y0 + crop_h
-
-    try:
-        import cv2
-    except ImportError as e:
-        raise RuntimeError(
-            "OpenCV is required for --tool-egocentric synthesis (pip install opencv-python)."
-        ) from e
-
-    src_crop = image[int(y0) : int(y1), int(x0) : int(x1)]
-    if src_crop.size == 0:
-        return None
-    out = cv2.resize(src_crop, (img_w, img_h), interpolation=cv2.INTER_LINEAR)
-
-    # Mild degradation to approximate wearable camera stream.
-    if rng.random() < 0.5:
-        k = 3 if rng.random() < 0.7 else 5
-        out = cv2.GaussianBlur(out, (k, k), sigmaX=0.0)
-    if rng.random() < 0.4:
-        noise = rng.uniform(2.0, 7.0)
-        jitter = np.random.normal(0.0, noise, out.shape).astype(np.float32)
-        out = np.clip(out.astype(np.float32) + jitter, 0, 255).astype(np.uint8)
-
-    out_boxes: list[tuple[int, float, float, float, float]] = []
-    for src_cls, cx, cy, bw, bh in boxes:
-        dst_cls = cls_map.get(src_cls)
-        if dst_cls is None:
-            continue
-        bx1, by1, bx2, by2 = _norm_xywh_to_xyxy(cx, cy, bw, bh, img_w, img_h)
-        # Crop coordinates then resize back.
-        nx1 = (bx1 - x0) * scale
-        ny1 = (by1 - y0) * scale
-        nx2 = (bx2 - x0) * scale
-        ny2 = (by2 - y0) * scale
-        clipped = _clip_box_xyxy(nx1, ny1, nx2, ny2, img_w, img_h)
-        if clipped is None:
-            continue
-        cxn, cyn, bwn, bhn = _xyxy_to_norm_xywh(*clipped, img_w, img_h)
-        if bwn < cfg.min_box_side or bhn < cfg.min_box_side:
-            continue
-        out_boxes.append((dst_cls, cxn, cyn, bwn, bhn))
-
-    if not out_boxes:
-        return None
-    return out, out_boxes
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -839,77 +646,6 @@ def _populate_split(
     return n
 
 
-def _populate_tool_egocentric_split(
-    split: str,
-    items: list[tuple[Path, Path, str, dict[int, int]]],
-    *,
-    cfg: ToolEgocentricConfig,
-) -> int:
-    """Generate synthetic egocentric tool samples directly into merged split."""
-    if not cfg.enabled or cfg.copies_per_image <= 0:
-        return 0
-
-    out_dir = MERGED_DIR / split
-    out_dir.mkdir(parents=True, exist_ok=True)
-    seed_offset = {"train": 11, "val": 17, "test": 23}.get(split, 29)
-    rng = random.Random(RANDOM_SEED + seed_offset)
-    side_range = _target_tool_norm_side_range(cfg)
-    try:
-        import cv2
-    except ImportError as e:
-        raise RuntimeError(
-            "OpenCV is required for --tool-egocentric synthesis "
-            "(pip install opencv-python in fyp-ml env)."
-        ) from e
-
-    written = 0
-    for img_path, lbl_src, prefix, cls_map in items:
-        # Keep this synthesis focused on construction_tools merge rows.
-        if prefix != "ct":
-            continue
-
-        boxes = _read_yolo_boxes(lbl_src)
-        if not boxes:
-            continue
-
-        image_bgr = cv2.imread(str(img_path.resolve()))
-        if image_bgr is None:
-            continue
-        image = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
-
-        base_stem = f"{prefix}_{_stable_unique_stem(img_path)}"
-        for copy_idx in range(cfg.copies_per_image):
-            simulated = _simulate_tool_egocentric_view(
-                image,
-                boxes,
-                cls_map=cls_map,
-                cfg=cfg,
-                rng=rng,
-                target_side_range=side_range,
-            )
-            if simulated is None:
-                continue
-            out_img, out_boxes = simulated
-            synth_stem = f"{base_stem}_ego{copy_idx + 1:02d}"
-            out_img_path = out_dir / f"{synth_stem}.jpg"
-            out_lbl_path = out_dir / f"{synth_stem}.txt"
-
-            out_bgr = cv2.cvtColor(out_img, cv2.COLOR_RGB2BGR)
-            ok = cv2.imwrite(str(out_img_path), out_bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 93])
-            if not ok:
-                continue
-            _write_yolo_tuples(out_lbl_path, out_boxes)
-            written += 1
-
-    if written:
-        lo, hi = side_range
-        print(
-            f"  Added synthetic egocentric tool samples to {split}: {written} "
-            f"(target normalized tool side ~{lo:.3f}-{hi:.3f})"
-        )
-    return written
-
-
 def _dataset_premerge_stats(
     ds_dir: Path, cls_map: dict[int, int]
 ) -> tuple[int, int, dict[int, int]]:
@@ -990,11 +726,7 @@ def _print_premerge_stats() -> None:
     )
 
 
-def merge_for_finetune(
-    *,
-    balance: bool = False,
-    tool_egocentric: ToolEgocentricConfig | None = None,
-) -> None:
+def merge_for_finetune(*, balance: bool = False) -> None:
     """Combine all per-dataset YOLO outputs into ``fyp_merged/{train,val,test}``.
 
     When *balance* is True, hand-only images are subsampled to match the total
@@ -1051,10 +783,6 @@ def merge_for_finetune(
         ("test", test_items),
     ]:
         _populate_split(name, items, counts)
-        if tool_egocentric is not None and tool_egocentric.enabled:
-            counts[name] += _populate_tool_egocentric_split(
-                name, items, cfg=tool_egocentric
-            )
 
     total = sum(counts.values())
     print(f"\n  Merged dataset written to {MERGED_DIR}")
@@ -1103,57 +831,11 @@ def main(
         "--balance",
         help="Subsample hand-only images to match tool image count, reducing class imbalance",
     ),
-    tool_egocentric: bool = typer.Option(
-        True,
-        "--tool-egocentric/--no-tool-egocentric",
-        help="Synthesize first-person-like tool images for merged dataset.",
-    ),
-    tool_egocentric_copies: int = typer.Option(
-        1,
-        "--tool-egocentric-copies",
-        min=0,
-        help="Synthetic copies per original construction_tools tool image.",
-    ),
-    target_distance_min_cm: float = typer.Option(
-        40.0,
-        "--target-distance-min-cm",
-        help="Target near distance from camera to tool (cm).",
-    ),
-    target_distance_max_cm: float = typer.Option(
-        60.0,
-        "--target-distance-max-cm",
-        help="Target far distance from camera to tool (cm).",
-    ),
-    imx335_focal_mm: float = typer.Option(
-        2.8,
-        "--imx335-focal-mm",
-        help="Lens focal length in mm for IMX335 distance-to-scale estimation.",
-    ),
-    imx335_sensor_width_mm: float = typer.Option(
-        IMX335_SENSOR_WIDTH_MM,
-        "--imx335-sensor-width-mm",
-        help="IMX335 active sensor width in mm.",
-    ),
-    assumed_tool_width_cm: float = typer.Option(
-        12.0,
-        "--assumed-tool-width-cm",
-        help="Assumed physical tool width for distance-to-scale conversion.",
-    ),
 ) -> int:
     valid_datasets = ["ego2hands", "construction_tools", "all"]
     if dataset not in valid_datasets:
         typer.echo(
             f"Error: dataset must be one of [{', '.join(valid_datasets)}]",
-            err=True,
-        )
-        raise typer.Exit(1)
-    if target_distance_min_cm <= 0 or target_distance_max_cm <= 0:
-        typer.echo("Error: target distances must be > 0", err=True)
-        raise typer.Exit(1)
-    if imx335_focal_mm <= 0 or imx335_sensor_width_mm <= 0 or assumed_tool_width_cm <= 0:
-        typer.echo(
-            "Error: --imx335-focal-mm, --imx335-sensor-width-mm, "
-            "and --assumed-tool-width-cm must be > 0",
             err=True,
         )
         raise typer.Exit(1)
@@ -1185,24 +867,7 @@ def main(
         print("\n=== Merging into fyp_merged/ ===")
         _print_premerge_stats()
         _prepare_merged_dir(clear=clear)
-        tool_ego_cfg = ToolEgocentricConfig(
-            enabled=tool_egocentric,
-            copies_per_image=tool_egocentric_copies,
-            target_distance_min_cm=target_distance_min_cm,
-            target_distance_max_cm=target_distance_max_cm,
-            focal_mm=imx335_focal_mm,
-            sensor_width_mm=imx335_sensor_width_mm,
-            assumed_tool_width_cm=assumed_tool_width_cm,
-        )
-        if tool_egocentric:
-            lo, hi = _target_tool_norm_side_range(tool_ego_cfg)
-            print(
-                "  Tool egocentric synthesis: "
-                f"copies={tool_egocentric_copies}, "
-                f"distance={target_distance_min_cm:.1f}-{target_distance_max_cm:.1f} cm, "
-                f"target_tool_norm_side~{lo:.3f}-{hi:.3f}"
-            )
-        merge_for_finetune(balance=balance, tool_egocentric=tool_ego_cfg)
+        merge_for_finetune(balance=balance)
 
     print("\nDone.")
     return 0

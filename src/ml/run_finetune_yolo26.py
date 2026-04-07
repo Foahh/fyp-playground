@@ -39,8 +39,9 @@ FINETUNE_EPOCHS = 220
 FINETUNE_LR0 = 0.0008
 FINETUNE_BATCH = 24
 FINETUNE_NBS = 64
-FINETUNE_IMGSZ = 368
-FINETUNE_MULTI_SCALE = 0.3
+FINETUNE_IMGSZ = 320
+FINETUNE_MULTI_SCALE = 0.2
+FINETUNE_PATIENCE = 60
 
 
 def run_name_for(size: int) -> str:
@@ -69,8 +70,28 @@ def main(
         "--no-resume",
         help="Do not resume: start a new run from the loaded weights (ignore last.pt in the output dir).",
     ),
+    size: int = typer.Option(
+        FINETUNE_IMGSZ,
+        "--size",
+        help="Training image size (deployment target is usually 320).",
+    ),
+    epochs: int = typer.Option(
+        FINETUNE_EPOCHS,
+        "--epochs",
+        help="Max finetune epochs.",
+    ),
+    lr0: float = typer.Option(
+        FINETUNE_LR0,
+        "--lr0",
+        help="Initial learning rate.",
+    ),
+    patience: int = typer.Option(
+        FINETUNE_PATIENCE,
+        "--patience",
+        help="Early-stopping patience.",
+    ),
 ):
-    run_name = run_name_for(FINETUNE_IMGSZ)
+    run_name = run_name_for(size)
     local_run_dir = PROJECT / run_name
     weights_dir = local_run_dir / "weights"
 
@@ -104,12 +125,12 @@ def main(
 
     train_kw: dict = {
         "data": data_yaml,
-        "imgsz": FINETUNE_IMGSZ,
-        "epochs": FINETUNE_EPOCHS,
+        "imgsz": size,
+        "epochs": epochs,
         "optimizer": "AdamW",
         "batch": FINETUNE_BATCH,
         "nbs": FINETUNE_NBS,
-        "lr0": FINETUNE_LR0,
+        "lr0": lr0,
         "lrf": 0.01,
         "weight_decay": 0.0005,
         "warmup_epochs": 3.0,
@@ -122,19 +143,20 @@ def main(
         "hsv_v": 0.2,
         "fliplr": 0.5,
         "translate": 0.05,
-        "scale": 0.25,
+        "scale": 0.2,
         "multi_scale": FINETUNE_MULTI_SCALE,
-        "mosaic": 1,
-        "mixup": 0.15,
-        "copy_paste": 0.25,
-        "close_mosaic": 30,
-        "cls": 1.5,
-        "flipud": 0.3,
+        "mosaic": 0.5,
+        "mixup": 0.0,
+        "copy_paste": 0.0,
+        "close_mosaic": 15,
+        "cls": 1.2,
+        "box": 8.5,
+        "flipud": 0.0,
         "deterministic": False,
         "project": str(PROJECT),
         "name": run_name,
         "exist_ok": True,
-        "patience": 30,
+        "patience": patience,
         "resume": resume_val,
     }
     if device:
