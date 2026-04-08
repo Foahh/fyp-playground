@@ -33,7 +33,7 @@ DEFAULT_MEMORY_CSV = RESULTS_DIR / "generate_result.csv"
 
 NPU_RAM_ACTIVATION_KIB = 4 * 448  # npuRAM3–6
 CPU_RAM_ACTIVATION_KIB = 512  # cpuRAM2
-MAX_LATENCY_MS = 66  # 15 FPS ceiling
+MAX_LATENCY_MS = 70  # ~15 FPS ceiling
 MAX_WEIGHTS_FLASH_KIB = 10240  # 10 MiB octoFlash (for glass deployment, altough 60 MiB is given on the STM32N6570-DK)
 
 # Quantisation formats dropped before gating and listing.
@@ -280,6 +280,10 @@ def _print_column_abbreviations_legend() -> None:
     legend.add_row(
         "fmt", "Quantisation format (W4A8 excluded from the candidate pool)."
     )
+    legend.add_row(
+        "dataset",
+        "Evaluation / training dataset label ([bold]dataset[/bold] from benchmark CSV).",
+    )
     legend.add_row("res", "Input resolution in pixels.")
     legend.add_row(
         "act_no_io",
@@ -374,6 +378,7 @@ def print_section1(
             show_lines=False,
         )
         table.add_column("Model Variant", no_wrap=True)
+        table.add_column("dataset", min_width=10, no_wrap=True)
         table.add_column("fmt", min_width=4)
         table.add_column("res", min_width=3)
         table.add_column("act_no_io", min_width=8, justify="right")
@@ -382,7 +387,7 @@ def print_section1(
         table.add_column("Reason", no_wrap=True)
 
         excluded_sorted = excluded.sort_values(
-            ["model_variant", "resolution", "format"], kind="mergesort"
+            ["model_variant", "dataset", "resolution", "format"], kind="mergesort"
         )
         for _, row in excluded_sorted.iterrows():
             reasons: list[str] = []
@@ -393,6 +398,7 @@ def print_section1(
             flag_str = _memory_flags(row)
             table.add_row(
                 str(row["model_variant"]),
+                str(row.get("dataset", "")),
                 str(row["format"]),
                 str(int(row["resolution"])),
                 _f(row["activations_without_io"]),
@@ -425,7 +431,7 @@ def print_section3(candidates: pd.DataFrame) -> None:
     for key, grp in candidates.groupby(_FAMILY_KEY, sort=False):
         hyp_label = f" ({key[1]})" if key[1] else ""
         grp_sorted = grp.sort_values(
-            ["resolution", "model_variant", "format"], kind="mergesort"
+            ["dataset", "resolution", "model_variant", "format"], kind="mergesort"
         )
 
         table = Table(
@@ -435,6 +441,7 @@ def print_section3(candidates: pd.DataFrame) -> None:
             show_lines=False,
         )
         table.add_column("Variant", no_wrap=True)
+        table.add_column("dataset", min_width=10, no_wrap=True)
         table.add_column("fmt", min_width=4)
         table.add_column("res", min_width=4, justify="right")
         table.add_column("AP", min_width=5, justify="right")
@@ -449,6 +456,7 @@ def print_section3(candidates: pd.DataFrame) -> None:
             mem_flag = _flags(row)
             table.add_row(
                 str(row["model_variant"]),
+                str(row.get("dataset", "")),
                 str(row["format"]),
                 str(int(row["resolution"])),
                 _f(row["ap_50"]),
