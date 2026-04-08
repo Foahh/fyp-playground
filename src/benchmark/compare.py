@@ -30,6 +30,9 @@ rows are omitted.
 Use ``--delta METRIC:THRESH`` (repeatable) to keep only listed metrics whose numeric ``|Δ|`` is
 at least ``THRESH`` (raw delta, not percent). Rows without a numeric ``Δ`` stay listed; empty
 ``stedgeai_version`` match rows are omitted (same as ``--delta-pct``).
+
+Use ``--dataset`` to restrict rows to one CSV dataset label (e.g. ``fyp_merged`` or ``merged`` for
+``FYP-Merged``, ``80`` for ``COCO-80``, ``person`` for ``COCO-Person``).
 """
 
 from __future__ import annotations
@@ -131,6 +134,14 @@ _DATASOURCE_CHOICES = (
     "evaluate",
 )
 
+# CLI aliases → CSV ``dataset`` column (same convention as model_selection).
+_DATASET_CLI_TO_LABEL: dict[str, str] = {
+    "80": "COCO-80",
+    "person": "COCO-Person",
+    "merged": "FYP-Merged",
+    "fyp_merged": "FYP-Merged",
+}
+
 
 def _ds_norm(s: str) -> str:
     return (s or "").strip().casefold()
@@ -138,6 +149,27 @@ def _ds_norm(s: str) -> str:
 
 def _ds_error_choices() -> str:
     return ", ".join(_DATASOURCE_CHOICES)
+
+
+def _dataset_cli_error_choices() -> str:
+    return ", ".join(sorted(_DATASET_CLI_TO_LABEL.keys()))
+
+
+def _resolve_dataset_cli_flag(raw: str | None) -> str | None:
+    """Return CSV dataset label or None. *raw* is a single CLI token (e.g. ``fyp_merged``)."""
+    if raw is None:
+        return None
+    key = (raw or "").strip().casefold().replace("-", "_")
+    if key not in _DATASET_CLI_TO_LABEL:
+        return None
+    return _DATASET_CLI_TO_LABEL[key]
+
+
+def _filter_by_dataset_label(df: pd.DataFrame, label: str) -> pd.DataFrame:
+    if df.empty or "dataset" not in df.columns:
+        return df.iloc[0:0].copy()
+    m = df["dataset"] == label
+    return df.loc[m].copy()
 
 
 def _require_file_exists(path: Path, *, label: str) -> None:
@@ -495,6 +527,7 @@ def compare_readme_to_bench(
     right_label: str,
     left_is_readme: bool,
     headline: str,
+    dataset_label: str | None = None,
 ) -> ComparisonResult:
     parsed_df = load_csv_df(parsed_path)
     bench_df = load_csv_df(bench_path)
@@ -509,6 +542,9 @@ def compare_readme_to_bench(
 
     parsed_n = _normalize_identity_df(parsed_df)
     bench_n = _normalize_identity_df(bench_df)
+    if dataset_label is not None:
+        parsed_n = _filter_by_dataset_label(parsed_n, dataset_label)
+        bench_n = _filter_by_dataset_label(bench_n, dataset_label)
 
     g_sizes = bench_n.groupby(list(KEY_MERGE), sort=False).size()
     _append_duplicate_labels(g_sizes, out, left=False)
@@ -618,6 +654,8 @@ def compare_bench_to_bench(
     left_path: Path,
     right_label: str,
     right_path: Path,
+    *,
+    dataset_label: str | None = None,
 ) -> ComparisonResult:
     left_df = load_csv_df(left_path)
     right_df = load_csv_df(right_path)
@@ -631,6 +669,9 @@ def compare_bench_to_bench(
 
     left_n = _normalize_identity_df(left_df)
     right_n = _normalize_identity_df(right_df)
+    if dataset_label is not None:
+        left_n = _filter_by_dataset_label(left_n, dataset_label)
+        right_n = _filter_by_dataset_label(right_n, dataset_label)
 
     _append_duplicate_labels(
         left_n.groupby(list(KEY_MERGE), sort=False).size(),
@@ -921,6 +962,14 @@ def compare_entry(
             "Repeat for multiple patterns."
         ),
     ),
+    dataset: str | None = typer.Option(
+        None,
+        "--dataset",
+        help=(
+            "Keep only rows for one benchmark dataset: "
+            f"{_dataset_cli_error_choices()} (FYP merged: merged or fyp_merged)."
+        ),
+    ),
 ) -> None:
     """Compare any two datasources (delta = right − left)."""
     if getattr(ctx, "resilient_parsing", False):
@@ -939,6 +988,14 @@ def compare_entry(
         raise typer.Exit(2)
     if l == r:
         _err_console.print("[red]error: --left and --right must be different[/red]")
+        raise typer.Exit(2)
+
+    dataset_label = _resolve_dataset_cli_flag(dataset)
+    if dataset is not None and dataset_label is None:
+        _err_console.print(
+            f"[red]error: invalid --dataset {dataset!r}; "
+            f"expected one of: {_dataset_cli_error_choices()}[/red]"
+        )
         raise typer.Exit(2)
 
     configure_logging()
@@ -983,6 +1040,7 @@ def compare_entry(
                 right_label=r,
                 left_is_readme=True,
                 headline=f"{l} vs {r} (delta = {r} − {l})",
+                dataset_label=dataset_label,
             )
         else:
             bench_path = _bench_path_for_ds(l, ds_paths)
@@ -994,13 +1052,16 @@ def compare_entry(
                 right_label=r,
                 left_is_readme=False,
                 headline=f"{l} vs {r} (delta = {r} − {l})",
+                dataset_label=dataset_label,
             )
     else:
         left_path = _bench_path_for_ds(l, ds_paths)
         right_path = _bench_path_for_ds(r, ds_paths)
         _require_file_exists(left_path, label=l)
         _require_file_exists(right_path, label=r)
-        result = compare_bench_to_bench(l, left_path, r, right_path)
+        result = compare_bench_to_bench(
+            l, left_path, r, right_path, dataset_label=dataset_label
+        )
 
     assert result is not None
     if include:
