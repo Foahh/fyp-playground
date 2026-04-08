@@ -14,7 +14,7 @@ model:
   pretrained: true
   pretrained_dataset: coco
   pretrained_input_shape: [3, 320, 320]
-  input_shape: [3, 256, 256]
+  input_shape: [3, 320, 320]
   num_classes: 2
 
 dataset:
@@ -23,7 +23,7 @@ dataset:
   class_names: [hand, tool]
   seed: 127
   num_workers: 8
-  multiscale_range: 2
+  multiscale_range: 1
   training_path: " "
   train_images_path: ./datasets/fyp_merged/train
   train_annotations_path: ./datasets/fyp_merged/annotations/instances_train.json
@@ -33,34 +33,34 @@ dataset:
   test_annotations_path: ./datasets/fyp_merged/annotations/instances_test.json
   quantization_split: 1
   quantization_path: ./datasets/fyp_merged/val
-  mosaic_prob: 0.6
-  mixup_prob: 0.05
-  hsv_prob: 0.8
+  mosaic_prob: 0.35
+  mixup_prob: 0.0
+  hsv_prob: 0.6
   flip_prob: 0.5
-  degrees: 3.0
-  translate: 0.05
-  mosaic_scale: (0.7, 1.3)
-  enable_mixup: true
-  mixup_scale: (0.8, 1.2)
-  shear: 1.0
+  degrees: 2.0
+  translate: 0.03
+  mosaic_scale: (0.8, 1.2)
+  enable_mixup: false
+  mixup_scale: (1.0, 1.0)
+  shear: 0.5
 
 training:
   trainer_name: yolod
-  batch_size: 32
-  warmup_epochs: 3
-  epochs: 180
+  batch_size: 24
+  warmup_epochs: 4
+  epochs: 220
   scheduler: yoloxwarmcos
-  no_aug_epochs: 25
+  no_aug_epochs: 35
   ema: true
   print_interval: 1
   eval_interval: 1
   save_history_ckpt: true
   optimizer:
     SGD:
-      learning_rate: 0.0008
+      learning_rate: 0.0007
       momentum: 0.9
       warmup_lr: 0.0
-      min_lr_ratio: 0.05
+      min_lr_ratio: 0.01
       weight_decay: 5.0e-4
   resume_training_from: ''
   start_epoch: 0
