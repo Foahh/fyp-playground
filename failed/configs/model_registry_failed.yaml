@@ -1,0 +1,17 @@
+  - config: configs/tinyissimoyolo_v8_320_fyp_merged_config.yaml
+    model: results/model/tinyissimoyolo_v8_320_quant_pc_ui_fyp_merged.tflite
+    family: tinyissimoyolo_v8
+    variant: tinyissimoyolo_v8_320_fyp_merged
+    hyperparameters: ""
+    dataset: FYP-Merged
+    fmt: Int8
+    resolution: 320
+
+  - config: configs/yolo26_fyp_merged_config.yaml
+    model: results/model/yolo26_320_quant_pc_ui_fyp_merged.tflite
+    family: yolo26
+    variant: yolo26_320_fyp_merged
+    hyperparameters: ""
+    dataset: FYP-Merged
+    fmt: Int8
+    resolution: 320

@@ -31,8 +31,8 @@ Use ``--delta METRIC:THRESH`` (repeatable) to keep only listed metrics whose num
 at least ``THRESH`` (raw delta, not percent). Rows without a numeric ``Δ`` stay listed; empty
 ``stedgeai_version`` match rows are omitted (same as ``--delta-pct``).
 
-Use ``--dataset`` to restrict rows to one CSV dataset label (e.g. ``fyp_merged`` or ``merged`` for
-``FYP-Merged``, ``80`` for ``COCO-80``, ``person`` for ``COCO-Person``).
+Use ``--dataset`` to restrict rows to one CSV dataset label
+(``80`` for ``COCO-80`` or ``person`` for ``COCO-Person``).
 """
 
 from __future__ import annotations
@@ -138,8 +138,6 @@ _DATASOURCE_CHOICES = (
 _DATASET_CLI_TO_LABEL: dict[str, str] = {
     "80": "COCO-80",
     "person": "COCO-Person",
-    "merged": "FYP-Merged",
-    "fyp_merged": "FYP-Merged",
 }
 
 
@@ -156,7 +154,7 @@ def _dataset_cli_error_choices() -> str:
 
 
 def _resolve_dataset_cli_flag(raw: str | None) -> str | None:
-    """Return CSV dataset label or None. *raw* is a single CLI token (e.g. ``fyp_merged``)."""
+    """Return CSV dataset label or None. *raw* is a single CLI token."""
     if raw is None:
         return None
     key = (raw or "").strip().casefold().replace("-", "_")
@@ -967,7 +965,7 @@ def compare_entry(
         "--dataset",
         help=(
             "Keep only rows for one benchmark dataset: "
-            f"{_dataset_cli_error_choices()} (FYP merged: merged or fyp_merged)."
+            f"{_dataset_cli_error_choices()}."
         ),
     ),
 ) -> None:
