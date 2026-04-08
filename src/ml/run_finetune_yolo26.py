@@ -44,8 +44,17 @@ FINETUNE_MULTI_SCALE = 0.2
 FINETUNE_PATIENCE = 60
 
 
-def run_name_for(size: int) -> str:
-    return f"yolo26_{size}"
+def _lr_tag(lr: float) -> str:
+    return f"lr{int(round(lr * 1_000_000))}"
+
+
+def run_name_for(
+    size: int,
+    epochs: int = FINETUNE_EPOCHS,
+    lr0: float = FINETUNE_LR0,
+    patience: int = FINETUNE_PATIENCE,
+) -> str:
+    return f"yolo26_{size}_e{epochs}_{_lr_tag(lr0)}_p{patience}"
 
 
 app = typer.Typer()
@@ -91,7 +100,7 @@ def main(
         help="Early-stopping patience.",
     ),
 ):
-    run_name = run_name_for(size)
+    run_name = run_name_for(size=size, epochs=epochs, lr0=lr0, patience=patience)
     local_run_dir = PROJECT / run_name
     weights_dir = local_run_dir / "weights"
 

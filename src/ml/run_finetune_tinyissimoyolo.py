@@ -35,17 +35,27 @@ from src.dataset.dataset_common import materialize_fyp_merged_data_yaml
 TINY = ROOT / "external" / "TinyissimoYOLO"
 PROJECT = get_results_dir() / "model"
 
-FINETUNE_EPOCHS = 220
-FINETUNE_LR0 = 0.001
+FINETUNE_EPOCHS = 260
+FINETUNE_LR0 = 0.0008
 FINETUNE_BATCH = 32
 FINETUNE_NBS = 64
+FINETUNE_PATIENCE = 70
 
 SOURCE_RUN_NAME = "tinyissimoyolo_v8_320"
 FINETUNE_IMGSZ = 320
 
 
-def run_name_for(size: int) -> str:
-    return f"tinyissimoyolo_v8_{size}"
+def _lr_tag(lr: float) -> str:
+    return f"lr{int(round(lr * 1_000_000))}"
+
+
+def run_name_for(
+    size: int,
+    epochs: int = FINETUNE_EPOCHS,
+    lr0: float = FINETUNE_LR0,
+    patience: int = FINETUNE_PATIENCE,
+) -> str:
+    return f"tinyissimoyolo_v8_{size}_e{epochs}_{_lr_tag(lr0)}_p{patience}"
 
 
 def prune_epoch_checkpoints(trainer, keep: int = 5) -> None:
@@ -100,11 +110,31 @@ def main(
         "--no-resume",
         help="Do not resume: start a new run from the resolved weights (ignore last.pt in the output dir).",
     ),
+    size: int = typer.Option(
+        FINETUNE_IMGSZ,
+        "--size",
+        help="Training image size (deployment target is usually 320).",
+    ),
+    epochs: int = typer.Option(
+        FINETUNE_EPOCHS,
+        "--epochs",
+        help="Max finetune epochs.",
+    ),
+    lr0: float = typer.Option(
+        FINETUNE_LR0,
+        "--lr0",
+        help="Initial learning rate.",
+    ),
+    patience: int = typer.Option(
+        FINETUNE_PATIENCE,
+        "--patience",
+        help="Early-stopping patience.",
+    ),
 ):
     if not TINY.is_dir():
         raise FileNotFoundError(f"Expected TinyissimoYOLO at {TINY}")
 
-    run_name = run_name_for(FINETUNE_IMGSZ)
+    run_name = run_name_for(size=size, epochs=epochs, lr0=lr0, patience=patience)
     local_run_dir = PROJECT / run_name
     weights_dir = local_run_dir / "weights"
 
@@ -142,14 +172,13 @@ def main(
 
     train_kw: dict = {
         "data": data_yaml,
-        "imgsz": FINETUNE_IMGSZ,
-        "epochs": FINETUNE_EPOCHS,
-        "optimizer": "SGD",
+        "imgsz": size,
+        "epochs": epochs,
+        "optimizer": "AdamW",
         "batch": FINETUNE_BATCH,
         "nbs": FINETUNE_NBS,
-        "lr0": FINETUNE_LR0,
+        "lr0": lr0,
         "lrf": 0.01,
-        "momentum": 0.937,
         "weight_decay": 0.0005,
         "warmup_epochs": 3.0,
         "warmup_bias_lr": 0.01,
@@ -157,19 +186,23 @@ def main(
         "cos_lr": True,
         "amp": True,
         "hsv_h": 0.015,
-        "hsv_s": 0.4,
-        "hsv_v": 0.2,
+        "hsv_s": 0.35,
+        "hsv_v": 0.15,
         "fliplr": 0.5,
-        "translate": 0.05,
-        "scale": 0.25,
-        "mosaic": 0.6,
-        "mixup": 0.05,
-        "close_mosaic": 25,
+        "translate": 0.03,
+        "scale": 0.15,
+        "mosaic": 0.4,
+        "mixup": 0.0,
+        "close_mosaic": 15,
+        "box": 8.5,
+        "cls": 1.2,
+        "flipud": 0.0,
+        "single_cls": False,
         "deterministic": False,
         "project": str(PROJECT),
         "name": run_name,
         "exist_ok": True,
-        "patience": 30,
+        "patience": patience,
         "resume": resume_val,
         "save_period": 10,
     }
