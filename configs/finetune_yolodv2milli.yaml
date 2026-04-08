@@ -33,9 +33,9 @@ dataset:
   test_annotations_path: ./datasets/fyp_merged/annotations/instances_test.json
   quantization_split: 1
   quantization_path: ./datasets/fyp_merged/val
-  mosaic_prob: 0.35
+  mosaic_prob: 0.4
   mixup_prob: 0.0
-  hsv_prob: 0.6
+  hsv_prob: 0.8
   flip_prob: 0.5
   degrees: 2.0
   translate: 0.03
@@ -47,8 +47,8 @@ dataset:
 training:
   trainer_name: yolod
   batch_size: 24
-  warmup_epochs: 4
-  epochs: 220
+  warmup_epochs: 3
+  epochs: 260
   scheduler: yoloxwarmcos
   no_aug_epochs: 35
   ema: true
@@ -56,11 +56,10 @@ training:
   eval_interval: 1
   save_history_ckpt: true
   optimizer:
-    SGD:
+    AdamW:
       learning_rate: 0.0007
-      momentum: 0.9
       warmup_lr: 0.0
-      min_lr_ratio: 0.01
+      min_lr_ratio: 0.05
       weight_decay: 5.0e-4
   resume_training_from: ''
   start_epoch: 0

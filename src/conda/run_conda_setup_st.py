@@ -23,6 +23,7 @@ from src.conda.conda_setup_common import (
 
 STZOO_ENV_NAME = os.environ.get("FYP_STZOO_ENV", "fyp-st")
 PYTHON_VERSION = "3.12.9"
+PYTORCH_CUDA128_INDEX = "https://download.pytorch.org/whl/cu128"
 
 
 def main() -> None:
@@ -39,6 +40,17 @@ def main() -> None:
         sys.exit(1)
 
     ensure_conda_env(STZOO_ENV_NAME, PYTHON_VERSION, f"Python {PYTHON_VERSION}")
+
+
+    if platform.system() == "Linux":
+        pip_install(
+            STZOO_ENV_NAME,
+            "torch",
+            "torchvision",
+            "torchaudio",
+            "--index-url",
+            PYTORCH_CUDA128_INDEX,
+        )
 
     if platform.system() == "Linux":
         activate_d = Path(conda_prefix(STZOO_ENV_NAME)) / "etc" / "conda" / "activate.d"
