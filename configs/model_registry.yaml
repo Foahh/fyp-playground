@@ -537,6 +537,15 @@
     fmt: Int8
     resolution: 320
 
+  - config: configs/tinyissimoyolo_v8_320_fyp_merged_config.yaml
+    model: results/model/tinyissimoyolo_v8_320_quant_pc_ui_fyp_merged.tflite
+    family: tinyissimoyolo_v8
+    variant: tinyissimoyolo_v8_320_fyp_merged
+    hyperparameters: ""
+    dataset: FYP-Merged
+    fmt: Int8
+    resolution: 320
+
   - config: configs/yolo26_config.yaml
     model: 
       external/ultralytics/examples/YOLOv8-STEdgeAI/stedgeai_models/object_detection/yolo26/yolo26_256_qdq_int8_od_coco-person-st.onnx

@@ -42,3 +42,4 @@
 "2026-04-01T20:41:50.467948+00:00","tinyissimoyolo_v8","tinyissimoyolo_v8_288","","COCO-Person","Int8","288","55.4"
 "2026-04-03T09:58:07.905936+00:00","tinyissimoyolo_v8","tinyissimoyolo_v8_320","","COCO-Person","Int8","320","55.9"
 "2026-04-07T06:28:41.332041+00:00","yolo26","yolo26_320_fyp_merged","","FYP-Merged","Int8","320","70.1"
+"2026-04-08T04:27:19.892127+00:00","tinyissimoyolo_v8","tinyissimoyolo_v8_320_fyp_merged","","FYP-Merged","Int8","320","67.3"
