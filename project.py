@@ -35,6 +35,7 @@ LOCAL_COMMANDS: dict[str, str] = {
     "train-person": "src/ml/run_train_tinyissimo_coco_person.py",
     "train-coco80-320": "src/ml/run_train_tinyissimo_coco80_320.py",
     "quantize-tiny": "src/ml/run_quantize_tinyissimo_coco_person.py",
+    "quantize-tiny-finetuned": "src/ml/run_quantize_tinyissimo_finetuned.py",
     "prepare-finetune-dataset": "src/ml/run_prepare_finetune_dataset.py",
     "finetune-st": "src/ml/run_finetune_st.py",
     "finetune-tiny": "src/ml/run_finetune_tinyissimoyolo.py",
@@ -62,6 +63,7 @@ _ML_COMMANDS = frozenset(
         "finetune-yolo26",
         "pseudo-label",
         "quantize-tiny",
+        "quantize-tiny-finetuned",
         "quantize-yolo26-finetuned",
     }
 )
