@@ -1,0 +1,3 @@
+"host_time_iso","model_family","model_variant","hyperparameters","dataset","format","resolution","ap_50"
+"2026-04-07T06:28:41.332041+00:00","yolo26","yolo26_320_fyp_merged","","FYP-Merged","Int8","320","70.1"
+"2026-04-08T04:27:19.892127+00:00","tinyissimoyolo_v8","tinyissimoyolo_v8_320_fyp_merged","","FYP-Merged","Int8","320","67.3"

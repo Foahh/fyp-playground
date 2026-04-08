@@ -18,30 +18,28 @@ from src.conda.conda_setup_common import (
 ROOT = Path(__file__).resolve().parent
 
 LOCAL_COMMANDS: dict[str, str] = {
-    "download-coco": "src/dataset/run_download_coco_dataset.py",
-    "download-finetune": "src/dataset/run_download_finetune_dataset.py",
-    "view-finetune-labels": "src/dataset/view_yolo_labels.py",
-    "benchmark": "src/benchmark/run_benchmark.py",
-    "generate-model": "src/benchmark/run_generate_model.py",
+    # env
+    "setup-env-ml": "src/conda/run_conda_setup_ml.py",
+    "setup-env-st": "src/conda/run_conda_setup_st.py",
+    # dataset
+    "download-dataset": "src/dataset/download_dataset.py",
+    # benchmark
     "evaluate": "src/benchmark/run_evaluate.py",
+    "generate-model": "src/benchmark/run_generate_model.py",
+    "benchmark": "src/benchmark/run_benchmark.py",
+    "parse-modelzoo": "src/benchmark/run_parse_modelzoo_readme.py",
+    # post-benchmark
     "compare": "src/benchmark/run_compare.py",
     "select-model": "src/benchmark/run_model_selection.py",
     "verify-model-config": "src/benchmark/run_check_model_dtypes.py",
     "verify-idle-power": "src/benchmark/run_verify_idle_power.py",
     "estimate-battery": "src/benchmark/run_estimate_battery.py",
-    "parse-modelzoo": "src/benchmark/run_parse_modelzoo_readme.py",
-    "setup-env-ml": "src/conda/run_conda_setup_ml.py",
-    "setup-env-st": "src/conda/run_conda_setup_st.py",
+    # train
     "train-person": "src/ml/run_train_tinyissimo_coco_person.py",
-    "train-coco80-320": "src/ml/run_train_tinyissimo_coco80_320.py",
+    # finetune
+    # quantize
     "quantize-tiny": "src/ml/run_quantize_tinyissimo_coco_person.py",
-    "quantize-tiny-finetuned": "src/ml/run_quantize_tinyissimo_finetuned.py",
-    "prepare-finetune-dataset": "src/ml/run_prepare_finetune_dataset.py",
-    "finetune-st": "src/ml/run_finetune_st.py",
-    "finetune-tiny": "src/ml/run_finetune_tinyissimoyolo.py",
-    "finetune-yolo26": "src/ml/run_finetune_yolo26.py",
-    "quantize-yolo26-finetuned": "src/ml/run_quantize_yolo26_finetuned.py",
-    "pseudo-label": "src/ml/run_pseudo_label.py",
+    # dev
     "format": "src/dev/run_format.py",
 }
 
@@ -54,17 +52,9 @@ _BASE_ENV_COMMANDS = frozenset(
 
 _ML_COMMANDS = frozenset(
     {
-        "download-coco",
-        "download-finetune",
-        "view-finetune-labels",
+        "download-dataset",
         "train-person",
-        "train-coco80-320",
-        "finetune-tiny",
-        "finetune-yolo26",
-        "pseudo-label",
         "quantize-tiny",
-        "quantize-tiny-finetuned",
-        "quantize-yolo26-finetuned",
     }
 )
 
@@ -77,8 +67,6 @@ _ST_COMMANDS = frozenset(
         "evaluate",
         "compare",
         "select-model",
-        "prepare-finetune-dataset",
-        "finetune-st",
         "verify-model-config",
         "verify-idle-power",
         "estimate-battery",

@@ -36,7 +36,7 @@ All workflows are exposed as the first argument to [`project.py`](project.py). E
 | --- | --- | --- |
 | `setup-env-ml` | *(none — runs installer)* | Create/update `fyp-ml` (train, datasets, quantize) |
 | `setup-env-st` | *(none)* | Create/update `fyp-st` |
-| `download-coco` | `fyp-ml` | Download and prepare COCO (person) for training |
+| `download-dataset` | `fyp-ml` | Download and prepare COCO (person) for training |
 | `download-finetune` | `fyp-ml` | Download and prepare hand / hazardous-tool finetune sources |
 | `train` | `fyp-ml` | Train TinyissimoYOLO |
 | `quantize` | `fyp-ml` | INT8 TFLite export from a trained checkpoint |
@@ -59,7 +59,7 @@ git submodule update --init --recursive
 python project.py setup-env-ml
 python project.py setup-env-st
 
-python project.py download-coco
+python project.py download-dataset
 python project.py train --size 192
 python project.py quantize --size 192
 
@@ -115,7 +115,7 @@ Command mapping:
 
 | Command | Env |
 |---|---|
-| `download-coco`, `download-finetune`, `train`, `quantize` | `fyp-ml` |
+| `download-dataset`, `download-finetune`, `train`, `quantize` | `fyp-ml` |
 | `benchmark`, `evaluate`, `compare`, `select-model`, `verify-model-config`, `parse-modelzoo`, `prepare-finetune-dataset`, `finetune` | `fyp-st` |
 | `setup-env-ml`, `setup-env-st` | base or any env with `conda` |
 
@@ -142,30 +142,18 @@ Default dataset location is `./datasets`:
 
 ```sh
 mkdir -p ./datasets
-python project.py download-coco
+python project.py download-dataset
 ```
 
 To use a different dataset directory:
 
 ```sh
-FYP_DATASETS_DIR=~/datasets python project.py download-coco
+FYP_DATASETS_DIR=~/datasets python project.py download-dataset
 ```
-
-### Finetune source datasets (optional)
-
-For hand / hazardous-tool detection finetunes, download and convert sources in `fyp-ml`:
-
-```sh
-python project.py download-finetune
-python project.py download-finetune -- --dataset ego2hands
-python project.py download-finetune -- --skip-download
-```
-
-See the docstring in [`src/dataset/run_download_finetune_dataset.py`](src/dataset/run_download_finetune_dataset.py) for all datasets and flags.
 
 ---
 
-## 2. Train
+## 1. Train
 
 Train TinyissimoYOLO in `fyp-ml`.
 

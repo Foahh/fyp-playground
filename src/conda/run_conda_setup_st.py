@@ -41,7 +41,6 @@ def main() -> None:
 
     ensure_conda_env(STZOO_ENV_NAME, PYTHON_VERSION, f"Python {PYTHON_VERSION}")
 
-
     if platform.system() == "Linux":
         pip_install(
             STZOO_ENV_NAME,

@@ -1,4 +1,5 @@
 pycocotools>=2.0.11
+datasets>=4.8.4
 
 ultralytics[export]>=8.4.33
 

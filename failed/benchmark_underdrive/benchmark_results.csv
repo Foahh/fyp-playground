@@ -1,0 +1,3 @@
+"host_time_iso","stedgeai_version","cpu_mhz","npu_mhz","model_family","model_variant","hyperparameters","dataset","format","resolution","inference_time_ms","inf_per_sec","pm_avg_inf_mW","pm_avg_idle_mW","pm_avg_delta_mW","pm_avg_inf_ms","pm_avg_idle_ms","pm_avg_inf_mJ","pm_avg_idle_mJ"
+"2026-04-08T04:29:18.804176+00:00","4.0.0","400","400","tinyissimoyolo_v8","tinyissimoyolo_v8_320_fyp_merged","","FYP-Merged","Int8","320","38.981","25.65","788.541","728.290","60.251","39.573","83.197","31.205","60.592"
+"2026-04-08T04:36:29.131513+00:00","4.0.0","400","400","yolo26","yolo26_320_fyp_merged","","FYP-Merged","Int8","320","69.828","14.32","811.160","730.919","80.241","70.657","82.992","57.314","60.660"

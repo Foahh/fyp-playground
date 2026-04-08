@@ -12,7 +12,6 @@ from ..paths import (
     COCO_IMAGES,
     COCO_PERSON_ANNOTATIONS,
     COCO_PERSON_TFS_TEST,
-    FYP_MERGED_TFS_TEST,
     SERVICES_DIR,
     STEDGEAI_PATH,
 )
@@ -56,9 +55,6 @@ def build_eval_config(entry: ModelEntry) -> Path:
     elif entry.dataset == "COCO-80":
         tfs_test = COCO_80_TFS_TEST
         coco_annotations = COCO_80_ANNOTATIONS
-    elif entry.dataset == "FYP-Merged":
-        tfs_test = FYP_MERGED_TFS_TEST
-        coco_annotations = COCO_80_ANNOTATIONS  # unused for tfs format
     else:
         raise ValueError(f"Invalid dataset: {entry.dataset}")
 
