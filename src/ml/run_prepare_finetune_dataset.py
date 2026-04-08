@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
 """Prepare an ST Model Zoo object-detection dataset for finetuning.
 
-Materializes TensorFlow-serialized ``.tfs`` label files next to images for each split
-(``training_path``, ``validation_path``, ``test_path``) so host evaluation and
-benchmarks can load ``.jpg``/``.tfs`` pairs — including non-``.jpg`` image extensions.
+For ``dataset.format: coco`` (PyTorch / Hydra finetune configs), builds COCO
+``instances_*.json`` files next to ``train_annotations_path`` / ``val_annotations_path``
+/ ``test_annotations_path`` from YOLO ``.txt`` labels in the image folders.
+
+For ``dataset.format: tfs`` (or other layouts using flat ``training_path``), materializes
+TensorFlow-serialized ``.tfs`` label files next to images for each split
+(``training_path``, ``validation_path``, ``test_path``) so evaluation and benchmarks can
+load ``.jpg``/``.tfs`` pairs — including non-``.jpg`` image extensions.
+
+ST COCO configs use ``training_path: " "`` (placeholder); that is treated as unset for TFS.
 """
 
 from __future__ import annotations
@@ -32,6 +39,18 @@ def _load_config(config_file: Path) -> dict:
 
 def _resolve_repo_path(path_value: str) -> Path:
     return (ROOT / path_value).resolve()
+
+
+def _effective_training_path_for_tfs(dataset: dict) -> str | None:
+    """Return a non-empty training_path for flat-directory TFS layout, else None.
+
+    ST COCO YAML examples set ``training_path: " "``; that must not trigger TFS creation.
+    """
+    raw = dataset.get("training_path")
+    if raw is None:
+        return None
+    s = str(raw).strip()
+    return s or None
 
 
 def _is_image_file(path: Path) -> bool:
@@ -187,15 +206,23 @@ def _materialize_tfs_from_dataset_yaml(config_file: Path) -> None:
     """Create ``.tfs`` for training / validation / test paths declared in the dataset config."""
     data = _load_config(config_file)
     ds = data.get("dataset") or {}
-    if not ds.get("training_path"):
+    if ds.get("format") == "coco":
         print(
-            "[prepare-finetune-dataset] No dataset.training_path; skipping TFS creation.",
+            "[prepare-finetune-dataset] dataset.format=coco; skipping flat-directory .tfs "
+            "(ST training consumes COCO JSON; use converter/data_dir if you need TFS)."
+        )
+        return
+
+    train_rel = _effective_training_path_for_tfs(ds)
+    if not train_rel:
+        print(
+            "[prepare-finetune-dataset] No usable dataset.training_path; skipping TFS creation.",
             file=sys.stderr,
         )
         return
 
     settings = data.get("settings") or {}
-    train_dir = _resolve_repo_path(str(ds["training_path"]))
+    train_dir = _resolve_repo_path(train_rel)
     padded = _resolve_padded_labels_size(train_dir, settings)
     exclude = bool(settings.get("exclude_unlabeled_images", False))
 
@@ -290,6 +317,11 @@ def _convert_split_yolo_to_coco(
         for idx, name in enumerate(class_names)
     ]
     payload = {
+        "info": {
+            "description": "fyp-playground YOLO→COCO export",
+            "version": "1.0",
+        },
+        "licenses": [],
         "images": images,
         "annotations": annotations,
         "categories": categories,
@@ -297,7 +329,10 @@ def _convert_split_yolo_to_coco(
 
     output_json.parent.mkdir(parents=True, exist_ok=True)
     with output_json.open("w", encoding="utf-8") as f:
-        json.dump(payload, f)
+        json.dump(payload, f, ensure_ascii=False)
+
+    with output_json.open(encoding="utf-8") as f:
+        json.load(f)
 
     return len(images), len(annotations)
 
@@ -347,9 +382,21 @@ def _ensure_coco_annotations(config_file: Path, force: bool = False) -> None:
     required_jsons = [train_json, val_json]
     if test_json is not None:
         required_jsons.append(test_json)
-    if not force and all(path.is_file() for path in required_jsons):
+
+    def _coco_json_ok(path: Path) -> bool:
+        if not path.is_file() or path.suffix.lower() != ".json":
+            return False
+        try:
+            with path.open(encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+            return False
+        return isinstance(data, dict) and "images" in data and "annotations" in data
+
+    if not force and all(_coco_json_ok(p) for p in required_jsons):
         print(
-            "[prepare-finetune-dataset] COCO annotation JSON files already exist; skipping regeneration."
+            "[prepare-finetune-dataset] COCO annotation JSON files already present and valid; "
+            "skipping regeneration."
         )
         return
 

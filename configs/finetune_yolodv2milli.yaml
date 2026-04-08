@@ -13,7 +13,7 @@ model:
   model_name: st_yolodv2milli_actrelu_pt
   pretrained: true
   pretrained_dataset: coco
-  pretrained_input_shape: [3, 640, 640]
+  pretrained_input_shape: [3, 320, 320]
   input_shape: [3, 256, 256]
   num_classes: 2
 
