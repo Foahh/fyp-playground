@@ -9,6 +9,7 @@ longer idle windows used during power measurement.
 From repo root:
     ./project.py estimate-battery --mah 500
     ./project.py estimate-battery --mah 1000 --mode underdrive
+    ./project.py estimate-battery --mah 500 --table-format ai
 """
 
 from __future__ import annotations
@@ -23,6 +24,10 @@ from rich.console import Console
 from rich.table import Table
 
 from src.benchmark.paths import benchmark_paths_for_mode
+from src.benchmark.utils.table_format import (
+    ai_markdown_table,
+    normalize_table_format,
+)
 
 _MODES = ("underdrive", "nominal", "overdrive")
 
@@ -116,6 +121,55 @@ def _render_table(
     return table
 
 
+def _render_ai_table(
+    estimates: pd.DataFrame,
+    *,
+    mode: str,
+    battery_mah: float,
+    voltage: float,
+    idle_ms: float,
+) -> str:
+    title = (
+        f"Battery Life Estimates — {mode} mode "
+        f"| {battery_mah:.0f} mAh @ {voltage:.2f} V "
+        f"({battery_mah * voltage:.0f} mWh) "
+        f"| inter-frame idle {idle_ms:g} ms"
+    )
+    headers = [
+        "#",
+        "Model Variant",
+        "fmt",
+        "res",
+        "Idle_mW",
+        "Inf_mW",
+        "Avg_mW",
+        "Duty_pct",
+        "Life_h",
+        "Life_d+h",
+    ]
+    rows: list[list[str]] = []
+    for i, row in estimates.iterrows():
+        life_h = row["battery_life_h"]
+        days = int(life_h // 24)
+        rem_h = life_h % 24
+        dhm = f"{days}d {rem_h:.1f}h" if days else f"{rem_h:.1f}h"
+        rows.append(
+            [
+                str(int(i) + 1),
+                str(row["model_variant"]),
+                str(row["format"]),
+                str(int(row["resolution"])),
+                f"{row['pm_avg_idle_mW']:.1f}",
+                f"{row['pm_avg_inf_mW']:.1f}",
+                f"{row['avg_power_mW']:.1f}",
+                f"{row['duty_cycle_pct']:.1f}",
+                f"{life_h:.2f}",
+                dhm,
+            ]
+        )
+    return title + "\n\n" + ai_markdown_table(headers, rows).rstrip()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
@@ -155,10 +209,22 @@ def main(argv: list[str] | None = None) -> int:
             f"default: {DEFAULT_IDLE_MS})."
         ),
     )
+    parser.add_argument(
+        "--table-format",
+        type=str,
+        default="rich",
+        help="Tabular output: 'rich' (terminal) or 'ai' (compact Markdown, smaller context).",
+    )
     args = parser.parse_args(argv)
     if args.idle_ms <= 0:
         print("Error: --idle-ms must be positive.", file=sys.stderr)
         return 1
+
+    try:
+        tf = normalize_table_format(args.table_format)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 2
 
     csv_path = benchmark_paths_for_mode(args.mode).csv_path
     if not csv_path.is_file():
@@ -179,19 +245,31 @@ def main(argv: list[str] | None = None) -> int:
             return 1
 
     estimates = _estimate(df, args.mah, args.voltage, idle_ms=args.idle_ms)
-    term_width = shutil.get_terminal_size((140, 25)).columns
-    width = max(term_width, 140)
-    console = Console(width=width, _environ={"COLUMNS": str(width)})
-    console.print(
-        _render_table(
-            estimates,
-            mode=args.mode,
-            battery_mah=args.mah,
-            voltage=args.voltage,
-            idle_ms=args.idle_ms,
+    if tf == "ai":
+        print(
+            _render_ai_table(
+                estimates,
+                mode=args.mode,
+                battery_mah=args.mah,
+                voltage=args.voltage,
+                idle_ms=args.idle_ms,
+            )
         )
-    )
-    console.print()
+        print()
+    else:
+        term_width = shutil.get_terminal_size((140, 25)).columns
+        width = max(term_width, 140)
+        console = Console(width=width, _environ={"COLUMNS": str(width)})
+        console.print(
+            _render_table(
+                estimates,
+                mode=args.mode,
+                battery_mah=args.mah,
+                voltage=args.voltage,
+                idle_ms=args.idle_ms,
+            )
+        )
+        console.print()
 
     return 0
 

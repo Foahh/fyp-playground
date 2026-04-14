@@ -33,6 +33,9 @@ at least ``THRESH`` (raw delta, not percent). Rows without a numeric ``Δ`` stay
 
 Use ``--dataset`` to restrict rows to one CSV dataset label
 (``80`` for ``COCO-80`` or ``person`` for ``COCO-Person``).
+
+Use ``--table-format {rich,ai}`` (default ``rich``): ``ai`` emits compact Markdown tables
+for smaller LLM context; ``rich`` keeps Rich terminal layout.
 """
 
 from __future__ import annotations
@@ -51,6 +54,7 @@ from rich.table import Table
 from .constants import CSV_COLUMNS, CSV_COLUMNS_NO_POWER
 from .paths import RESULTS_DIR
 from .utils.logutil import configure_logging, typer_install_exception_hook
+from .utils.table_format import ai_markdown_table, normalize_table_format
 
 DEFAULT_PARSED_CSV = RESULTS_DIR / "benchmark_parsed.csv"
 DEFAULT_UNDERDRIVE_CSV = RESULTS_DIR / "benchmark_underdrive_results.csv"
@@ -810,29 +814,39 @@ def print_comparison_report(
     delta_pct: float | None = None,
     delta_abs_before: int | None = None,
     delta_abs_desc: str | None = None,
+    table_format: str = "rich",
 ) -> None:
-    console = Console()
-    console.print(result.headline)
+    is_ai = table_format == "ai"
+    console = Console() if not is_ai else None
+
+    def _emit(s: str = "") -> None:
+        if is_ai:
+            print(s)
+        else:
+            assert console is not None
+            console.print(s)
+
+    _emit(result.headline)
 
     body_rows, stedge_rows = _partition_stedgeai_rows(result.delta_rows)
     hoist = _stedgeai_hoist_banner(stedge_rows, result.left, result.right)
     if hoist:
-        console.print(hoist)
+        _emit(hoist)
 
     if delta_abs_desc is not None and delta_abs_before is not None:
-        console.print(
+        _emit(
             f"(filtered: {delta_abs_desc} — "
             f"{len(result.delta_rows)} of {delta_abs_before} row(s))"
         )
     if delta_pct is not None and delta_rows_before_filter is not None:
-        console.print(
+        _emit(
             f"(filtered: |Δ%| ≥ {delta_pct:g}% — "
             f"{len(result.delta_rows)} of {delta_rows_before_filter} row(s))"
         )
-    console.print()
+    _emit()
 
     if not body_rows:
-        console.print("No overlapping metric cells (nothing to tabulate).")
+        _emit("No overlapping metric cells (nothing to tabulate).")
     else:
         by_variant_and_format: dict[tuple[str, str], list[dict[str, str]]] = (
             defaultdict(list)
@@ -840,24 +854,32 @@ def print_comparison_report(
         for r in body_rows:
             by_variant_and_format[(r["model_variant"], r["format"])].append(r)
 
+        cols = list(result.table_columns)
         for i, (variant, fmt) in enumerate(sorted(by_variant_and_format.keys())):
             rows = by_variant_and_format[(variant, fmt)]
             rows.sort(key=_row_sort_key)
             if i:
+                _emit()
+            if is_ai:
+                _emit(f"## {variant} | {fmt}")
+                _emit()
+                md_rows = [[r.get(c, "") for c in cols] for r in rows]
+                _emit(ai_markdown_table(cols, md_rows).rstrip())
+            else:
+                assert console is not None
+                console.print(Rule(title=f"{variant} | {fmt}", style="bold"))
                 console.print()
-            console.print(Rule(title=f"{variant} | {fmt}", style="bold"))
-            console.print()
-            table = Table(show_header=True, header_style="bold", show_lines=False)
-            for c in result.table_columns:
-                col_kw = {"overflow": "fold", "no_wrap": c == "metric"}
-                if c == "metric":
-                    col_kw["min_width"] = 22
-                table.add_column(c, **col_kw)
-            for r in rows:
-                table.add_row(*[r.get(c, "") for c in result.table_columns])
-            console.print(table)
+                table = Table(show_header=True, header_style="bold", show_lines=False)
+                for c in cols:
+                    col_kw = {"overflow": "fold", "no_wrap": c == "metric"}
+                    if c == "metric":
+                        col_kw["min_width"] = 22
+                    table.add_column(c, **col_kw)
+                for r in rows:
+                    table.add_row(*[r.get(c, "") for c in cols])
+                console.print(table)
 
-    console.print()
+    _emit()
     parts = [
         f"{result.matched_rows} config(s) matched",
         f"{len(body_rows)} metric cell(s) listed",
@@ -871,15 +893,15 @@ def print_comparison_report(
             0,
             f"{result.skipped_parsed_no_readme} parsed row(s) skipped (no readme metrics)",
         )
-    console.print("Summary: " + "; ".join(parts) + ".")
+    _emit("Summary: " + "; ".join(parts) + ".")
 
     if result.duplicate_left_keys:
-        console.print(
+        _emit(
             f"Note: {len(result.duplicate_left_keys)} duplicate key(s) in {result.left} CSV "
             f"(first row kept): {', '.join(sorted(set(result.duplicate_left_keys)))}"
         )
     if result.duplicate_right_keys:
-        console.print(
+        _emit(
             f"Note: {len(result.duplicate_right_keys)} duplicate key(s) in {result.right} CSV "
             f"(first row kept): {', '.join(sorted(set(result.duplicate_right_keys)))}"
         )
@@ -889,16 +911,16 @@ def print_comparison_report(
             f"Note: {len(result.missing_in_right)} {result.left} config(s) have no {result.right} row "
             f"(compare missed; not in table): {keys}"
         )
-        console.print(msg)
+        _emit(msg)
     if result.missing_in_left:
         keys = ", ".join(sorted(set(result.missing_in_left)))
         msg = (
             f"Note: {len(result.missing_in_left)} {result.right} row(s) have no matching {result.left} row "
             f"(compare missed; not in table): {keys}"
         )
-        console.print(msg)
+        _emit(msg)
     if result.missed_numeric_compare:
-        console.print(
+        _emit(
             f"Note: {result.missed_numeric_compare} metric cell(s) have no delta "
             f"(missing or non-numeric value on one side)."
         )
@@ -967,6 +989,11 @@ def compare_entry(
             f"Keep only rows for one benchmark dataset: {_dataset_cli_error_choices()}."
         ),
     ),
+    table_format: str = typer.Option(
+        "rich",
+        "--table-format",
+        help="Tabular output: 'rich' (terminal) or 'ai' (compact Markdown, smaller context).",
+    ),
 ) -> None:
     """Compare any two datasources (delta = right − left)."""
     if getattr(ctx, "resilient_parsing", False):
@@ -993,6 +1020,12 @@ def compare_entry(
             f"[red]error: invalid --dataset {dataset!r}; "
             f"expected one of: {_dataset_cli_error_choices()}[/red]"
         )
+        raise typer.Exit(2)
+
+    try:
+        tf = normalize_table_format(table_format)
+    except ValueError as e:
+        _err_console.print(f"[red]error: {e}[/red]")
         raise typer.Exit(2)
 
     configure_logging()
@@ -1083,6 +1116,7 @@ def compare_entry(
         delta_pct=delta_pct,
         delta_abs_before=before_delta_abs,
         delta_abs_desc=delta_abs_desc,
+        table_format=tf,
     )
 
 

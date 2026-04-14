@@ -7,6 +7,8 @@ composite ranking score).
 
 From repo root:
   ./project.py select-model [flags]
+
+Use ``--table-format {rich,ai}`` (default ``rich``) for Rich vs compact Markdown tables.
 """
 
 from __future__ import annotations
@@ -25,6 +27,7 @@ from rich.table import Table
 
 from .paths import RESULTS_DIR
 from .utils.logutil import configure_logging, typer_install_exception_hook
+from .utils.table_format import ai_markdown_table, normalize_table_format
 
 DEFAULT_EVAL_CSV = RESULTS_DIR / "evaluation_result.csv"
 DEFAULT_MEMORY_CSV = RESULTS_DIR / "generate_result.csv"
@@ -254,8 +257,42 @@ def _f(v: float, fmt: str = ".1f") -> str:
     return f"{v:{fmt}}"
 
 
-def _print_column_abbreviations_legend() -> None:
+def _print_column_abbreviations_legend(*, table_format: str = "rich") -> None:
     """Short column header glossary for tables printed in this report."""
+    rows_md: list[tuple[str, str]] = [
+        ("AP", "Primary accuracy: AP@50 (ap_50)."),
+        ("ms", "Inference time (inference_time_ms)."),
+        ("mJ", "Energy per inference (pm_avg_inf_mJ)."),
+        (
+            "eff_geo",
+            "Efficiency curve: √(AP/ms × AP/mJ) (efficiency_geo); needs valid AP, latency, and mJ.",
+        ),
+        ("fmt", "Quantisation format (W4A8 excluded from the candidate pool)."),
+        (
+            "dataset",
+            "Evaluation / training dataset label (dataset from benchmark CSV).",
+        ),
+        ("res", "Input resolution in pixels."),
+        ("act_no_io", "Activation KiB without input/output buffers (Issues 4–5)."),
+        ("spill", "Spill KiB past NPU activation budget (npu_spill_kib)."),
+        (
+            "Reason",
+            "Hardware gate failure(s): latency above ceiling and/or weights flash over budget.",
+        ),
+    ]
+    if table_format == "ai":
+        print()
+        print("### Column abbreviations")
+        print()
+        print(
+            ai_markdown_table(
+                ["Abbr", "Meaning"],
+                [list(t) for t in rows_md],
+            ).rstrip()
+        )
+        print()
+        return
+
     _console.print()
     _console.print("  [bold]Column abbreviations[/bold]")
     legend_width = min(92, max(72, (_console.width or 92) - 4))
@@ -301,8 +338,31 @@ def _print_column_abbreviations_legend() -> None:
     _console.print()
 
 
-def print_section0(df: pd.DataFrame, filter_summary: str | None = None) -> None:
-    _print_column_abbreviations_legend()
+def print_section0(
+    df: pd.DataFrame,
+    filter_summary: str | None = None,
+    *,
+    table_format: str = "rich",
+) -> None:
+    _print_column_abbreviations_legend(table_format=table_format)
+    if table_format == "ai":
+        print("## Section 0 — Assumptions & Substituted Values")
+        print()
+        if filter_summary:
+            print(f"Filter summary: {filter_summary}")
+            print()
+
+        power_cols = ["pm_avg_inf_mW", "pm_avg_inf_mJ"]
+        any_missing = any(df[c].isna().all() for c in power_cols if c in df.columns)
+        if any_missing:
+            print(
+                "WARNING: Power columns missing — efficiency_geo may be NaN where mJ is unavailable."
+            )
+        else:
+            print("All benchmark columns present. No placeholders substituted.")
+        print()
+        return
+
     _console.print(Rule("[bold]Section 0 — Assumptions & Substituted Values[/bold]"))
     _console.print()
     if filter_summary:
@@ -325,9 +385,15 @@ def print_section1(
     all_df: pd.DataFrame,
     candidates: pd.DataFrame,
     excluded: pd.DataFrame,
+    *,
+    table_format: str = "rich",
 ) -> None:
-    _console.print(Rule("[bold]Section 1 — Data Cleaning & Anomaly Report[/bold]"))
-    _console.print()
+    if table_format == "ai":
+        print("## Section 1 — Data Cleaning & Anomaly Report")
+        print()
+    else:
+        _console.print(Rule("[bold]Section 1 — Data Cleaning & Anomaly Report[/bold]"))
+        _console.print()
 
     issues = [
         (
@@ -361,34 +427,41 @@ def print_section1(
         ),
     ]
     for title, desc in issues:
-        _console.print(f"  [bold]{title}[/bold]")
-        _console.print(f"    {escape(desc)}")
-        _console.print()
+        if table_format == "ai":
+            print(f"**{title}**")
+            for line in desc.strip().split("\n"):
+                print(line.strip())
+            print()
+        else:
+            _console.print(f"  [bold]{title}[/bold]")
+            _console.print(f"    {escape(desc)}")
+            _console.print()
 
     if excluded.empty:
-        _console.print(
-            "  [dim]Disposition table: no hardware gate failures "
-            "(all filtered rows are candidates).[/dim]"
-        )
+        if table_format == "ai":
+            print(
+                "Disposition: no hardware gate failures (all filtered rows are candidates)."
+            )
+        else:
+            _console.print(
+                "  [dim]Disposition table: no hardware gate failures "
+                "(all filtered rows are candidates).[/dim]"
+            )
     else:
-        table = Table(
-            title="Disposition Table (excluded only)",
-            show_header=True,
-            header_style="bold",
-            show_lines=False,
-        )
-        table.add_column("Model Variant", no_wrap=True)
-        table.add_column("dataset", min_width=10, no_wrap=True)
-        table.add_column("fmt", min_width=4)
-        table.add_column("res", min_width=3)
-        table.add_column("act_no_io", min_width=8, justify="right")
-        table.add_column("spill", min_width=6, justify="right")
-        table.add_column("Flags", min_width=8)
-        table.add_column("Reason", no_wrap=True)
-
         excluded_sorted = excluded.sort_values(
             ["model_variant", "dataset", "resolution", "format"], kind="mergesort"
         )
+        disp_headers = [
+            "Model Variant",
+            "dataset",
+            "fmt",
+            "res",
+            "act_no_io",
+            "spill",
+            "Flags",
+            "Reason",
+        ]
+        md_rows: list[list[str]] = []
         for _, row in excluded_sorted.iterrows():
             reasons: list[str] = []
             if row["inference_time_ms"] > MAX_LATENCY_MS:
@@ -396,80 +469,168 @@ def print_section1(
             if row["weights_flash_kib"] > MAX_WEIGHTS_FLASH_KIB:
                 reasons.append(f"flash={row['weights_flash_kib']:.0f}KiB")
             flag_str = _memory_flags(row)
-            table.add_row(
-                str(row["model_variant"]),
-                str(row.get("dataset", "")),
-                str(row["format"]),
-                str(int(row["resolution"])),
-                _f(row["activations_without_io"]),
-                _f(row["npu_spill_kib"]),
-                escape(flag_str) if flag_str else "",
-                ", ".join(reasons),
+            md_rows.append(
+                [
+                    str(row["model_variant"]),
+                    str(row.get("dataset", "")),
+                    str(row["format"]),
+                    str(int(row["resolution"])),
+                    _f(row["activations_without_io"]),
+                    _f(row["npu_spill_kib"]),
+                    flag_str if flag_str else "",
+                    ", ".join(reasons),
+                ]
             )
+        if table_format == "ai":
+            print(
+                ai_markdown_table(
+                    disp_headers,
+                    md_rows,
+                    title="Disposition Table (excluded only)",
+                ).rstrip()
+            )
+        else:
+            table = Table(
+                title="Disposition Table (excluded only)",
+                show_header=True,
+                header_style="bold",
+                show_lines=False,
+            )
+            table.add_column("Model Variant", no_wrap=True)
+            table.add_column("dataset", min_width=10, no_wrap=True)
+            table.add_column("fmt", min_width=4)
+            table.add_column("res", min_width=3)
+            table.add_column("act_no_io", min_width=8, justify="right")
+            table.add_column("spill", min_width=6, justify="right")
+            table.add_column("Flags", min_width=8)
+            table.add_column("Reason", no_wrap=True)
+            for row_cells in md_rows:
+                table.add_row(
+                    row_cells[0],
+                    row_cells[1],
+                    row_cells[2],
+                    row_cells[3],
+                    row_cells[4],
+                    row_cells[5],
+                    escape(row_cells[6]) if row_cells[6] else "",
+                    row_cells[7],
+                )
+            _console.print(table)
+    if table_format == "ai":
+        print()
+        print(
+            f"Total rows: {len(all_df)} | Candidates: {len(candidates)} | "
+            f"Excluded: {len(excluded)}"
+        )
+        print()
+    else:
+        _console.print()
+        _console.print(
+            f"  Total rows: {len(all_df)} | Candidates: {len(candidates)} | "
+            f"Excluded: {len(excluded)}"
+        )
+        _console.print()
 
-        _console.print(table)
-    _console.print()
-    _console.print(
-        f"  Total rows: {len(all_df)} | Candidates: {len(candidates)} | "
-        f"Excluded: {len(excluded)}"
-    )
-    _console.print()
 
+def print_section3(
+    candidates: pd.DataFrame,
+    *,
+    table_format: str = "rich",
+) -> None:
+    if table_format == "ai":
+        print("## Section 3 — Candidate Models (grouped by family)")
+        print()
+        print(
+            "Each table lists gated-pass variants for one (model_family, hyperparameters) group. "
+            "eff_geo = √(AP/ms × AP/mJ) when energy data is valid."
+        )
+        print()
+    else:
+        _console.print(
+            Rule("[bold]Section 3 — Candidate Models (grouped by family)[/bold]")
+        )
+        _console.print()
+        _console.print(
+            "  [dim]Each table lists all gated-pass variants for one "
+            "(model_family, hyperparameters) group. "
+            "[bold]eff_geo[/bold] = √(AP/ms × AP/mJ) when energy data is valid.[/dim]"
+        )
+        _console.print()
 
-def print_section3(candidates: pd.DataFrame) -> None:
-    _console.print(
-        Rule("[bold]Section 3 — Candidate Models (grouped by family)[/bold]")
-    )
-    _console.print()
-    _console.print(
-        "  [dim]Each table lists all gated-pass variants for one "
-        "(model_family, hyperparameters) group. "
-        "[bold]eff_geo[/bold] = √(AP/ms × AP/mJ) when energy data is valid.[/dim]"
-    )
-    _console.print()
-
+    cand_headers = [
+        "Variant",
+        "dataset",
+        "fmt",
+        "res",
+        "AP",
+        "ms",
+        "mJ",
+        "eff_geo",
+        "act_no_io",
+        "spill",
+        "Flags",
+    ]
     for key, grp in candidates.groupby(_FAMILY_KEY, sort=False):
         hyp_label = f" ({key[1]})" if key[1] else ""
         grp_sorted = grp.sort_values(
             ["dataset", "resolution", "model_variant", "format"], kind="mergesort"
         )
-
-        table = Table(
-            title=f"{key[0]}{hyp_label} — {len(grp_sorted)} variant(s)",
-            show_header=True,
-            header_style="bold",
-            show_lines=False,
-        )
-        table.add_column("Variant", no_wrap=True)
-        table.add_column("dataset", min_width=10, no_wrap=True)
-        table.add_column("fmt", min_width=4)
-        table.add_column("res", min_width=4, justify="right")
-        table.add_column("AP", min_width=5, justify="right")
-        table.add_column("ms", min_width=5, justify="right")
-        table.add_column("mJ", min_width=5, justify="right")
-        table.add_column("eff_geo", min_width=8, justify="right")
-        table.add_column("act_no_io", min_width=8, justify="right")
-        table.add_column("spill", min_width=6, justify="right")
-        table.add_column("Flags", min_width=8)
-
+        title = f"{key[0]}{hyp_label} — {len(grp_sorted)} variant(s)"
+        md_rows: list[list[str]] = []
         for _, row in grp_sorted.iterrows():
             mem_flag = _flags(row)
-            table.add_row(
-                str(row["model_variant"]),
-                str(row.get("dataset", "")),
-                str(row["format"]),
-                str(int(row["resolution"])),
-                _f(row["ap_50"]),
-                _f(row["inference_time_ms"]),
-                _f(row.get("pm_avg_inf_mJ", float("nan"))),
-                _f(row["efficiency_geo"], ".4f"),
-                _f(row["activations_without_io"]),
-                _f(row["npu_spill_kib"]),
-                escape(mem_flag) if mem_flag else "",
+            md_rows.append(
+                [
+                    str(row["model_variant"]),
+                    str(row.get("dataset", "")),
+                    str(row["format"]),
+                    str(int(row["resolution"])),
+                    _f(row["ap_50"]),
+                    _f(row["inference_time_ms"]),
+                    _f(row.get("pm_avg_inf_mJ", float("nan"))),
+                    _f(row["efficiency_geo"], ".4f"),
+                    _f(row["activations_without_io"]),
+                    _f(row["npu_spill_kib"]),
+                    mem_flag if mem_flag else "",
+                ]
             )
-
-        _console.print(table)
-        _console.print()
+        if table_format == "ai":
+            print(ai_markdown_table(cand_headers, md_rows, title=title).rstrip())
+            print()
+        else:
+            table = Table(
+                title=title,
+                show_header=True,
+                header_style="bold",
+                show_lines=False,
+            )
+            table.add_column("Variant", no_wrap=True)
+            table.add_column("dataset", min_width=10, no_wrap=True)
+            table.add_column("fmt", min_width=4)
+            table.add_column("res", min_width=4, justify="right")
+            table.add_column("AP", min_width=5, justify="right")
+            table.add_column("ms", min_width=5, justify="right")
+            table.add_column("mJ", min_width=5, justify="right")
+            table.add_column("eff_geo", min_width=8, justify="right")
+            table.add_column("act_no_io", min_width=8, justify="right")
+            table.add_column("spill", min_width=6, justify="right")
+            table.add_column("Flags", min_width=8)
+            for row_cells in md_rows:
+                table.add_row(
+                    row_cells[0],
+                    row_cells[1],
+                    row_cells[2],
+                    row_cells[3],
+                    row_cells[4],
+                    row_cells[5],
+                    row_cells[6],
+                    row_cells[7],
+                    row_cells[8],
+                    row_cells[9],
+                    escape(row_cells[10]) if row_cells[10] else "",
+                )
+            _console.print(table)
+            _console.print()
 
 
 # ── Main pipeline ────────────────────────────────────────────────────────────
@@ -489,6 +650,7 @@ def run_selection(
     output_csv: Path | None = None,
     ap_csv: Path = DEFAULT_EVAL_CSV,
     memory_csv: Path = DEFAULT_MEMORY_CSV,
+    table_format: str = "rich",
 ) -> pd.DataFrame:
     """Run filtering and print candidate models grouped by family.
 
@@ -546,9 +708,9 @@ def run_selection(
     passing, excluded = gate_constraints(df)
     candidates = sort_candidates(passing)
 
-    print_section0(df, option_label)
-    print_section1(df, candidates, excluded)
-    print_section3(candidates)
+    print_section0(df, option_label, table_format=table_format)
+    print_section1(df, candidates, excluded, table_format=table_format)
+    print_section3(candidates, table_format=table_format)
 
     if output_csv is not None:
         out_cols = [
@@ -576,7 +738,10 @@ def run_selection(
             float_format="%.4f",
             quoting=csv.QUOTE_ALL,
         )
-        _console.print(f"Candidate results written to [bold]{output_csv}[/bold]")
+        if table_format == "ai":
+            print(f"Candidate results written to {output_csv}")
+        else:
+            _console.print(f"Candidate results written to [bold]{output_csv}[/bold]")
 
     return candidates
 
@@ -612,6 +777,11 @@ def _cli_entry(
         "-o",
         help="Write candidate results CSV to this path",
     ),
+    table_format: str = typer.Option(
+        "rich",
+        "--table-format",
+        help="Tabular output: 'rich' (terminal) or 'ai' (compact Markdown, smaller context).",
+    ),
 ) -> None:
     """List gated-pass benchmark candidates for STM32N6570-DK deployment."""
     if getattr(ctx, "resilient_parsing", False):
@@ -630,11 +800,18 @@ def _cli_entry(
         _err.print(f"[red]Error: CSV not found: {DEFAULT_CSV}[/red]")
         raise typer.Exit(2)
 
+    try:
+        tf = normalize_table_format(table_format)
+    except ValueError as e:
+        _err.print(f"[red]Error: {e}[/red]")
+        raise typer.Exit(2)
+
     run_selection(
         DEFAULT_CSV,
         dataset_filter=dataset,
         min_size=min_size,
         output_csv=output,
+        table_format=tf,
     )
 
 

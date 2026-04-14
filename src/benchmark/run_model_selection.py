@@ -2,6 +2,7 @@
 
 From repo root:
   ./project.py select-model [flags]
+  ./project.py select-model --table-format ai
 """
 
 from __future__ import annotations
