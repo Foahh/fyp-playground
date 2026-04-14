@@ -1,8 +1,8 @@
 # FYP Playground
 
-Workspace for FYP research, TinyissimoYOLO training, INT8 TFLite quantization, STM32 benchmarking, and STM32 Model Zoo finetuning.
+Workspace for FYP research: TinyissimoYOLO training on COCO Person, INT8 TFLite quantization for STM32N6, on-device benchmarking, and metric tooling around the STM32 AI Model Zoo.
 
-**STEdgeAI version:** `4.0`
+**STEdgeAI:** set `STEDGEAI_CORE_DIR` to your install root (examples below use `4.0`; use the path that matches your toolchain).
 
 ---
 
@@ -10,44 +10,50 @@ Workspace for FYP research, TinyissimoYOLO training, INT8 TFLite quantization, S
 
 This repository provides a unified workflow to:
 
-1. initialize the workspace
-2. prepare datasets
-3. train TinyissimoYOLO
-4. quantize to INT8 TFLite
-5. benchmark on STM32 hardware
-6. finetune STM32 Model Zoo models
+1. initialize the workspace and Conda environments
+2. prepare the COCO Person dataset
+3. train TinyissimoYOLO (`train-person`)
+4. quantize to INT8 TFLite (`quantize-tiny`)
+5. (optional) pre-generate STEdgeAI artifacts (`generate-model`)
+6. benchmark on STM32 hardware and run companion tooling (`benchmark`, `evaluate`, `compare`, …)
 
-Use `project.py` as the main entry point for most tasks.
+Use [`project.py`](project.py) as the main entry point for supported commands.
 
 ### Repository layout
 
-- [`src/dataset`](src/dataset) — COCO and finetune dataset prep
-- [`src/conda`](src/conda) — Conda environment setup
-- [`src/ml`](src/ml) — training, INT8 TFLite quantization, Model Zoo finetune runners
-- [`src/benchmark`](src/benchmark) — on-device benchmark and README compare tooling
-- [`configs/`](configs) — YAML configs for export and finetuning
-- [`requirements-ml.txt`](requirements-ml.txt) (train + quantize), [`requirements-st.txt`](requirements-st.txt) — extra pip constraints for `fyp-st`
+- [`src/dataset`](src/dataset) — COCO download and YOLO / TFS prep
+- [`src/conda`](src/conda) — Conda environment setup (`fyp-ml`, `fyp-st`)
+- [`src/ml`](src/ml) — `train-person`, `quantize-tiny`
+- [`src/benchmark`](src/benchmark) — on-device benchmark, model generation, evaluation, comparison, power helpers
+- [`src/dev`](src/dev) — developer utilities (`format`)
+- [`configs/`](configs) — Tinyissimo Model Zoo YAML stubs and [`configs/model_registry.yaml`](configs/model_registry.yaml)
+- [`requirements-ml.txt`](requirements-ml.txt) — extra pip constraints for `fyp-ml`
+- [`requirements-st.txt`](requirements-st.txt) — extra pip constraints for `fyp-st`
+- [`failed/`](failed/) — incomplete or abandoned work; see [Failed Tasks](#failed-tasks)
+
+For Model Zoo fine-tuning on custom data using only supported upstream flows, see [`external/stm32ai-modelzoo-services/object_detection/docs/tuto/`](external/stm32ai-modelzoo-services/object_detection/docs/tuto/).
 
 ### `project.py` command reference
 
-All workflows are exposed as the first argument to [`project.py`](project.py). Extra flags are passed through to the underlying module (use `python project.py COMMAND -- --help` if a script needs `--` before flags).
+All workflows are exposed as the first argument to [`project.py`](project.py). Extra flags are passed through to the underlying module (use `python project.py COMMAND --help` or `python project.py COMMAND -- --help` depending on whether the script uses argparse or Typer).
 
 | Command | Conda env | Purpose |
 | --- | --- | --- |
-| `setup-env-ml` | *(none — runs installer)* | Create/update `fyp-ml` (train, datasets, quantize) |
+| `setup-env-ml` | *(none — runs installer)* | Create/update `fyp-ml` (datasets, train, quantize) |
 | `setup-env-st` | *(none)* | Create/update `fyp-st` |
-| `download-dataset` | `fyp-ml` | Download and prepare COCO (person) for training |
-| `download-finetune` | `fyp-ml` | Download and prepare hand / hazardous-tool finetune sources |
-| `train` | `fyp-ml` | Train TinyissimoYOLO |
-| `quantize` | `fyp-ml` | INT8 TFLite export from a trained checkpoint |
+| `download-dataset` | `fyp-ml` | Download and prepare COCO (person subset) for training |
+| `train-person` | `fyp-ml` | Train TinyissimoYOLO on COCO Person |
+| `quantize-tiny` | `fyp-ml` | INT8 TFLite export from a trained checkpoint |
+| `format` | `fyp-ml` | Ruff-format Python under `project.py` + `src/`; normalize YAML (excludes `external/`, `results/`) |
+| `generate-model` | `fyp-st` | Run STEdgeAI `generate` for registry models; append rows to `results/generate_result.csv` |
 | `benchmark` | `fyp-st` | On-device STM32 benchmark |
 | `evaluate` | `fyp-st` | Host-side AP evaluation via Model Zoo → `results/evaluation_result.csv` |
 | `parse-modelzoo` | `fyp-st` | Parse Model Zoo README tables → `results/benchmark_parsed.csv` |
 | `compare` | `fyp-st` | Compare two metric sources (README vs bench CSVs, etc.) |
 | `verify-model-config` | `fyp-st` | Print I/O tensor dtypes for each registered model (TFLite / ONNX QDQ) |
+| `verify-idle-power` | `fyp-st` | Stats on `pm_avg_idle_mW` across benchmark mode CSVs |
+| `estimate-battery` | `fyp-st` | Rough battery-life estimates from benchmark power columns |
 | `select-model` | `fyp-st` | Score and rank candidates from benchmark + optional AP CSV |
-| `prepare-finetune-dataset` | `fyp-st` | Prepare STM32 Model Zoo finetune dataset pipeline |
-| `finetune` | `fyp-st` | Run Model Zoo finetune / chain modes from YAML |
 
 ---
 
@@ -60,8 +66,8 @@ python project.py setup-env-ml
 python project.py setup-env-st
 
 python project.py download-dataset
-python project.py train --size 192
-python project.py quantize --size 192
+python project.py train-person --size 192
+python project.py quantize-tiny --size 192
 
 python project.py benchmark
 ```
@@ -73,8 +79,8 @@ python project.py benchmark
 - [1. Initialize](#1-initialize)
 - [2. Train](#2-train)
 - [3. Quantize](#3-quantize)
-- [4. Benchmark](#4-benchmark)
-- [5. Finetune](#5-finetune)
+- [4. Generate models (optional)](#4-generate-models-optional)
+- [5. Benchmark](#5-benchmark)
 
 ---
 
@@ -88,7 +94,7 @@ git submodule update --init --recursive
 
 ### Linux setup
 
-Install **STEdgeAI** in a user-owned location such as `~/ST/STEdgeAI`, then add this to `~/.bashrc`:
+Install **STEdgeAI** in a user-owned location such as `~/ST/STEdgeAI`, then add this to `~/.bashrc` (adjust the version segment if your install differs):
 
 ```sh
 export STEDGEAI_CORE_DIR="$HOME/ST/STEdgeAI/4.0"
@@ -108,15 +114,15 @@ Two Conda environments are used by default:
 
 | Purpose | Default env | Setup |
 |---|---|---|
-| Dataset prep, training, Ultralytics export / INT8 TFLite (`src/ml/run_quantize.py`) | `fyp-ml` (`FYP_YOLO_ENV`) | `python project.py setup-env-ml` |
-| Benchmarking, README comparison, Model Zoo finetuning | `fyp-st` (`FYP_STZOO_ENV`) | `python project.py setup-env-st` |
+| Dataset prep, training, quantization (`src/ml/`), formatting | `fyp-ml` (`FYP_YOLO_ENV`) | `python project.py setup-env-ml` |
+| Benchmarking, generation, README comparison, evaluation | `fyp-st` (`FYP_STZOO_ENV`) | `python project.py setup-env-st` |
 
 Command mapping:
 
 | Command | Env |
 |---|---|
-| `download-dataset`, `download-finetune`, `train`, `quantize` | `fyp-ml` |
-| `benchmark`, `evaluate`, `compare`, `select-model`, `verify-model-config`, `parse-modelzoo`, `prepare-finetune-dataset`, `finetune` | `fyp-st` |
+| `download-dataset`, `train-person`, `quantize-tiny`, `format` | `fyp-ml` |
+| `generate-model`, `benchmark`, `evaluate`, `compare`, `select-model`, `verify-model-config`, `verify-idle-power`, `estimate-battery`, `parse-modelzoo` | `fyp-st` |
 | `setup-env-ml`, `setup-env-st` | base or any env with `conda` |
 
 Create environments:
@@ -153,11 +159,11 @@ FYP_DATASETS_DIR=~/datasets python project.py download-dataset
 
 ---
 
-## 1. Train
+## 2. Train
 
 Train TinyissimoYOLO in `fyp-ml`.
 
-The installer uses **Python 3.12** by default (override with `FYP_ML_PYTHON`) so TensorFlow / `onnx2tf` match the quantization stack. Conda-forge may give a CPU `torch`; for **CUDA 12.8** wheels:
+The installer uses **Python 3.12** by default (override with `FYP_ML_PYTHON`) so TensorFlow matches the quantization stack. Conda-forge may give a CPU `torch`; for **CUDA 12.8** wheels:
 
 ```sh
 pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
@@ -175,10 +181,10 @@ results/model/
 
 Training examples:
 
-- `python project.py train --size 192`
-- `python project.py train --size 256`
-- `python project.py train --size 288`
-- `python project.py train --size 320`
+- `python project.py train-person --size 192`
+- `python project.py train-person --size 256`
+- `python project.py train-person --size 288`
+- `python project.py train-person --size 320`
 
 Checkpoint path:
 
@@ -190,16 +196,16 @@ results/model/tinyissimoyolo_v8_<size>/weights/best.pt
 
 ## 3. Quantize
 
-Quantize a trained checkpoint to **INT8 TFLite** in `fyp-ml` (this runs `src/ml/run_quantize.py`).
+Quantize a trained checkpoint to **INT8 TFLite** in `fyp-ml` (runs `src/ml/run_quantize_tinyissimo_coco_person.py`).
 
 Main command:
 
-- `python project.py quantize --size 192`
+- `python project.py quantize-tiny --size 192`
 
 Optional examples:
 
-- `python project.py quantize --size 192 --no-eval`
-- `python project.py quantize --size 192 --checkpoint /path/to/best.pt`
+- `python project.py quantize-tiny --size 192 --no-eval`
+- `python project.py quantize-tiny --size 192 --checkpoint /path/to/best.pt`
 
 Default output:
 
@@ -215,21 +221,49 @@ results/model/tinyissimoyolo_v8_<size>/weights/best_saved_model/val_int8/
 
 ### Notes
 
-- Export uses Ultralytics INT8 TFLite flow.
+- Export uses Ultralytics toward SavedModel, then `tf.lite.TFLiteConverter` with ST-friendly quantization settings.
 - The script prints the final artifact path.
-- For STM32 Model Zoo host-side evaluation, use `configs/tinyissimoyolo_v8_192_config.yaml` and run `stm32ai_main.py` from `fyp-st`.
+- For STM32 Model Zoo host-side evaluation of bundled configs, use e.g. `configs/tinyissimoyolo_v8_192_config.yaml` and run `stm32ai_main.py` from `fyp-st` per Model Zoo docs.
 
 ---
 
-## 4. Benchmark
+## 4. Generate models (optional)
+
+`generate-model` runs STEdgeAI `generate` for each entry in the model registry, writes C artifacts under `results/network/`, and appends memory summary rows to:
+
+```text
+results/generate_result.csv
+```
+
+Audit log:
+
+```text
+results/generate.log
+```
+
+Examples:
+
+- Full registry (skip entries already in the CSV): `python project.py generate-model`
+- Subset: `python project.py generate-model -- --filter st_yoloxn`
+- Force redo: `python project.py generate-model -- --force`
+
+Benchmarking reuses generated outputs when present; this command is useful for warming caches or inspecting memory before a long bench run.
+
+---
+
+## 5. Benchmark
 
 Benchmark on **STM32N6570-DK** in `fyp-st`.
 
-Results are saved to:
+Per-mode results are saved under:
 
 ```text
 results/benchmark_underdrive/benchmark_results.csv
+results/benchmark_nominal/benchmark_results.csv
+results/benchmark_overdrive/benchmark_results.csv
 ```
+
+(Defaults in docs and tools often refer to **underdrive** first.)
 
 ### Requirements
 
@@ -261,7 +295,7 @@ Benchmark examples:
 - Underdrive mode only: `python project.py benchmark --mode underdrive`
 - Nominal mode only (600 MHz no-overdrive path): `python project.py benchmark --mode nominal`
 - Overdrive mode only: `python project.py benchmark --mode overdrive`
-- Both modes (default): `python project.py benchmark`
+- All modes (default): `python project.py benchmark`
 
 ### Optional power measurement
 
@@ -269,16 +303,10 @@ For INA228-based logging, see:
 
 - [external/fyp-power-measure/README.md](external/fyp-power-measure/README.md)
 
-Benchmark averages are written to `pm_avg_*` columns in:
+Benchmark averages are written to `pm_avg_*` columns in the active mode’s `benchmark_results.csv`. Continuous logs are appended to:
 
 ```text
-results/benchmark_underdrive/benchmark_results.csv
-```
-
-Continuous logs are appended to:
-
-```text
-results/benchmark_underdrive/power_measure.csv
+results/benchmark_<mode>/power_measure.csv
 ```
 
 ### Host-side evaluation (`evaluate`)
@@ -332,6 +360,23 @@ Prints input/output tensor dtypes from each model in the registry (TFLite FlatBu
 python project.py verify-model-config
 ```
 
+### Verify idle power stability (`verify-idle-power`)
+
+Summarizes `pm_avg_idle_mW` in each of `results/benchmark_underdrive|nominal|overdrive/benchmark_results.csv` (spread, outliers).
+
+```sh
+python project.py verify-idle-power
+```
+
+### Battery life estimate (`estimate-battery`)
+
+Uses inference and idle power/duration from a mode’s benchmark CSV with a configurable gap between frames (default 1 ms). Example:
+
+```sh
+python project.py estimate-battery --mah 500
+python project.py estimate-battery --mah 1000 --mode underdrive
+```
+
 ### Model selection / ranking (`select-model`)
 
 Scores and ranks benchmark candidates using `results/benchmark_underdrive/benchmark_results.csv` by default, optionally joined with host AP from `results/evaluation_result.csv`. Tunable weights via `--w-acc`, `--w-energy`, `--w-eff`, `--w-lat`, `--w-mem`, `--w-modern`; `--option-b` enables alternate memory scoring.
@@ -345,39 +390,38 @@ Examples:
 python project.py select-model -- --help
 ```
 
+### Code formatting (`format`)
+
+Runs **ruff** on `project.py` and `src/`, then normalizes first-party YAML (skips `external/`, `results/`, Hydra outputs). CI-style check:
+
+```sh
+python project.py format --check
+```
+
 ---
 
-## 5. Finetune
+## Failed Tasks
 
-Use the STM32 Model Zoo finetune pipeline in `fyp-st`.
+The [`failed/`](failed/) tree holds experiments that were **not finished or not integrated** into the root [`project.py`](project.py). Nothing under `failed/` is registered as a `project.py` command today; scripts still contain docstrings that assume hypothetical commands (for example `download-finetune`, `finetune-tinyissimoyolo`). Treat this folder as a snapshot for reference or revival, not a supported path.
 
-Configs:
+| Area | Location (under `failed/`) | Notes |
+| --- | --- | --- |
+| Finetune dataset download and merge (ego2hands, construction tools → `fyp_merged`) | [`src/dataset/run_download_finetune_dataset.py`](failed/src/dataset/run_download_finetune_dataset.py) | Intended `download-finetune`; docstrings also mention `view-finetune-labels`, which is not present here. Includes a frozen copy of merged dataset assets under `failed/datasets/`. |
+| Model Zoo dataset prep (TFS, COCO layout, Hydra-facing prep) | [`src/ml/run_prepare_finetune_dataset.py`](failed/src/ml/run_prepare_finetune_dataset.py) | Intended `prepare-finetune-dataset`. |
+| Model Zoo TensorFlow / Hydra finetune wrapper | [`src/ml/run_finetune_st.py`](failed/src/ml/run_finetune_st.py) | Intended `finetune` — shells out to `external/stm32ai-modelzoo-services/object_detection/stm32ai_main.py`. |
+| TinyissimoYOLO finetune on merged hand/tool data | [`src/ml/run_finetune_tinyissimoyolo.py`](failed/src/ml/run_finetune_tinyissimoyolo.py) | Intended `finetune-tinyissimoyolo`. |
+| INT8 TFLite for finetuned Tinyissimo checkpoints | [`src/ml/run_quantize_tinyissimo_finetuned.py`](failed/src/ml/run_quantize_tinyissimo_finetuned.py) | Intended `quantize-tiny-finetuned`. |
+| YOLO26 finetune on `fyp_merged` | [`src/ml/run_finetune_yolo26.py`](failed/src/ml/run_finetune_yolo26.py) | Intended `finetune-yolo26`. |
+| INT8 TFLite for finetuned YOLO26 | [`src/ml/run_quantize_yolo26_finetuned.py`](failed/src/ml/run_quantize_yolo26_finetuned.py) | Intended `quantize-yolo26`. |
+| TinyissimoYOLO on COCO 80 classes at 320 px | [`src/ml/run_train_tinyissimo_coco80_320.py`](failed/src/ml/run_train_tinyissimo_coco80_320.py) | Intended `train-coco80-320`. |
+| Alternate configs and registry | [`configs/`](failed/configs/) | e.g. `yolo26_fyp_merged_config.yaml`, `model_registry_failed.yaml`, `finetune_yolodv2milli.yaml`. |
+| Old run outputs | [`failed/results/`](failed/results/), benchmark CSVs, `generate_result.csv`, `evaluation_result.csv` at `failed/` root | Captured artifacts from those experiments; not used by the active `results/` workflow. |
 
-- `configs/finetune_dataset.yaml` — dataset conversion and TFS preparation
-- `configs/finetune.yaml` — training and chained quantization/export modes
+To reuse any of this, you would need to copy or wire scripts back under `src/`, fix imports and paths (they may assume repo layout at the time of the attempt), and add entries to `project.py` if you want the same CLI surface.
 
-### Prepare finetune dataset
+---
 
-Examples:
+## See also
 
-- Default: `python project.py prepare-finetune-dataset -- --config configs/finetune_dataset.yaml`
-- Skip format conversion: `python project.py prepare-finetune-dataset -- --config configs/finetune_dataset.yaml --skip-convert`
-- Run analysis: `python project.py prepare-finetune-dataset -- --config configs/finetune_dataset.yaml --analyze`
-- Pass Hydra override: `python project.py prepare-finetune-dataset -- --config configs/finetune_dataset.yaml --override hydra.run.dir=./configs/outputs/dataset/debug`
-
-### Run finetuning
-
-Examples:
-
-- Use mode from YAML: `python project.py finetune -- --config configs/finetune.yaml`
-- Training mode: `python project.py finetune -- --config configs/finetune.yaml --mode training`
-- Chain TQE mode: `python project.py finetune -- --config configs/finetune.yaml --mode chain_tqe`
-- Chain TQEB mode: `python project.py finetune -- --config configs/finetune.yaml --mode chain_tqeb`
-- With Hydra overrides: `python project.py finetune -- --config configs/finetune.yaml --override training.epochs=80 --override training.batch_size=16`
-
-### Notes
-
-- Prepare TFS data before finetuning.
-- YAML paths are relative to the repository root when launched via `project.py`.
-- Update class names and dataset paths before training.
-- Hydra outputs default under `./configs/outputs/`.
+- Upstream Model Zoo fine-tuning tutorials: [`external/stm32ai-modelzoo-services/object_detection/docs/tuto/`](external/stm32ai-modelzoo-services/object_detection/docs/tuto/)
+- Power analysis notes: [`docs/power_measurement_analysis.md`](docs/power_measurement_analysis.md)
