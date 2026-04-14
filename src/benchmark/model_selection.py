@@ -42,7 +42,7 @@ SELECTION_EXCLUDED_FORMATS: frozenset[str] = frozenset({"W4A8"})
 # Model families dropped before gating and listing (by ``model_family`` prefix).
 SELECTION_EXCLUDED_FAMILY_PREFIXES: tuple[str, ...] = ("ssdlite_",)
 
-DEFAULT_CSV = RESULTS_DIR / "benchmark_underdrive" / "benchmark_results.csv"
+DEFAULT_CSV = RESULTS_DIR / "benchmark_underdrive_results.csv"
 
 _MIN_WIDTH = 160
 _MIN_HEIGHT = 50

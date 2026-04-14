@@ -9,9 +9,9 @@ benchmarking, not a separate “underdrive vs overdrive” split on the README s
 Datasources (select via ``--left/--right``):
 
 - **readme**: parsed CSV (default ``results/benchmark_parsed.csv``)
-- **underdrive**: benchmark CSV (default ``results/benchmark_underdrive/benchmark_results.csv``)
-- **nominal**: benchmark CSV (default ``results/benchmark_nominal/benchmark_results.csv``)
-- **overdrive**: benchmark CSV (default ``results/benchmark_overdrive/benchmark_results.csv``)
+- **underdrive**: benchmark CSV (default ``results/benchmark_underdrive_results.csv``)
+- **nominal**: benchmark CSV (default ``results/benchmark_nominal_results.csv``)
+- **overdrive**: benchmark CSV (default ``results/benchmark_overdrive_results.csv``)
 - **memory**: generate-model memory CSV (default ``results/generate_result.csv``)
 
 Delta is always defined as ``right − left``.
@@ -53,9 +53,9 @@ from .paths import RESULTS_DIR
 from .utils.logutil import configure_logging, typer_install_exception_hook
 
 DEFAULT_PARSED_CSV = RESULTS_DIR / "benchmark_parsed.csv"
-DEFAULT_UNDERDRIVE_CSV = RESULTS_DIR / "benchmark_underdrive" / "benchmark_results.csv"
-DEFAULT_NOMINAL_CSV = RESULTS_DIR / "benchmark_nominal" / "benchmark_results.csv"
-DEFAULT_OVERDRIVE_CSV = RESULTS_DIR / "benchmark_overdrive" / "benchmark_results.csv"
+DEFAULT_UNDERDRIVE_CSV = RESULTS_DIR / "benchmark_underdrive_results.csv"
+DEFAULT_NOMINAL_CSV = RESULTS_DIR / "benchmark_nominal_results.csv"
+DEFAULT_OVERDRIVE_CSV = RESULTS_DIR / "benchmark_overdrive_results.csv"
 DEFAULT_MEMORY_CSV = RESULTS_DIR / "generate_result.csv"
 DEFAULT_EVALUATE_CSV = RESULTS_DIR / "evaluation_result.csv"
 

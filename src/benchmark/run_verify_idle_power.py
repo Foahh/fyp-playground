@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Audit stability of ``pm_avg_idle_mW`` per benchmark mode CSV.
 
-Reads ``results/benchmark_{underdrive,nominal,overdrive}/benchmark_results.csv``
+Reads ``results/benchmark_{underdrive,nominal,overdrive}_results.csv``
 and reports basic spread stats (mean, std, CV, percentiles, Tukey outliers).
 
 Usage:

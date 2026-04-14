@@ -1,0 +1,396 @@
+ST Edge AI Core v4.0.0-20500 359356bb0
+   STM32CubeAI 12.0.0-RC4
+
+=== LOAD | yolo11n_256 | Int8 ===
+04/01/2026 08:17:20 PM  n6_utils_pkg.config_reader -- [DEPRECATED] The option --n6-loader-config is deprecated and will be removed in future versions. Please use '--config-file' instead.
+04/01/2026 08:17:20 PM  n6_utils_pkg.config_reader -- Cube IDE path /Users/foobar/TOOLS/STM32CubeIDE_x.y.z/STM32CubeIDE does not exist, either comment it or fix it in the config file. Ignoring it.
+04/01/2026 08:17:20 PM  __main__ -- Preparing compiler GCC
+04/01/2026 08:17:20 PM  __main__ -- Setting a breakpoint in main.c at line 137 (before the infinite loop)
+04/01/2026 08:17:20 PM  __main__ -- Copying network.c to project: -> /home/fn/ST/STEdgeAI/4.0/Projects/STM32N6570-DK/Applications/NPU_Validation/X-CUBE-AI/App/network.c
+04/01/2026 08:17:20 PM  __main__ -- Copying network_ecblobs.h to project: /home/fn/fyp/fyp-playground/results/network/yolo11n_256__int8/st_ai_output/network_ecblobs.h -> /home/fn/ST/STEdgeAI/4.0/Projects/STM32N6570-DK/Applications/NPU_Validation/X-CUBE-AI/App
+04/01/2026 08:17:20 PM  __main__ -- Resetting the board...
+04/01/2026 08:17:25 PM  __main__ -- Flashing memory xSPI2 -- 2 596.689 kB
+04/01/2026 08:17:30 PM  __main__ -- Flashing memory xSPI2 -- return code ERROR
+04/01/2026 08:17:30 PM  __main__ -- Start operation did not achieve successfully.
+ST Edge AI Core v4.0.0-20500 359356bb0
+   STM32CubeAI 12.0.0-RC4
+
+=== LOAD | yolo11n_256 | Int8 ===
+04/01/2026 08:17:50 PM  n6_utils_pkg.config_reader -- [DEPRECATED] The option --n6-loader-config is deprecated and will be removed in future versions. Please use '--config-file' instead.
+04/01/2026 08:17:50 PM  n6_utils_pkg.config_reader -- Cube IDE path /Users/foobar/TOOLS/STM32CubeIDE_x.y.z/STM32CubeIDE does not exist, either comment it or fix it in the config file. Ignoring it.
+04/01/2026 08:17:50 PM  __main__ -- Preparing compiler GCC
+04/01/2026 08:17:50 PM  __main__ -- Setting a breakpoint in main.c at line 137 (before the infinite loop)
+04/01/2026 08:17:50 PM  __main__ -- Copying network.c to project: -> /home/fn/ST/STEdgeAI/4.0/Projects/STM32N6570-DK/Applications/NPU_Validation/X-CUBE-AI/App/network.c
+04/01/2026 08:17:50 PM  __main__ -- Copying network_ecblobs.h to project: /home/fn/fyp/fyp-playground/results/network/yolo11n_256__int8/st_ai_output/network_ecblobs.h -> /home/fn/ST/STEdgeAI/4.0/Projects/STM32N6570-DK/Applications/NPU_Validation/X-CUBE-AI/App
+04/01/2026 08:17:50 PM  __main__ -- Resetting the board...
+04/01/2026 08:17:51 PM  __main__ -- Flashing memory xSPI2 -- 2 596.689 kB
+04/01/2026 08:18:13 PM  __main__ -- Building project (conf= N6-DK)
+04/01/2026 08:18:15 PM  __main__ -- Loading internal memories & Running the program
+04/01/2026 08:18:21 PM  __main__ -- Start operation achieved successfully
+
+--- VALIDATE start | yolo11n_256 | Int8 | n_runs=50 ---
+VALIDATE_SUMMARY n=50 avg_ms=32.413336 min_ms=32.388626 max_ms=32.445820
+
+=== VALIDATE | yolo11n_256 | Int8 ===
+elapsed time (VALIDATE, wall): 18.197s
+validate rc: 0
+power samples captured (validate window): 100
+Running 50 inferences using ai_runner...
+Completed 50 inferences
+Inference time: avg=32.413ms, min=32.389ms, max=32.446ms
+
+=== LOAD | yolo26_256 | Int8 ===
+04/01/2026 08:18:40 PM  n6_utils_pkg.config_reader -- [DEPRECATED] The option --n6-loader-config is deprecated and will be removed in future versions. Please use '--config-file' instead.
+04/01/2026 08:18:40 PM  n6_utils_pkg.config_reader -- Cube IDE path /Users/foobar/TOOLS/STM32CubeIDE_x.y.z/STM32CubeIDE does not exist, either comment it or fix it in the config file. Ignoring it.
+04/01/2026 08:18:40 PM  __main__ -- Preparing compiler GCC
+04/01/2026 08:18:40 PM  __main__ -- Setting a breakpoint in main.c at line 137 (before the infinite loop)
+04/01/2026 08:18:40 PM  __main__ -- Copying network.c to project: -> /home/fn/ST/STEdgeAI/4.0/Projects/STM32N6570-DK/Applications/NPU_Validation/X-CUBE-AI/App/network.c
+04/01/2026 08:18:40 PM  __main__ -- Copying network_ecblobs.h to project: /home/fn/fyp/fyp-playground/results/network/yolo26_256__int8/st_ai_output/network_ecblobs.h -> /home/fn/ST/STEdgeAI/4.0/Projects/STM32N6570-DK/Applications/NPU_Validation/X-CUBE-AI/App
+04/01/2026 08:18:40 PM  __main__ -- Resetting the board...
+04/01/2026 08:18:41 PM  __main__ -- Flashing memory xSPI2 -- 2 397.521 kB
+04/01/2026 08:19:02 PM  __main__ -- Building project (conf= N6-DK)
+04/01/2026 08:19:03 PM  __main__ -- Loading internal memories & Running the program
+04/01/2026 08:19:07 PM  __main__ -- Start operation achieved successfully
+
+--- VALIDATE start | yolo26_256 | Int8 | n_runs=50 ---
+VALIDATE_SUMMARY n=50 avg_ms=25.623218 min_ms=25.615063 max_ms=25.647953
+
+=== VALIDATE | yolo26_256 | Int8 ===
+elapsed time (VALIDATE, wall): 17.760s
+validate rc: 0
+power samples captured (validate window): 100
+Running 50 inferences using ai_runner...
+Completed 50 inferences
+Inference time: avg=25.623ms, min=25.615ms, max=25.648ms
+
+=== LOAD | yolo26_320 | Int8 ===
+04/01/2026 08:19:26 PM  n6_utils_pkg.config_reader -- [DEPRECATED] The option --n6-loader-config is deprecated and will be removed in future versions. Please use '--config-file' instead.
+04/01/2026 08:19:26 PM  n6_utils_pkg.config_reader -- Cube IDE path /Users/foobar/TOOLS/STM32CubeIDE_x.y.z/STM32CubeIDE does not exist, either comment it or fix it in the config file. Ignoring it.
+04/01/2026 08:19:26 PM  __main__ -- Preparing compiler GCC
+04/01/2026 08:19:26 PM  __main__ -- Setting a breakpoint in main.c at line 137 (before the infinite loop)
+04/01/2026 08:19:26 PM  __main__ -- Copying network.c to project: -> /home/fn/ST/STEdgeAI/4.0/Projects/STM32N6570-DK/Applications/NPU_Validation/X-CUBE-AI/App/network.c
+04/01/2026 08:19:26 PM  __main__ -- Copying network_ecblobs.h to project: /home/fn/fyp/fyp-playground/results/network/yolo26_320__int8/st_ai_output/network_ecblobs.h -> /home/fn/ST/STEdgeAI/4.0/Projects/STM32N6570-DK/Applications/NPU_Validation/X-CUBE-AI/App
+04/01/2026 08:19:26 PM  __main__ -- Resetting the board...
+04/01/2026 08:19:27 PM  __main__ -- Flashing memory xSPI2 -- 2 413.905 kB
+04/01/2026 08:19:48 PM  __main__ -- Building project (conf= N6-DK)
+04/01/2026 08:19:49 PM  __main__ -- Loading internal memories & Running the program
+04/01/2026 08:19:53 PM  __main__ -- Start operation achieved successfully
+
+--- VALIDATE start | yolo26_320 | Int8 | n_runs=50 ---
+VALIDATE_SUMMARY n=50 avg_ms=36.576308 min_ms=36.378819 max_ms=36.713993
+
+=== VALIDATE | yolo26_320 | Int8 ===
+elapsed time (VALIDATE, wall): 18.612s
+validate rc: 0
+power samples captured (validate window): 100
+Running 50 inferences using ai_runner...
+Completed 50 inferences
+Inference time: avg=36.576ms, min=36.379ms, max=36.714ms
+
+=== LOAD | yolov8n_192 | Int8 ===
+04/01/2026 08:20:13 PM  n6_utils_pkg.config_reader -- [DEPRECATED] The option --n6-loader-config is deprecated and will be removed in future versions. Please use '--config-file' instead.
+04/01/2026 08:20:13 PM  n6_utils_pkg.config_reader -- Cube IDE path /Users/foobar/TOOLS/STM32CubeIDE_x.y.z/STM32CubeIDE does not exist, either comment it or fix it in the config file. Ignoring it.
+04/01/2026 08:20:13 PM  __main__ -- Preparing compiler GCC
+04/01/2026 08:20:13 PM  __main__ -- Setting a breakpoint in main.c at line 137 (before the infinite loop)
+04/01/2026 08:20:13 PM  __main__ -- Copying network.c to project: -> /home/fn/ST/STEdgeAI/4.0/Projects/STM32N6570-DK/Applications/NPU_Validation/X-CUBE-AI/App/network.c
+04/01/2026 08:20:13 PM  __main__ -- Copying network_ecblobs.h to project: /home/fn/fyp/fyp-playground/results/network/yolov8n_192__int8/st_ai_output/network_ecblobs.h -> /home/fn/ST/STEdgeAI/4.0/Projects/STM32N6570-DK/Applications/NPU_Validation/X-CUBE-AI/App
+04/01/2026 08:20:13 PM  __main__ -- Resetting the board...
+04/01/2026 08:20:14 PM  __main__ -- Flashing memory xSPI2 -- 3 006.993 kB
+04/01/2026 08:20:40 PM  __main__ -- Building project (conf= N6-DK)
+04/01/2026 08:20:40 PM  __main__ -- Loading internal memories & Running the program
+04/01/2026 08:20:43 PM  __main__ -- Start operation achieved successfully
+
+--- VALIDATE start | yolov8n_192 | Int8 | n_runs=50 ---
+VALIDATE_SUMMARY n=50 avg_ms=19.168290 min_ms=18.985422 max_ms=19.409555
+
+=== VALIDATE | yolov8n_192 | Int8 ===
+elapsed time (VALIDATE, wall): 17.169s
+validate rc: 0
+power samples captured (validate window): 100
+Running 50 inferences using ai_runner...
+Completed 50 inferences
+Inference time: avg=19.168ms, min=18.985ms, max=19.410ms
+
+=== LOAD | yolov8n_256 | Int8 ===
+04/01/2026 08:21:02 PM  n6_utils_pkg.config_reader -- [DEPRECATED] The option --n6-loader-config is deprecated and will be removed in future versions. Please use '--config-file' instead.
+04/01/2026 08:21:02 PM  n6_utils_pkg.config_reader -- Cube IDE path /Users/foobar/TOOLS/STM32CubeIDE_x.y.z/STM32CubeIDE does not exist, either comment it or fix it in the config file. Ignoring it.
+04/01/2026 08:21:02 PM  __main__ -- Preparing compiler GCC
+04/01/2026 08:21:02 PM  __main__ -- Setting a breakpoint in main.c at line 137 (before the infinite loop)
+04/01/2026 08:21:02 PM  __main__ -- Copying network.c to project: -> /home/fn/ST/STEdgeAI/4.0/Projects/STM32N6570-DK/Applications/NPU_Validation/X-CUBE-AI/App/network.c
+04/01/2026 08:21:02 PM  __main__ -- Copying network_ecblobs.h to project: /home/fn/fyp/fyp-playground/results/network/yolov8n_256__int8/st_ai_output/network_ecblobs.h -> /home/fn/ST/STEdgeAI/4.0/Projects/STM32N6570-DK/Applications/NPU_Validation/X-CUBE-AI/App
+04/01/2026 08:21:02 PM  __main__ -- Resetting the board...
+04/01/2026 08:21:02 PM  __main__ -- Flashing memory xSPI2 -- 3 011.681 kB
+04/01/2026 08:21:28 PM  __main__ -- Building project (conf= N6-DK)
+04/01/2026 08:21:29 PM  __main__ -- Loading internal memories & Running the program
+04/01/2026 08:21:32 PM  __main__ -- Start operation achieved successfully
+
+--- VALIDATE start | yolov8n_256 | Int8 | n_runs=50 ---
+VALIDATE_SUMMARY n=50 avg_ms=28.871106 min_ms=28.854876 max_ms=28.886831
+
+=== VALIDATE | yolov8n_256 | Int8 ===
+elapsed time (VALIDATE, wall): 17.889s
+validate rc: 0
+power samples captured (validate window): 100
+Running 50 inferences using ai_runner...
+Completed 50 inferences
+Inference time: avg=28.871ms, min=28.855ms, max=28.887ms
+
+=== LOAD | yolov8n_320 | Int8 ===
+04/01/2026 08:21:51 PM  n6_utils_pkg.config_reader -- [DEPRECATED] The option --n6-loader-config is deprecated and will be removed in future versions. Please use '--config-file' instead.
+04/01/2026 08:21:51 PM  n6_utils_pkg.config_reader -- Cube IDE path /Users/foobar/TOOLS/STM32CubeIDE_x.y.z/STM32CubeIDE does not exist, either comment it or fix it in the config file. Ignoring it.
+04/01/2026 08:21:51 PM  __main__ -- Preparing compiler GCC
+04/01/2026 08:21:51 PM  __main__ -- Setting a breakpoint in main.c at line 137 (before the infinite loop)
+04/01/2026 08:21:51 PM  __main__ -- Copying network.c to project: -> /home/fn/ST/STEdgeAI/4.0/Projects/STM32N6570-DK/Applications/NPU_Validation/X-CUBE-AI/App/network.c
+04/01/2026 08:21:51 PM  __main__ -- Copying network_ecblobs.h to project: /home/fn/fyp/fyp-playground/results/network/yolov8n_320__int8/st_ai_output/network_ecblobs.h -> /home/fn/ST/STEdgeAI/4.0/Projects/STM32N6570-DK/Applications/NPU_Validation/X-CUBE-AI/App
+04/01/2026 08:21:51 PM  __main__ -- Resetting the board...
+04/01/2026 08:21:52 PM  __main__ -- Flashing memory xSPI2 -- 3 017.745 kB
+04/01/2026 08:22:17 PM  __main__ -- Building project (conf= N6-DK)
+04/01/2026 08:22:17 PM  __main__ -- Loading internal memories & Running the program
+04/01/2026 08:22:21 PM  __main__ -- Start operation achieved successfully
+
+--- VALIDATE start | yolov8n_320 | Int8 | n_runs=50 ---
+VALIDATE_SUMMARY n=50 avg_ms=37.459318 min_ms=36.589760 max_ms=37.820469
+
+=== VALIDATE | yolov8n_320 | Int8 ===
+elapsed time (VALIDATE, wall): 18.614s
+validate rc: 0
+power samples captured (validate window): 100
+Running 50 inferences using ai_runner...
+Completed 50 inferences
+Inference time: avg=37.459ms, min=36.590ms, max=37.820ms
+
+=== LOAD | yolov8n_416 | Int8 ===
+04/01/2026 08:22:40 PM  n6_utils_pkg.config_reader -- [DEPRECATED] The option --n6-loader-config is deprecated and will be removed in future versions. Please use '--config-file' instead.
+04/01/2026 08:22:40 PM  n6_utils_pkg.config_reader -- Cube IDE path /Users/foobar/TOOLS/STM32CubeIDE_x.y.z/STM32CubeIDE does not exist, either comment it or fix it in the config file. Ignoring it.
+04/01/2026 08:22:40 PM  __main__ -- Preparing compiler GCC
+04/01/2026 08:22:40 PM  __main__ -- Setting a breakpoint in main.c at line 137 (before the infinite loop)
+04/01/2026 08:22:40 PM  __main__ -- Copying network.c to project: -> /home/fn/ST/STEdgeAI/4.0/Projects/STM32N6570-DK/Applications/NPU_Validation/X-CUBE-AI/App/network.c
+04/01/2026 08:22:40 PM  __main__ -- Copying network_ecblobs.h to project: /home/fn/fyp/fyp-playground/results/network/yolov8n_416__int8/st_ai_output/network_ecblobs.h -> /home/fn/ST/STEdgeAI/4.0/Projects/STM32N6570-DK/Applications/NPU_Validation/X-CUBE-AI/App
+04/01/2026 08:22:41 PM  __main__ -- Resetting the board...
+04/01/2026 08:22:41 PM  __main__ -- Flashing memory xSPI2 -- 3 029.345 kB
+04/01/2026 08:23:06 PM  __main__ -- Building project (conf= N6-DK)
+04/01/2026 08:23:07 PM  __main__ -- Loading internal memories & Running the program
+04/01/2026 08:23:10 PM  __main__ -- Start operation achieved successfully
+
+--- VALIDATE start | yolov8n_416 | Int8 | n_runs=50 ---
+VALIDATE_SUMMARY n=50 avg_ms=67.543326 min_ms=66.555122 max_ms=67.775047
+
+=== VALIDATE | yolov8n_416 | Int8 ===
+elapsed time (VALIDATE, wall): 21.004s
+validate rc: 0
+power samples captured (validate window): 100
+Running 50 inferences using ai_runner...
+Completed 50 inferences
+Inference time: avg=67.543ms, min=66.555ms, max=67.775ms
+ST Edge AI Core v4.0.0-20500 359356bb0
+   STM32CubeAI 12.0.0-RC4
+ST Edge AI Core v4.0.0-20500 359356bb0
+   STM32CubeAI 12.0.0-RC4
+ST Edge AI Core v4.0.0-20500 359356bb0
+   STM32CubeAI 12.0.0-RC4
+
+=== LOAD | tinyissimoyolo_v8_192 | Int8 ===
+04/02/2026 04:49:19 AM  n6_utils_pkg.config_reader -- [DEPRECATED] The option --n6-loader-config is deprecated and will be removed in future versions. Please use '--config-file' instead.
+04/02/2026 04:49:19 AM  n6_utils_pkg.config_reader -- Cube IDE path /Users/foobar/TOOLS/STM32CubeIDE_x.y.z/STM32CubeIDE does not exist, either comment it or fix it in the config file. Ignoring it.
+04/02/2026 04:49:19 AM  __main__ -- Preparing compiler GCC
+04/02/2026 04:49:19 AM  __main__ -- Setting a breakpoint in main.c at line 137 (before the infinite loop)
+04/02/2026 04:49:19 AM  __main__ -- Copying network.c to project: -> /home/fn/ST/STEdgeAI/4.0/Projects/STM32N6570-DK/Applications/NPU_Validation/X-CUBE-AI/App/network.c
+04/02/2026 04:49:19 AM  __main__ -- Copying network_ecblobs.h to project: /home/fn/fyp/fyp-playground/results/network/tinyissimoyolo_v8_192__int8/st_ai_output/network_ecblobs.h -> /home/fn/ST/STEdgeAI/4.0/Projects/STM32N6570-DK/Applications/NPU_Validation/X-CUBE-AI/App
+04/02/2026 04:49:20 AM  __main__ -- Resetting the board...
+04/02/2026 04:49:20 AM  __main__ -- Flashing memory xSPI2 -- 995.121 kB
+04/02/2026 04:49:30 AM  __main__ -- Building project (conf= N6-DK)
+04/02/2026 04:49:32 AM  __main__ -- Loading internal memories & Running the program
+04/02/2026 04:49:34 AM  __main__ -- Start operation achieved successfully
+
+--- VALIDATE start | tinyissimoyolo_v8_192 | Int8 | n_runs=50 ---
+VALIDATE_SUMMARY n=50 avg_ms=10.875465 min_ms=10.344008 max_ms=11.194445
+
+=== VALIDATE | tinyissimoyolo_v8_192 | Int8 ===
+elapsed time (VALIDATE, wall): 16.619s
+validate rc: 0
+power samples captured (validate window): 100
+Running 50 inferences using ai_runner...
+Completed 50 inferences
+Inference time: avg=10.875ms, min=10.344ms, max=11.194ms
+
+=== LOAD | tinyissimoyolo_v8_256 | Int8 ===
+04/02/2026 04:49:52 AM  n6_utils_pkg.config_reader -- [DEPRECATED] The option --n6-loader-config is deprecated and will be removed in future versions. Please use '--config-file' instead.
+04/02/2026 04:49:52 AM  n6_utils_pkg.config_reader -- Cube IDE path /Users/foobar/TOOLS/STM32CubeIDE_x.y.z/STM32CubeIDE does not exist, either comment it or fix it in the config file. Ignoring it.
+04/02/2026 04:49:52 AM  __main__ -- Preparing compiler GCC
+04/02/2026 04:49:52 AM  __main__ -- Setting a breakpoint in main.c at line 137 (before the infinite loop)
+04/02/2026 04:49:52 AM  __main__ -- Copying network.c to project: -> /home/fn/ST/STEdgeAI/4.0/Projects/STM32N6570-DK/Applications/NPU_Validation/X-CUBE-AI/App/network.c
+04/02/2026 04:49:52 AM  __main__ -- Copying network_ecblobs.h to project: /home/fn/fyp/fyp-playground/results/network/tinyissimoyolo_v8_256__int8/st_ai_output/network_ecblobs.h -> /home/fn/ST/STEdgeAI/4.0/Projects/STM32N6570-DK/Applications/NPU_Validation/X-CUBE-AI/App
+04/02/2026 04:49:52 AM  __main__ -- Resetting the board...
+04/02/2026 04:49:52 AM  __main__ -- Flashing memory xSPI2 -- 999.809 kB
+04/02/2026 04:50:01 AM  __main__ -- Building project (conf= N6-DK)
+04/02/2026 04:50:02 AM  __main__ -- Loading internal memories & Running the program
+04/02/2026 04:50:05 AM  __main__ -- Start operation achieved successfully
+
+--- VALIDATE start | tinyissimoyolo_v8_256 | Int8 | n_runs=50 ---
+VALIDATE_SUMMARY n=50 avg_ms=16.667454 min_ms=16.654057 max_ms=16.678446
+
+=== VALIDATE | tinyissimoyolo_v8_256 | Int8 ===
+elapsed time (VALIDATE, wall): 17.299s
+validate rc: 0
+power samples captured (validate window): 100
+Running 50 inferences using ai_runner...
+Completed 50 inferences
+Inference time: avg=16.667ms, min=16.654ms, max=16.678ms
+
+=== LOAD | tinyissimoyolo_v8_288 | Int8 ===
+04/02/2026 04:50:23 AM  n6_utils_pkg.config_reader -- [DEPRECATED] The option --n6-loader-config is deprecated and will be removed in future versions. Please use '--config-file' instead.
+04/02/2026 04:50:23 AM  n6_utils_pkg.config_reader -- Cube IDE path /Users/foobar/TOOLS/STM32CubeIDE_x.y.z/STM32CubeIDE does not exist, either comment it or fix it in the config file. Ignoring it.
+04/02/2026 04:50:23 AM  __main__ -- Preparing compiler GCC
+04/02/2026 04:50:23 AM  __main__ -- Setting a breakpoint in main.c at line 137 (before the infinite loop)
+04/02/2026 04:50:23 AM  __main__ -- Copying network.c to project: -> /home/fn/ST/STEdgeAI/4.0/Projects/STM32N6570-DK/Applications/NPU_Validation/X-CUBE-AI/App/network.c
+04/02/2026 04:50:23 AM  __main__ -- Copying network_ecblobs.h to project: /home/fn/fyp/fyp-playground/results/network/tinyissimoyolo_v8_288__int8/st_ai_output/network_ecblobs.h -> /home/fn/ST/STEdgeAI/4.0/Projects/STM32N6570-DK/Applications/NPU_Validation/X-CUBE-AI/App
+04/02/2026 04:50:23 AM  __main__ -- Resetting the board...
+04/02/2026 04:50:23 AM  __main__ -- Flashing memory xSPI2 -- 1 002.689 kB
+04/02/2026 04:50:33 AM  __main__ -- Building project (conf= N6-DK)
+04/02/2026 04:50:34 AM  __main__ -- Loading internal memories & Running the program
+04/02/2026 04:50:37 AM  __main__ -- Start operation achieved successfully
+
+--- VALIDATE start | tinyissimoyolo_v8_288 | Int8 | n_runs=50 ---
+VALIDATE_SUMMARY n=50 avg_ms=18.966858 min_ms=18.941978 max_ms=18.991850
+
+=== VALIDATE | tinyissimoyolo_v8_288 | Int8 ===
+elapsed time (VALIDATE, wall): 17.713s
+validate rc: 0
+power samples captured (validate window): 100
+Running 50 inferences using ai_runner...
+Completed 50 inferences
+Inference time: avg=18.967ms, min=18.942ms, max=18.992ms
+ST Edge AI Core v4.0.0-20500 359356bb0
+   STM32CubeAI 12.0.0-RC4
+
+=== LOAD | tinyissimoyolo_v8_320 | Int8 ===
+04/03/2026 07:48:01 PM  n6_utils_pkg.config_reader -- [DEPRECATED] The option --n6-loader-config is deprecated and will be removed in future versions. Please use '--config-file' instead.
+04/03/2026 07:48:01 PM  n6_utils_pkg.config_reader -- Cube IDE path /Users/foobar/TOOLS/STM32CubeIDE_x.y.z/STM32CubeIDE does not exist, either comment it or fix it in the config file. Ignoring it.
+04/03/2026 07:48:01 PM  __main__ -- Preparing compiler GCC
+04/03/2026 07:48:01 PM  __main__ -- Setting a breakpoint in main.c at line 137 (before the infinite loop)
+04/03/2026 07:48:01 PM  __main__ -- Copying network.c to project: -> /home/fn/ST/STEdgeAI/4.0/Projects/STM32N6570-DK/Applications/NPU_Validation/X-CUBE-AI/App/network.c
+04/03/2026 07:48:01 PM  __main__ -- Copying network_ecblobs.h to project: /home/fn/fyp/fyp-playground/results/network/tinyissimoyolo_v8_320__int8/st_ai_output/network_ecblobs.h -> /home/fn/ST/STEdgeAI/4.0/Projects/STM32N6570-DK/Applications/NPU_Validation/X-CUBE-AI/App
+04/03/2026 07:48:01 PM  __main__ -- Resetting the board...
+04/03/2026 07:48:01 PM  __main__ -- Flashing memory xSPI2 -- 1 005.873 kB
+04/03/2026 07:48:11 PM  __main__ -- Building project (conf= N6-DK)
+04/03/2026 07:48:12 PM  __main__ -- Loading internal memories & Running the program
+04/03/2026 07:48:15 PM  __main__ -- Start operation achieved successfully
+
+--- VALIDATE start | tinyissimoyolo_v8_320 | Int8 | n_runs=50 ---
+VALIDATE_SUMMARY n=50 avg_ms=22.407376 min_ms=22.389246 max_ms=22.430634
+
+=== VALIDATE | tinyissimoyolo_v8_320 | Int8 ===
+elapsed time (VALIDATE, wall): 17.949s
+validate rc: 0
+power samples captured (validate window): 100
+Running 50 inferences using ai_runner...
+Completed 50 inferences
+Inference time: avg=22.407ms, min=22.389ms, max=22.431ms
+ST Edge AI Core v4.0.0-20500 359356bb0
+   STM32CubeAI 12.0.0-RC4
+
+=== LOAD | yolo26_320_fyp_merged | Int8 ===
+04/07/2026 12:04:56 AM  n6_utils_pkg.config_reader -- [DEPRECATED] The option --n6-loader-config is deprecated and will be removed in future versions. Please use '--config-file' instead.
+04/07/2026 12:04:56 AM  n6_utils_pkg.config_reader -- Cube IDE path /Users/foobar/TOOLS/STM32CubeIDE_x.y.z/STM32CubeIDE does not exist, either comment it or fix it in the config file. Ignoring it.
+04/07/2026 12:04:56 AM  __main__ -- Preparing compiler GCC
+04/07/2026 12:04:56 AM  __main__ -- Setting a breakpoint in main.c at line 137 (before the infinite loop)
+04/07/2026 12:04:56 AM  __main__ -- Copying network.c to project: -> /home/fn/ST/STEdgeAI/4.0/Projects/STM32N6570-DK/Applications/NPU_Validation/X-CUBE-AI/App/network.c
+04/07/2026 12:04:56 AM  __main__ -- Copying network_ecblobs.h to project: /home/fn/fyp/fyp-playground/results/network/yolo26_320_fyp_merged__int8/st_ai_output/network_ecblobs.h -> /home/fn/ST/STEdgeAI/4.0/Projects/STM32N6570-DK/Applications/NPU_Validation/X-CUBE-AI/App
+04/07/2026 12:04:56 AM  __main__ -- Resetting the board...
+04/07/2026 12:04:56 AM  __main__ -- Flashing memory xSPI2 -- 2 401.361 kB
+04/07/2026 12:05:17 AM  __main__ -- Building project (conf= N6-DK)
+04/07/2026 12:05:19 AM  __main__ -- Loading internal memories & Running the program
+04/07/2026 12:05:23 AM  __main__ -- Start operation achieved successfully
+
+--- VALIDATE start | yolo26_320_fyp_merged | Int8 | n_runs=50 ---
+VALIDATE_SUMMARY n=50 avg_ms=39.666138 min_ms=39.475864 max_ms=39.816494
+
+=== VALIDATE | yolo26_320_fyp_merged | Int8 ===
+elapsed time (VALIDATE, wall): 18.953s
+validate rc: 0
+power samples captured (validate window): 100
+Running 50 inferences using ai_runner...
+Completed 50 inferences
+Inference time: avg=39.666ms, min=39.476ms, max=39.816ms
+ST Edge AI Core v4.0.0-20500 359356bb0
+   STM32CubeAI 12.0.0-RC4
+
+=== LOAD | yolo26_320_fyp_merged | Int8 ===
+04/07/2026 02:30:45 PM  n6_utils_pkg.config_reader -- [DEPRECATED] The option --n6-loader-config is deprecated and will be removed in future versions. Please use '--config-file' instead.
+04/07/2026 02:30:45 PM  n6_utils_pkg.config_reader -- Cube IDE path /Users/foobar/TOOLS/STM32CubeIDE_x.y.z/STM32CubeIDE does not exist, either comment it or fix it in the config file. Ignoring it.
+04/07/2026 02:30:45 PM  __main__ -- Preparing compiler GCC
+04/07/2026 02:30:45 PM  __main__ -- Setting a breakpoint in main.c at line 137 (before the infinite loop)
+04/07/2026 02:30:45 PM  __main__ -- Copying network.c to project: -> /home/fn/ST/STEdgeAI/4.0/Projects/STM32N6570-DK/Applications/NPU_Validation/X-CUBE-AI/App/network.c
+04/07/2026 02:30:45 PM  __main__ -- Copying network_ecblobs.h to project: /home/fn/fyp/fyp-playground/results/network/yolo26_320_fyp_merged__int8/st_ai_output/network_ecblobs.h -> /home/fn/ST/STEdgeAI/4.0/Projects/STM32N6570-DK/Applications/NPU_Validation/X-CUBE-AI/App
+04/07/2026 02:30:45 PM  __main__ -- Resetting the board...
+04/07/2026 02:30:45 PM  __main__ -- Flashing memory xSPI2 -- 2 400.225 kB
+04/07/2026 02:30:45 PM  __main__ -- Flashing memory xSPI2 -- return code ERROR
+04/07/2026 02:30:45 PM  __main__ -- Start operation did not achieve successfully.
+ST Edge AI Core v4.0.0-20500 359356bb0
+   STM32CubeAI 12.0.0-RC4
+
+=== LOAD | yolo26_320_fyp_merged | Int8 ===
+04/07/2026 02:31:57 PM  n6_utils_pkg.config_reader -- [DEPRECATED] The option --n6-loader-config is deprecated and will be removed in future versions. Please use '--config-file' instead.
+04/07/2026 02:31:57 PM  n6_utils_pkg.config_reader -- Cube IDE path /Users/foobar/TOOLS/STM32CubeIDE_x.y.z/STM32CubeIDE does not exist, either comment it or fix it in the config file. Ignoring it.
+04/07/2026 02:31:57 PM  __main__ -- Preparing compiler GCC
+04/07/2026 02:31:57 PM  __main__ -- Setting a breakpoint in main.c at line 137 (before the infinite loop)
+04/07/2026 02:31:57 PM  __main__ -- Copying network.c to project: -> /home/fn/ST/STEdgeAI/4.0/Projects/STM32N6570-DK/Applications/NPU_Validation/X-CUBE-AI/App/network.c
+04/07/2026 02:31:57 PM  __main__ -- Copying network_ecblobs.h to project: /home/fn/fyp/fyp-playground/results/network/yolo26_320_fyp_merged__int8/st_ai_output/network_ecblobs.h -> /home/fn/ST/STEdgeAI/4.0/Projects/STM32N6570-DK/Applications/NPU_Validation/X-CUBE-AI/App
+04/07/2026 02:31:57 PM  __main__ -- Resetting the board...
+04/07/2026 02:31:57 PM  __main__ -- Flashing memory xSPI2 -- 2 400.225 kB
+04/07/2026 02:32:17 PM  __main__ -- Building project (conf= N6-DK)
+04/07/2026 02:32:19 PM  __main__ -- Loading internal memories & Running the program
+04/07/2026 02:32:24 PM  __main__ -- Start operation achieved successfully
+
+--- VALIDATE start | yolo26_320_fyp_merged | Int8 | n_runs=50 ---
+VALIDATE_SUMMARY n=50 avg_ms=39.634293 min_ms=39.585793 max_ms=39.793606
+
+=== VALIDATE | yolo26_320_fyp_merged | Int8 ===
+elapsed time (VALIDATE, wall): 18.984s
+validate rc: 0
+power samples captured (validate window): 100
+Running 50 inferences using ai_runner...
+Completed 50 inferences
+Inference time: avg=39.634ms, min=39.586ms, max=39.794ms
+ST Edge AI Core v4.0.0-20500 359356bb0
+   STM32CubeAI 12.0.0-RC4
+
+=== LOAD | tinyissimoyolo_v8_320_fyp_merged | Int8 ===
+04/08/2026 12:28:15 PM  n6_utils_pkg.config_reader -- [DEPRECATED] The option --n6-loader-config is deprecated and will be removed in future versions. Please use '--config-file' instead.
+04/08/2026 12:28:15 PM  n6_utils_pkg.config_reader -- Cube IDE path /Users/foobar/TOOLS/STM32CubeIDE_x.y.z/STM32CubeIDE does not exist, either comment it or fix it in the config file. Ignoring it.
+04/08/2026 12:28:15 PM  __main__ -- Preparing compiler GCC
+04/08/2026 12:28:15 PM  __main__ -- Setting a breakpoint in main.c at line 137 (before the infinite loop)
+04/08/2026 12:28:15 PM  __main__ -- Copying network.c to project: -> /home/fn/ST/STEdgeAI/4.0/Projects/STM32N6570-DK/Applications/NPU_Validation/X-CUBE-AI/App/network.c
+04/08/2026 12:28:15 PM  __main__ -- Copying network_ecblobs.h to project: /home/fn/fyp/fyp-playground/results/network/tinyissimoyolo_v8_320_fyp_merged__int8/st_ai_output/network_ecblobs.h -> /home/fn/ST/STEdgeAI/4.0/Projects/STM32N6570-DK/Applications/NPU_Validation/X-CUBE-AI/App
+04/08/2026 12:28:15 PM  __main__ -- Resetting the board...
+04/08/2026 12:28:15 PM  __main__ -- Flashing memory xSPI2 -- 1 005.921 kB
+04/08/2026 12:28:15 PM  __main__ -- Flashing memory xSPI2 -- return code ERROR
+04/08/2026 12:28:15 PM  __main__ -- Start operation did not achieve successfully.
+ST Edge AI Core v4.0.0-20500 359356bb0
+   STM32CubeAI 12.0.0-RC4
+
+=== LOAD | tinyissimoyolo_v8_320_fyp_merged | Int8 ===
+04/08/2026 12:29:19 PM  n6_utils_pkg.config_reader -- [DEPRECATED] The option --n6-loader-config is deprecated and will be removed in future versions. Please use '--config-file' instead.
+04/08/2026 12:29:19 PM  n6_utils_pkg.config_reader -- Cube IDE path /Users/foobar/TOOLS/STM32CubeIDE_x.y.z/STM32CubeIDE does not exist, either comment it or fix it in the config file. Ignoring it.
+04/08/2026 12:29:19 PM  __main__ -- Preparing compiler GCC
+04/08/2026 12:29:19 PM  __main__ -- Setting a breakpoint in main.c at line 137 (before the infinite loop)
+04/08/2026 12:29:19 PM  __main__ -- Copying network.c to project: -> /home/fn/ST/STEdgeAI/4.0/Projects/STM32N6570-DK/Applications/NPU_Validation/X-CUBE-AI/App/network.c
+04/08/2026 12:29:19 PM  __main__ -- Copying network_ecblobs.h to project: /home/fn/fyp/fyp-playground/results/network/tinyissimoyolo_v8_320_fyp_merged__int8/st_ai_output/network_ecblobs.h -> /home/fn/ST/STEdgeAI/4.0/Projects/STM32N6570-DK/Applications/NPU_Validation/X-CUBE-AI/App
+04/08/2026 12:29:19 PM  __main__ -- Resetting the board...
+04/08/2026 12:29:19 PM  __main__ -- Flashing memory xSPI2 -- 1 005.921 kB
+04/08/2026 12:29:29 PM  __main__ -- Building project (conf= N6-DK)
+04/08/2026 12:29:31 PM  __main__ -- Loading internal memories & Running the program
+04/08/2026 12:29:34 PM  __main__ -- Start operation achieved successfully
+
+--- VALIDATE start | tinyissimoyolo_v8_320_fyp_merged | Int8 | n_runs=50 ---
+VALIDATE_SUMMARY n=50 avg_ms=22.502122 min_ms=22.435808 max_ms=22.528772
+
+=== VALIDATE | tinyissimoyolo_v8_320_fyp_merged | Int8 ===
+elapsed time (VALIDATE, wall): 17.881s
+validate rc: 0
+power samples captured (validate window): 100
+Running 50 inferences using ai_runner...
+Completed 50 inferences
+Inference time: avg=22.502ms, min=22.436ms, max=22.529ms
+ST Edge AI Core v4.0.0-20500 359356bb0
+   STM32CubeAI 12.0.0-RC4

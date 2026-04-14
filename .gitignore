@@ -3,9 +3,8 @@ datasets
 __pycache__/
 
 results/*
-!results/benchmark_underdrive/
-!results/benchmark_nominal/
-!results/benchmark_overdrive/
+!results/benchmark_*_results.csv
+!results/power_measure_*.csv
 !results/benchmark_parsed.csv
 !results/evaluation_result.csv
 !results/generate_result.csv
@@ -41,7 +40,11 @@ epoch*.pt
 ai_runner.log
 yolo26n.pt
 *.log
+!results/benchmark_*.log
 
 docs/superpowers/
 
 outputs
+
+post_benchmark_outputs
+Result.md

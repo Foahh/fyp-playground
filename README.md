@@ -258,9 +258,9 @@ Benchmark on **STM32N6570-DK** in `fyp-st`.
 Per-mode results are saved under:
 
 ```text
-results/benchmark_underdrive/benchmark_results.csv
-results/benchmark_nominal/benchmark_results.csv
-results/benchmark_overdrive/benchmark_results.csv
+results/benchmark_underdrive_results.csv
+results/benchmark_nominal_results.csv
+results/benchmark_overdrive_results.csv
 ```
 
 (Defaults in docs and tools often refer to **underdrive** first.)
@@ -303,10 +303,10 @@ For INA228-based logging, see:
 
 - [external/fyp-power-measure/README.md](external/fyp-power-measure/README.md)
 
-Benchmark averages are written to `pm_avg_*` columns in the active mode’s `benchmark_results.csv`. Continuous logs are appended to:
+Benchmark averages are written to `pm_avg_*` columns in the active mode’s `benchmark_*_results.csv`. Continuous logs are appended to:
 
 ```text
-results/benchmark_<mode>/power_measure.csv
+results/power_measure_<mode>.csv
 ```
 
 ### Host-side evaluation (`evaluate`)
@@ -362,7 +362,7 @@ python project.py verify-model-config
 
 ### Verify idle power stability (`verify-idle-power`)
 
-Summarizes `pm_avg_idle_mW` in each of `results/benchmark_underdrive|nominal|overdrive/benchmark_results.csv` (spread, outliers).
+Summarizes `pm_avg_idle_mW` in each of `results/benchmark_{underdrive,nominal,overdrive}_results.csv` (spread, outliers).
 
 ```sh
 python project.py verify-idle-power
@@ -379,12 +379,12 @@ python project.py estimate-battery --mah 1000 --mode underdrive
 
 ### Model selection / ranking (`select-model`)
 
-Scores and ranks benchmark candidates using `results/benchmark_underdrive/benchmark_results.csv` by default, optionally joined with host AP from `results/evaluation_result.csv`. Tunable weights via `--w-acc`, `--w-energy`, `--w-eff`, `--w-lat`, `--w-mem`, `--w-modern`; `--option-b` enables alternate memory scoring.
+Scores and ranks benchmark candidates using `results/benchmark_underdrive_results.csv` by default, optionally joined with host AP from `results/evaluation_result.csv`. Tunable weights via `--w-acc`, `--w-energy`, `--w-eff`, `--w-lat`, `--w-mem`, `--w-modern`; `--option-b` enables alternate memory scoring.
 
 Examples:
 
 - `python project.py select-model`
-- `python project.py select-model -- --csv results/benchmark_overdrive/benchmark_results.csv --output results/scored.csv`
+- `python project.py select-model -- --csv results/benchmark_overdrive_results.csv --output results/scored.csv`
 
 ```sh
 python project.py select-model -- --help

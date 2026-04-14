@@ -178,7 +178,7 @@ def compute_power_metrics(samples: list[dict], num_inferences: int = 1) -> dict:
 
 
 class PowerMeasureSession:
-    """Reads INA228 protobuf serial for the whole benchmark run; logs to power_measure.csv."""
+    """Reads INA228 protobuf serial for the whole benchmark run; logs to ``results/power_measure_<mode>.csv``."""
 
     _CSV_FIELDS = (
         "host_time_iso",
@@ -451,7 +451,7 @@ _session: Optional[PowerMeasureSession] = None
 def start_power_session(port: Optional[str], baud: int, power_csv_path: Path) -> bool:
     """
     If port is provided, start a background thread that logs every INA228
-    sample to results/benchmark_*/power_measure.csv with host_time_iso (UTC).
+    sample to ``results/power_measure_<mode>.csv`` with host_time_iso (UTC).
     """
     global _session
     if _session is not None:
