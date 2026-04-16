@@ -1,15 +1,15 @@
 [submodule "stm32ai-modelzoo"]
 	path = external/stm32ai-modelzoo
-	url = https://github.com/Foahh/stm32ai-modelzoo
+	url = https://github.com/STMicroelectronics/stm32ai-modelzoo.git
 [submodule "stm32ai-modelzoo-services"]
 	path = external/stm32ai-modelzoo-services
-	url = https://github.com/Foahh/stm32ai-modelzoo-services
+	url = https://github.com/STMicroelectronics/stm32ai-modelzoo-services.git
 [submodule "TinyissimoYOLO"]
 	path = external/TinyissimoYOLO
-	url = https://github.com/Foahh/TinyissimoYOLO
+	url = https://github.com/ETH-PBL/TinyissimoYOLO.git
 [submodule "ultralytics"]
 	path = external/ultralytics
-	url = https://github.com/Foahh/ultralytics
+	url = https://github.com/stm32-hotspot/ultralytics.git
 [submodule "external/fyp-power-measure"]
 	path = external/fyp-power-measure
 	url = https://github.com/Foahh/fyp-power-measure.git
