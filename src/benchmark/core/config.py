@@ -69,6 +69,8 @@ def build_eval_config(entry: ModelEntry) -> Path:
     else:
         overrides["dataset"] = {
             "test_path": tfs_test,
+            "test_images_path": tfs_test,
+            "test_annotations_path": tfs_test,
         }
 
     base_model = base.get("model", {})

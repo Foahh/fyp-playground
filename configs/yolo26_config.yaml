@@ -2,7 +2,7 @@ general:
   num_threads_tflite: 8
 
 model:
-  model_type: yolo26
+  model_type: yolo26n
 
 operation_mode: evaluation
 
