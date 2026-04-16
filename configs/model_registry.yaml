@@ -540,8 +540,8 @@
   - config: configs/yolo26_config.yaml
     model: 
       external/ultralytics/examples/YOLOv8-STEdgeAI/stedgeai_models/object_detection/yolo26/yolo26_256_qdq_int8_od_coco-person-st.onnx
-    family: yolo26
-    variant: yolo26_256
+    family: yolo26n
+    variant: yolo26n_256
     hyperparameters: ""
     dataset: COCO-Person
     fmt: Int8
@@ -550,8 +550,8 @@
   - config: configs/yolo26_config.yaml
     model: 
       external/ultralytics/examples/YOLOv8-STEdgeAI/stedgeai_models/object_detection/yolo26/yolo26_320_qdq_int8_od_coco-person-st.onnx
-    family: yolo26
-    variant: yolo26_320
+    family: yolo26n
+    variant: yolo26n_320
     hyperparameters: ""
     dataset: COCO-Person
     fmt: Int8

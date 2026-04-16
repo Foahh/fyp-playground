@@ -40,7 +40,6 @@ epoch*.pt
 ai_runner.log
 yolo26n.pt
 *.log
-!results/benchmark_*.log
 
 docs/superpowers/
 
