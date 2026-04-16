@@ -46,76 +46,85 @@ def configure_logging(
 
     ``audit_log_path`` selects the on-disk audit log; defaults to underdrive benchmark.log
     when omitted (e.g. compare-runs before any benchmark).
+
+    If logging is already configured, a call **without** ``audit_log_path`` leaves the
+    current audit file unchanged (so e.g. evaluate keeps ``evaluation.log`` instead of
+    reverting to the benchmark default).
     """
     global _configured, _audit_formatter
+
+    if _configured:
+        if audit_log_path is None:
+            return
+        audit_path = audit_log_path
+        audit_path.parent.mkdir(parents=True, exist_ok=True)
+        _swap_benchmark_audit_handler(audit_path)
+        return
 
     audit_path = (
         audit_log_path if audit_log_path is not None else _default_audit_log_path()
     )
     audit_path.parent.mkdir(parents=True, exist_ok=True)
 
-    if not _configured:
-        timestamper = structlog.processors.TimeStamper(fmt="iso")
+    timestamper = structlog.processors.TimeStamper(fmt="iso")
 
-        structlog.configure(
-            processors=[
-                structlog.contextvars.merge_contextvars,
-                structlog.stdlib.add_log_level,
-                structlog.stdlib.add_logger_name,
-                structlog.stdlib.PositionalArgumentsFormatter(),
-                timestamper,
-                structlog.processors.StackInfoRenderer(),
-                structlog.processors.format_exc_info,
-                structlog.processors.UnicodeDecoder(),
-                structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
-            ],
-            context_class=dict,
-            logger_factory=structlog.stdlib.LoggerFactory(),
-            wrapper_class=structlog.stdlib.BoundLogger,
-            cache_logger_on_first_use=True,
-        )
-
-        pre_chain = [
+    structlog.configure(
+        processors=[
+            structlog.contextvars.merge_contextvars,
             structlog.stdlib.add_log_level,
             structlog.stdlib.add_logger_name,
+            structlog.stdlib.PositionalArgumentsFormatter(),
             timestamper,
-        ]
-        # No ANSI in the message body
-        formatter = structlog.stdlib.ProcessorFormatter(
-            foreign_pre_chain=pre_chain,
-            processor=structlog.dev.ConsoleRenderer(colors=False),
-        )
+            structlog.processors.StackInfoRenderer(),
+            structlog.processors.format_exc_info,
+            structlog.processors.UnicodeDecoder(),
+            structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
+        ],
+        context_class=dict,
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        wrapper_class=structlog.stdlib.BoundLogger,
+        cache_logger_on_first_use=True,
+    )
 
-        plain_formatter = structlog.stdlib.ProcessorFormatter(
-            foreign_pre_chain=pre_chain,
-            processor=structlog.dev.ConsoleRenderer(colors=False),
-        )
+    pre_chain = [
+        structlog.stdlib.add_log_level,
+        structlog.stdlib.add_logger_name,
+        timestamper,
+    ]
+    # No ANSI in the message body
+    formatter = structlog.stdlib.ProcessorFormatter(
+        foreign_pre_chain=pre_chain,
+        processor=structlog.dev.ConsoleRenderer(colors=False),
+    )
 
-        root = logging.getLogger()
-        root.handlers.clear()
-        root.setLevel(logging.INFO)
+    plain_formatter = structlog.stdlib.ProcessorFormatter(
+        foreign_pre_chain=pre_chain,
+        processor=structlog.dev.ConsoleRenderer(colors=False),
+    )
 
-        rich_handler = RichHandler(
-            rich_tracebacks=rich_tracebacks,
-            show_path=False,
-            markup=False,
-            show_time=False,
-        )
-        rich_handler.setLevel(logging.INFO)
-        rich_handler.setFormatter(formatter)
+    root = logging.getLogger()
+    root.handlers.clear()
+    root.setLevel(logging.INFO)
 
-        _audit_formatter = plain_formatter
-        file_audit = logging.FileHandler(audit_path, encoding="utf-8", mode="a")
-        file_audit.setLevel(logging.INFO)
-        file_audit.setFormatter(plain_formatter)
-        file_audit._fyp_benchmark_audit = True
+    rich_handler = RichHandler(
+        rich_tracebacks=rich_tracebacks,
+        show_path=False,
+        markup=False,
+        show_time=False,
+    )
+    rich_handler.setLevel(logging.INFO)
+    rich_handler.setFormatter(formatter)
 
-        root.addHandler(rich_handler)
-        root.addHandler(file_audit)
+    _audit_formatter = plain_formatter
+    file_audit = logging.FileHandler(audit_path, encoding="utf-8", mode="a")
+    file_audit.setLevel(logging.INFO)
+    file_audit.setFormatter(plain_formatter)
+    file_audit._fyp_benchmark_audit = True
 
-        _configured = True
-    else:
-        _swap_benchmark_audit_handler(audit_path)
+    root.addHandler(rich_handler)
+    root.addHandler(file_audit)
+
+    _configured = True
 
 
 def get_logger(name: Optional[str] = None) -> structlog.stdlib.BoundLogger:
